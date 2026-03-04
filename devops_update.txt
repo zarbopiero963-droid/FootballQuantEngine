@@ -1,0 +1,8 @@
+BACKUP_REPOSITORY
+
+FIX_WHITESPACE
+
+SAFE_PATCH_FUNZIONE engine/pipeline.py run
+prob = prob * 0.95
+
+GENERATE_PATCH

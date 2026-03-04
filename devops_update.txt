@@ -1,8 +1,37 @@
-BACKUP_REPOSITORY
+CREA_FILE .gitignore
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
 
-FIX_WHITESPACE
+# C extensions
+*.so
 
-SAFE_PATCH_FUNZIONE engine/pipeline.py run
-prob = prob * 0.95
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+.eggs/
+*.spec
 
-GENERATE_PATCH
+# PyInstaller
+*.manifest
+
+# Database e dati locali
+*.sqlite3
+*.db
+data/datasets/*.csv
+data/datasets/*.json
+
+# Ambienti virtuali
+venv/
+env/
+ENV/
+.venv/
+
+# IDE e OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

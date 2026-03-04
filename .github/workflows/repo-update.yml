@@ -1,0 +1,34 @@
+name: Repo Update Engine
+
+on:
+  push:
+    paths:
+      - devops_update.txt
+
+jobs:
+
+  update:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install pytest ruff black isort
+
+      - run: python repo_update_engine.py
+
+      - run: |
+          git config user.name "repo-bot"
+          git config user.email "bot@github.com"
+
+          git add .
+
+          git commit -m "Automated DevOps Engine Update" || echo "No changes"
+
+          git push

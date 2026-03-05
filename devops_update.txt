@@ -1,158 +1,125 @@
 AUTO_BACKUP_BEFORE_RUN
 
-CREA_FILE engine/worker_pool.py
-from concurrent.futures import ThreadPoolExecutor
+CREA_FILE database/fixtures_repository.py
+from database.db_manager import connect
 
 
-class WorkerPool:
+class FixturesRepository:
 
-    def __init__(self, workers=4):
-        self.executor = ThreadPoolExecutor(max_workers=workers)
+    def save_fixture(self, fixture):
 
-    def submit(self, fn, *args, **kwargs):
-        return self.executor.submit(fn, *args, **kwargs)
+        conn = connect()
 
-    def shutdown(self):
-        self.executor.shutdown(wait=True)
-EOF
+        cursor = conn.cursor()
 
-CREA_FILE engine/scheduler.py
-import time
-from datetime import datetime
-
-
-class Scheduler:
-
-    def __init__(self, interval_minutes=10):
-        self.interval = interval_minutes * 60
-        self.jobs = []
-
-    def add_job(self, func):
-        self.jobs.append(func)
-
-    def run(self):
-
-        while True:
-
-            start = datetime.utcnow()
-
-            for job in self.jobs:
-                job()
-
-            elapsed = (datetime.utcnow() - start).total_seconds()
-
-            sleep_time = self.interval - elapsed
-
-            if sleep_time > 0:
-                time.sleep(sleep_time)
-EOF
-
-CREA_FILE engine/job_runner.py
-from data.api_football_collector import ApiFootballCollector
-from data.odds_collector import OddsCollector
-from features.feature_engine import FeatureEngine
-from engine.prediction_pipeline import PredictionPipeline
-
-
-class JobRunner:
-
-    def __init__(self):
-
-        self.api = ApiFootballCollector()
-        self.odds = OddsCollector()
-        self.pipeline = PredictionPipeline()
-
-    def run_cycle(self):
-
-        fixtures_response = self.api.get_next_matches()
-
-        fixtures = []
-
-        for match in fixtures_response.get("response", []):
-
-            fixture = match.get("fixture", {})
-            teams = match.get("teams", {})
-
-            fixtures.append(
-                {
-                    "home": teams.get("home", {}).get("name"),
-                    "away": teams.get("away", {}).get("name"),
-                    "home_goals": 0,
-                    "away_goals": 0
-                }
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO fixtures(
+                fixture_id,
+                league,
+                season,
+                home,
+                away,
+                match_date,
+                home_goals,
+                away_goals,
+                status
             )
+            VALUES(?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                fixture.get("fixture_id"),
+                fixture.get("league"),
+                fixture.get("season"),
+                fixture.get("home"),
+                fixture.get("away"),
+                fixture.get("match_date"),
+                fixture.get("home_goals"),
+                fixture.get("away_goals"),
+                fixture.get("status")
+            )
+        )
 
-        import pandas as pd
-
-        fixtures_df = pd.DataFrame(fixtures)
-
-        feature_engine = FeatureEngine()
-
-        features_df = feature_engine.build_features(fixtures_df)
-
-        odds_response = self.odds.get_odds()
-
-        odds_data = {}
-
-        for event in odds_response:
-
-            home = event.get("home_team")
-            away = event.get("away_team")
-
-            match_id = f"{home}_vs_{away}"
-
-            bookmakers = event.get("bookmakers", [])
-
-            if not bookmakers:
-                continue
-
-            markets = bookmakers[0].get("markets", [])
-
-            if not markets:
-                continue
-
-            outcomes = markets[0].get("outcomes", [])
-
-            odds_map = {}
-
-            for outcome in outcomes:
-
-                name = outcome.get("name")
-                price = outcome.get("price")
-
-                if name == home:
-                    odds_map["home"] = price
-                elif name == away:
-                    odds_map["away"] = price
-                elif name.lower() == "draw":
-                    odds_map["draw"] = price
-
-            odds_data[match_id] = odds_map
-
-        value_bets = self.pipeline.run(features_df, odds_data)
-
-        return value_bets
+        conn.commit()
+        conn.close()
 EOF
 
-CREA_FILE app/main.py
-from engine.scheduler import Scheduler
-from engine.job_runner import JobRunner
+CREA_FILE database/odds_repository.py
+from datetime import datetime
+from database.db_manager import connect
 
 
-def main():
+class OddsRepository:
 
-    scheduler = Scheduler(interval_minutes=10)
+    def save_odds(self, fixture_id, home_odds, draw_odds, away_odds):
 
-    runner = JobRunner()
+        conn = connect()
 
-    scheduler.add_job(runner.run_cycle)
+        cursor = conn.cursor()
 
-    scheduler.run()
+        cursor.execute(
+            """
+            INSERT INTO odds_history(
+                fixture_id,
+                timestamp,
+                home_odds,
+                draw_odds,
+                away_odds
+            )
+            VALUES(?,?,?,?,?)
+            """,
+            (
+                fixture_id,
+                datetime.utcnow().isoformat(),
+                home_odds,
+                draw_odds,
+                away_odds
+            )
+        )
+
+        conn.commit()
+        conn.close()
+EOF
+
+CREA_FILE database/prediction_repository.py
+from datetime import datetime
+from database.db_manager import connect
 
 
-if __name__ == "__main__":
-    main()
+class PredictionRepository:
+
+    def save_prediction(self, fixture_id, model, home_prob, draw_prob, away_prob, edge):
+
+        conn = connect()
+
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            INSERT INTO predictions(
+                fixture_id,
+                model,
+                home_prob,
+                draw_prob,
+                away_prob,
+                edge,
+                created_at
+            )
+            VALUES(?,?,?,?,?,?,?)
+            """,
+            (
+                fixture_id,
+                model,
+                home_prob,
+                draw_prob,
+                away_prob,
+                edge,
+                datetime.utcnow().isoformat()
+            )
+        )
+
+        conn.commit()
+        conn.close()
 EOF
 
 FIX_WHITESPACE
-

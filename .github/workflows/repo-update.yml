@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: repo-update-main
+  cancel-in-progress: false
+
 jobs:
   update:
     runs-on: ubuntu-latest
@@ -20,6 +24,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: true
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -35,20 +40,25 @@ jobs:
           python repo_update_engine.py
 
       - name: Commit changes
+        shell: bash
         run: |
+          set -e
+
           git config user.name "repo-bot"
           git config user.email "bot@github.com"
 
           git add .
 
-          if [[ -n "$(git status --porcelain)" ]]; then
-            git commit -m "[skip ci] Automated DevOps Engine Update"
-
-            # FIX: se nel frattempo main è cambiato su GitHub, aggiorna e ribasa
-            git pull --rebase origin main
-
-            # poi push
-            git push
-          else
+          if [[ -z "$(git status --porcelain)" ]]; then
             echo "No changes to commit"
+            exit 0
           fi
+
+          git commit -m "[skip ci] Automated DevOps Engine Update"
+
+          # FIX: sync robusto con remoto
+          git fetch origin main
+          git rebase origin/main
+
+          # FIX: push sicuro in caso di concorrenza
+          git push --force-with-lease origin HEAD:main

@@ -1,16 +1,9 @@
-name: Repo Update Engine ULTRA
+name: Repo Update Engine
 
 on:
   push:
     paths:
       - devops_update.txt
-
-permissions:
-  contents: write
-
-concurrency:
-  group: repo-update
-  cancel-in-progress: true
 
 jobs:
 
@@ -18,13 +11,13 @@ jobs:
 
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: write
+
     steps:
 
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          persist-credentials: true
-          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -36,29 +29,18 @@ jobs:
           pip install pytest ruff black isort
 
       - name: Run DevOps Engine
-        run: python repo_update_engine.py
+        run: |
+          python repo_update_engine.py
 
-      - name: Configure git
+      - name: Commit changes
         run: |
           git config user.name "repo-bot"
           git config user.email "bot@github.com"
 
-      - name: Remove forbidden files
-        run: |
-          git reset
+          git add -A
 
-          git add devops_update.txt
-          git add repo_update_engine.py
-
-          git add app/ || true
-          git add engine/ || true
-          git add config/ || true
-          git add tests/ || true
-
-      - name: Commit changes if any
-        run: |
           if [[ -n $(git status --porcelain) ]]; then
-            git commit -m "Automated DevOps Engine Update"
+            git commit -m "[skip ci] Automated DevOps Engine Update"
             git push
           else
             echo "No changes to commit"

@@ -52,9 +52,11 @@ ENV/
 # DevOps runtime
 # -----------------------
 
-logs/
-backups/
-patches/
+logs/*
+patches/*
+
+# backups NON ignorato
+# così i backup vengono salvati su GitHub
 
 # -----------------------
 # IDE

@@ -123,3 +123,4 @@ class PredictionRepository:
 EOF
 
 FIX_WHITESPACE
+

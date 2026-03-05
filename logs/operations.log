@@ -111,3 +111,14 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Backup created backups/backup_2026-03-05_14-44-10.zip
+File created database/fixtures_repository.py
+File created database/odds_repository.py
+File created database/prediction_repository.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

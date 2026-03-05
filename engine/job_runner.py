@@ -1,6 +1,13 @@
+import pandas as pd
+
+from config.settings_manager import load_settings
 from data.api_football_collector import ApiFootballCollector
 from data.odds_collector import OddsCollector
+from database.db_manager import init_db
+from engine.fixture_mapper import map_api_football_response_to_fixtures
+from engine.odds_mapper import map_odds_events_to_match_id
 from engine.prediction_pipeline import PredictionPipeline
+from engine.repository_saver import RepositorySaver
 from features.feature_engine import FeatureEngine
 
 
@@ -11,74 +18,46 @@ class JobRunner:
         self.api = ApiFootballCollector()
         self.odds = OddsCollector()
         self.pipeline = PredictionPipeline()
+        self.saver = RepositorySaver()
+
+        init_db()
 
     def run_cycle(self):
 
+        settings = load_settings()
+
+        if not settings.api_football_key or not settings.odds_api_key:
+            raise Exception("Missing API keys in settings.json")
+
         fixtures_response = self.api.get_next_matches()
 
-        fixtures = []
+        fixtures = map_api_football_response_to_fixtures(fixtures_response)
 
-        for match in fixtures_response.get("response", []):
+        rows = []
 
-            fixture = match.get("fixture", {})
-            teams = match.get("teams", {})
+        for f in fixtures:
 
-            fixtures.append(
+            rows.append(
                 {
-                    "home": teams.get("home", {}).get("name"),
-                    "away": teams.get("away", {}).get("name"),
-                    "home_goals": 0,
-                    "away_goals": 0,
+                    "home": f["home"],
+                    "away": f["away"],
+                    "home_goals": f.get("home_goals") or 0,
+                    "away_goals": f.get("away_goals") or 0,
                 }
             )
 
-        import pandas as pd
-
-        fixtures_df = pd.DataFrame(fixtures)
+        fixtures_df = pd.DataFrame(rows)
 
         feature_engine = FeatureEngine()
 
         features_df = feature_engine.build_features(fixtures_df)
 
-        odds_response = self.odds.get_odds()
+        odds_events = self.odds.get_odds()
 
-        odds_data = {}
-
-        for event in odds_response:
-
-            home = event.get("home_team")
-            away = event.get("away_team")
-
-            match_id = f"{home}_vs_{away}"
-
-            bookmakers = event.get("bookmakers", [])
-
-            if not bookmakers:
-                continue
-
-            markets = bookmakers[0].get("markets", [])
-
-            if not markets:
-                continue
-
-            outcomes = markets[0].get("outcomes", [])
-
-            odds_map = {}
-
-            for outcome in outcomes:
-
-                name = outcome.get("name")
-                price = outcome.get("price")
-
-                if name == home:
-                    odds_map["home"] = price
-                elif name == away:
-                    odds_map["away"] = price
-                elif name.lower() == "draw":
-                    odds_map["draw"] = price
-
-            odds_data[match_id] = odds_map
+        odds_data = map_odds_events_to_match_id(odds_events)
 
         value_bets = self.pipeline.run(features_df, odds_data)
+
+        self.saver.save_all(fixtures, odds_data, value_bets)
 
         return value_bets

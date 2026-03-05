@@ -1,174 +1,240 @@
+```text
 AUTO_BACKUP_BEFORE_RUN
 
-CREA_CARTELLA export
-CREA_CARTELLA notifications
-CREA_CARTELLA tests
+CREA_CARTELLA .github
+CREA_CARTELLA .github/workflows
 
 APPEND requirements.txt
-openpyxl
+pyinstaller
 EOF
 
-CREA_FILE export/__init__.py
-# export package
+CREA_FILE .gitignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.sqlite
+*.db
+*.zip
+
+.cache/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+.venv/
+venv/
+env/
+
+build/
+dist/
+*.spec
+
+settings.json
+quant_engine.db
 EOF
 
-CREA_FILE export/csv_exporter.py
-import csv
+CREA_FILE README.md
+# Football Quant Engine
 
+Motore quantitativo per calcio con:
+- API-Football (fixtures)
+- The Odds API (odds live)
+- ClubElo (team strength)
+- Understat (xG features)
+- Feature Engine + Poisson + Monte Carlo
+- Edge detection (value betting)
+- Scheduler automatico
+- Salvataggio su SQLite (fixtures, odds_history, predictions)
+- Export CSV/Excel
+- Notifiche Telegram (opzionale)
 
-class CsvExporter:
+## Requisiti
+- Python 3.11+
 
-    def export_value_bets(self, filepath, value_bets):
+## Setup
+```bash
+pip install -r requirements.txt
 
-        fieldnames = ["match_id", "market", "probability", "odds"]
+```
 
-        with open(filepath, "w", newline="", encoding="utf-8") as f:
+## Configurazione (settings.json)
 
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
+Crea un file `settings.json` nella root:
 
-            for vb in value_bets:
-                writer.writerow(
-                    {
-                        "match_id": vb.get("match_id"),
-                        "market": vb.get("market"),
-                        "probability": vb.get("probability"),
-                        "odds": vb.get("odds")
-                    }
-                )
+```json
+{
+  "api_football_key": "YOUR_API_FOOTBALL_KEY",
+  "odds_api_key": "YOUR_ODDS_API_KEY",
+  "telegram_token": "",
+  "telegram_chat_id": ""
+}
+
+```
+
+## Avvio (sviluppo)
+
+```bash
+python app/main.py
+
+```
+
+## Database
+
+Viene creato automaticamente `quant_engine.db` (SQLite) con tabelle:
+
+* fixtures
+* odds_history
+* predictions
+
+## Export
+
+* CSV: `export/csv_exporter.py`
+* Excel: `export/excel_exporter.py`
+
+## Build EXE (locale)
+
+```bash
+pyinstaller football_quant_engine.spec
+
+```
+
+Output:
+`dist/FootballQuantEngine.exe`
+
+## Build EXE su GitHub Actions
+
+Ad ogni commit viene generato un artifact scaricabile con l'EXE:
+
+1. vai in Actions
+2. apri il workflow Build Portable EXE
+3. scarica l'artifact FootballQuantEngine-Windows
 EOF
 
-CREA_FILE export/excel_exporter.py
-import pandas as pd
+CREA_FILE football_quant_engine.spec
 
+# -*- mode: python ; coding: utf-8 -*-
 
-class ExcelExporter:
+from PyInstaller.utils.hooks import collect_all
 
-    def export_value_bets(self, filepath, value_bets):
+block_cipher = None
 
-        df = pd.DataFrame(value_bets)
+datas = []
+binaries = []
+hiddenimports = []
 
-        df.to_excel(filepath, index=False)
+for pkg in ("numpy", "pandas", "scipy"):
+pkg_datas, pkg_binaries, pkg_hidden = collect_all(pkg)
+datas += pkg_datas
+binaries += pkg_binaries
+hiddenimports += pkg_hidden
+
+a = Analysis(
+["app/main.py"],
+pathex=["."],
+binaries=binaries,
+datas=datas,
+hiddenimports=hiddenimports,
+hookspath=[],
+hooksconfig={},
+runtime_hooks=[],
+excludes=[],
+win_no_prefer_redirects=False,
+win_private_assemblies=False,
+cipher=block_cipher,
+noarchive=False,
+)
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+exe = EXE(
+pyz,
+a.scripts,
+[],
+exclude_binaries=True,
+name="FootballQuantEngine",
+debug=False,
+bootloader_ignore_signals=False,
+strip=False,
+upx=False,
+console=True,
+disable_windowed_traceback=False,
+argv_emulation=False,
+target_arch=None,
+codesign_identity=None,
+entitlements_file=None,
+)
+
+coll = COLLECT(
+exe,
+a.binaries,
+a.zipfiles,
+a.datas,
+strip=False,
+upx=False,
+upx_exclude=[],
+name="FootballQuantEngine",
+)
 EOF
 
-CREA_FILE notifications/__init__.py
-# notifications package
-EOF
+CREA_FILE .github/workflows/build.yml
+name: Build Portable EXE
 
-CREA_FILE notifications/telegram_notifier.py
-import requests
+on:
+push:
+branches: ["**"]
 
+jobs:
+build-windows:
+runs-on: windows-latest
 
-class TelegramNotifier:
+```
+steps:
+  - name: Checkout
+    uses: actions/checkout@v4
 
-    def __init__(self, token, chat_id):
+  - name: Setup Python
+    uses: actions/setup-python@v5
+    with:
+      python-version: "3.11"
 
-        self.token = token
-        self.chat_id = chat_id
+  - name: Install dependencies
+    run: |
+      python -m pip install --upgrade pip
+      pip install -r requirements.txt
 
-    def send_message(self, text):
+  - name: Lint
+    run: |
+      ruff check .
+      black --check .
+      isort --check-only .
 
-        if not self.token or not self.chat_id:
-            return False
+  - name: Test
+    run: |
+      pytest -q
 
-        url = f"https://api.telegram.org/bot{self.token}/sendMessage"
+  - name: Build EXE (PyInstaller)
+    run: |
+      pyinstaller football_quant_engine.spec
 
-        payload = {"chat_id": self.chat_id, "text": text}
+  - name: Zip portable folder
+    shell: pwsh
+    run: |
+      Compress-Archive -Path dist\FootballQuantEngine\* -DestinationPath FootballQuantEngine-Portable.zip -Force
 
-        response = requests.post(url, json=payload, timeout=15)
+  - name: Upload artifact
+    uses: actions/upload-artifact@v4
+    with:
+      name: FootballQuantEngine-Windows
+      path: FootballQuantEngine-Portable.zip
 
-        return response.status_code == 200
-EOF
+```
 
-CREA_FILE tests/__init__.py
-# tests package
-EOF
-
-CREA_FILE tests/test_edge_detector.py
-from strategies.edge_detector import EdgeDetector
-
-
-def test_edge_detector_basic():
-
-    ed = EdgeDetector()
-
-    edge = ed.calculate_edge(0.6, 2.0)
-
-    assert edge == 0.6 - 0.5
-
-    assert ed.is_value_bet(0.6, 2.0) in (True, False)
-EOF
-
-CREA_FILE tests/test_poisson_model.py
-from models.poisson_model import PoissonModel
-
-
-def test_poisson_probabilities_sum_close_to_one():
-
-    model = PoissonModel()
-
-    probs = model.predict(
-        home_attack=1.4,
-        home_defense=1.0,
-        away_attack=1.2,
-        away_defense=1.1
-    )
-
-    total = probs["home_win"] + probs["draw"] + probs["away_win"]
-
-    assert 0.95 <= total <= 1.05
-EOF
-
-CREA_FILE tests/test_bivariate_poisson.py
-from models.bivariate_poisson import BivariatePoisson
-
-
-def test_bivariate_probabilities_sum_to_one():
-
-    model = BivariatePoisson()
-
-    probs = model.predict(lambda_home=1.5, lambda_away=1.1, rho=0.05)
-
-    total = probs["home_win"] + probs["draw"] + probs["away_win"]
-
-    assert 0.999 <= total <= 1.001
-EOF
-
-CREA_FILE tests/test_prediction_pipeline.py
-import pandas as pd
-
-from engine.prediction_pipeline import PredictionPipeline
-
-
-def test_prediction_pipeline_runs():
-
-    features_df = pd.DataFrame(
-        [
-            {
-                "home": "TeamA",
-                "away": "TeamB",
-                "home_attack": 1.4,
-                "home_defense": 1.0,
-                "away_attack": 1.2,
-                "away_defense": 1.1,
-                "elo_diff": 0
-            }
-        ]
-    )
-
-    odds_data = {
-        "TeamA_vs_TeamB": {
-            "home": 2.0,
-            "draw": 3.2,
-            "away": 3.8
-        }
-    }
-
-    pipeline = PredictionPipeline()
-
-    value_bets = pipeline.run(features_df, odds_data)
-
-    assert isinstance(value_bets, list)
 EOF
 
 FIX_WHITESPACE
+
+```
+
+```

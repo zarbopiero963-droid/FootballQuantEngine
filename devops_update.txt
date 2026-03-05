@@ -1,7 +1,57 @@
 BACKUP_REPOSITORY
 
-CREA_CARTELLA test
+APPEND repo_update_engine.py <<EOF
 
-CREA_FILE test/hello.txt <<EOF
-hello world
+import subprocess
+
+
+def run_black():
+    log("Running Black formatter")
+    subprocess.run(["black", "."], check=False)
+
+
+def run_isort():
+    log("Running isort")
+    subprocess.run(["isort", "."], check=False)
+
+
+def run_ruff():
+    log("Running ruff")
+    subprocess.run(["ruff", "check", ".", "--fix"], check=False)
+
+
+def run_pytest():
+
+    log("Running pytest")
+
+    result = subprocess.run(
+        ["pytest"],
+        capture_output=True,
+        text=True
+    )
+
+    log(result.stdout)
+
+    if result.returncode != 0:
+        log("Tests FAILED")
+        return False
+
+    log("Tests PASSED")
+    return True
+
+
+def rollback():
+
+    log("ROLLBACK STARTED")
+
+    versions = sorted(os.listdir("backups"))
+
+    if not versions:
+        log("No backup available")
+        return
+
+    restore_version(versions[-1])
+
+    log("ROLLBACK COMPLETED")
+
 EOF

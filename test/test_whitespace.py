@@ -1,10 +1,17 @@
-import sys
+from repo_update_engine import fix_whitespace
 import os
 
-sys.path.append(os.path.abspath("."))
 
-from repo_update_engine import fix_whitespace
+def test_fix_whitespace(tmp_path):
 
+    file = tmp_path / "test.txt"
 
-def test_whitespace():
-    assert callable(fix_whitespace)
+    file.write_text("hello    \nworld\t\n\n")
+
+    os.chdir(tmp_path)
+
+    fix_whitespace()
+
+    content = file.read_text()
+
+    assert "hello\n" in content

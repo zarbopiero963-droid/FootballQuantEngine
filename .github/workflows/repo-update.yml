@@ -13,12 +13,13 @@ jobs:
 
     runs-on: ubuntu-latest
 
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+
     steps:
 
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -35,7 +36,7 @@ jobs:
 
       - name: Run tests
         run: |
-          pytest
+          pytest -v
 
       - name: Commit changes
         run: |

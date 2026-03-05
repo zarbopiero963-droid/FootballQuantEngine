@@ -1,129 +1,147 @@
 AUTO_BACKUP_BEFORE_RUN
 
-CREA_CARTELLA models
-CREA_CARTELLA simulation
+CREA_CARTELLA strategies
+CREA_CARTELLA engine
 
-CREA_FILE models/__init__.py
-# models package
+CREA_FILE strategies/__init__.py
+# strategies package
 EOF
 
-CREA_FILE models/poisson_model.py
-import numpy as np
-from scipy.stats import poisson
+CREA_FILE strategies/edge_detector.py
+from config.constants import EDGE_THRESHOLD
 
 
-class PoissonModel:
+class EdgeDetector:
 
-    def predict(self, home_attack, home_defense, away_attack, away_defense):
+    def calculate_edge(self, probability, odds):
 
-        lambda_home = home_attack * away_defense
-        lambda_away = away_attack * home_defense
+        if odds <= 0:
+            return 0
 
-        max_goals = 6
+        implied_probability = 1 / odds
 
-        home_probs = [poisson.pmf(i, lambda_home) for i in range(max_goals)]
-        away_probs = [poisson.pmf(i, lambda_away) for i in range(max_goals)]
+        return probability - implied_probability
 
-        home_win = 0
-        draw = 0
-        away_win = 0
+    def is_value_bet(self, probability, odds):
 
-        for i in range(max_goals):
-            for j in range(max_goals):
+        edge = self.calculate_edge(probability, odds)
 
-                p = home_probs[i] * away_probs[j]
-
-                if i > j:
-                    home_win += p
-                elif i == j:
-                    draw += p
-                else:
-                    away_win += p
-
-        return {
-            "home_win": home_win,
-            "draw": draw,
-            "away_win": away_win
-        }
+        return edge > EDGE_THRESHOLD
 EOF
 
-CREA_FILE models/bivariate_poisson.py
-import numpy as np
-from scipy.stats import poisson
+CREA_FILE strategies/value_bet_strategy.py
+class ValueBetStrategy:
 
+    def find_value_bets(self, predictions, odds_data, edge_detector):
 
-class BivariatePoisson:
+        results = []
 
-    def predict(self, lambda_home, lambda_away, rho=0.05):
+        for match_id in predictions:
 
-        max_goals = 6
+            prediction = predictions[match_id]
 
-        home_win = 0
-        draw = 0
-        away_win = 0
+            if match_id not in odds_data:
+                continue
 
-        for i in range(max_goals):
-            for j in range(max_goals):
+            odds = odds_data[match_id]
 
-                p_home = poisson.pmf(i, lambda_home)
-                p_away = poisson.pmf(j, lambda_away)
+            home_prob = prediction.get("home_win")
+            draw_prob = prediction.get("draw")
+            away_prob = prediction.get("away_win")
 
-                correlation = 1 + rho if i == j else 1
+            home_odds = odds.get("home")
+            draw_odds = odds.get("draw")
+            away_odds = odds.get("away")
 
-                p = p_home * p_away * correlation
+            if edge_detector.is_value_bet(home_prob, home_odds):
+                results.append(
+                    {
+                        "match_id": match_id,
+                        "market": "home",
+                        "probability": home_prob,
+                        "odds": home_odds
+                    }
+                )
 
-                if i > j:
-                    home_win += p
-                elif i == j:
-                    draw += p
-                else:
-                    away_win += p
+            if edge_detector.is_value_bet(draw_prob, draw_odds):
+                results.append(
+                    {
+                        "match_id": match_id,
+                        "market": "draw",
+                        "probability": draw_prob,
+                        "odds": draw_odds
+                    }
+                )
 
-        total = home_win + draw + away_win
+            if edge_detector.is_value_bet(away_prob, away_odds):
+                results.append(
+                    {
+                        "match_id": match_id,
+                        "market": "away",
+                        "probability": away_prob,
+                        "odds": away_odds
+                    }
+                )
 
-        return {
-            "home_win": home_win / total,
-            "draw": draw / total,
-            "away_win": away_win / total
-        }
+        return results
 EOF
 
-CREA_FILE models/elo_model.py
-import math
-
-
-class EloModel:
-
-    def probability(self, elo_diff):
-
-        return 1 / (1 + 10 ** (-elo_diff / 400))
+CREA_FILE engine/__init__.py
+# engine package
 EOF
 
-CREA_FILE simulation/__init__.py
-# simulation package
-EOF
+CREA_FILE engine/prediction_pipeline.py
+from models.poisson_model import PoissonModel
+from simulation.monte_carlo import MonteCarloSimulator
+from strategies.edge_detector import EdgeDetector
+from strategies.value_bet_strategy import ValueBetStrategy
 
-CREA_FILE simulation/monte_carlo.py
-import numpy as np
 
+class PredictionPipeline:
 
-class MonteCarloSimulator:
+    def __init__(self):
 
-    def simulate(self, lambda_home, lambda_away, simulations=20000):
+        self.poisson = PoissonModel()
+        self.simulator = MonteCarloSimulator()
+        self.edge_detector = EdgeDetector()
+        self.strategy = ValueBetStrategy()
 
-        home_goals = np.random.poisson(lambda_home, simulations)
-        away_goals = np.random.poisson(lambda_away, simulations)
+    def run(self, features_df, odds_data):
 
-        home_win = (home_goals > away_goals).mean()
-        draw = (home_goals == away_goals).mean()
-        away_win = (home_goals < away_goals).mean()
+        predictions = {}
 
-        return {
-            "home_win": home_win,
-            "draw": draw,
-            "away_win": away_win
-        }
+        for _, row in features_df.iterrows():
+
+            match_id = f"{row['home']}_vs_{row['away']}"
+
+            model_probs = self.poisson.predict(
+                row["home_attack"],
+                row["home_defense"],
+                row["away_attack"],
+                row["away_defense"]
+            )
+
+            lambda_home = row["home_attack"] * row["away_defense"]
+            lambda_away = row["away_attack"] * row["home_defense"]
+
+            simulation_probs = self.simulator.simulate(
+                lambda_home,
+                lambda_away
+            )
+
+            predictions[match_id] = {
+                "home_win": (model_probs["home_win"] + simulation_probs["home_win"]) / 2,
+                "draw": (model_probs["draw"] + simulation_probs["draw"]) / 2,
+                "away_win": (model_probs["away_win"] + simulation_probs["away_win"]) / 2
+            }
+
+        value_bets = self.strategy.find_value_bets(
+            predictions,
+            odds_data,
+            self.edge_detector
+        )
+
+        return value_bets
 EOF
 
 FIX_WHITESPACE
-

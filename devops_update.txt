@@ -1,136 +1,128 @@
 AUTO_BACKUP_BEFORE_RUN
 
-CREA_CARTELLA features
+CREA_CARTELLA models
+CREA_CARTELLA simulation
 
-CREA_FILE features/__init__.py
-# features package
+CREA_FILE models/__init__.py
+# models package
 EOF
 
-CREA_FILE features/team_stats.py
-import pandas as pd
+CREA_FILE models/poisson_model.py
+import numpy as np
+from scipy.stats import poisson
 
 
-def build_team_stats(fixtures_df):
+class PoissonModel:
 
-    if fixtures_df.empty:
-        return pd.DataFrame()
+    def predict(self, home_attack, home_defense, away_attack, away_defense):
 
-    df = fixtures_df.copy()
+        lambda_home = home_attack * away_defense
+        lambda_away = away_attack * home_defense
 
-    home = df[["home", "home_goals", "away_goals"]].copy()
-    home.columns = ["team", "goals_for", "goals_against"]
+        max_goals = 6
 
-    away = df[["away", "away_goals", "home_goals"]].copy()
-    away.columns = ["team", "goals_for", "goals_against"]
+        home_probs = [poisson.pmf(i, lambda_home) for i in range(max_goals)]
+        away_probs = [poisson.pmf(i, lambda_away) for i in range(max_goals)]
 
-    teams = pd.concat([home, away])
+        home_win = 0
+        draw = 0
+        away_win = 0
 
-    stats = teams.groupby("team").agg(
-        goals_for=("goals_for", "mean"),
-        goals_against=("goals_against", "mean"),
-        matches=("goals_for", "count")
-    ).reset_index()
+        for i in range(max_goals):
+            for j in range(max_goals):
 
-    return stats
+                p = home_probs[i] * away_probs[j]
+
+                if i > j:
+                    home_win += p
+                elif i == j:
+                    draw += p
+                else:
+                    away_win += p
+
+        return {
+            "home_win": home_win,
+            "draw": draw,
+            "away_win": away_win
+        }
 EOF
 
-CREA_FILE features/elo_features.py
-import pandas as pd
+CREA_FILE models/bivariate_poisson.py
+import numpy as np
+from scipy.stats import poisson
 
 
-def elo_diff(home_team, away_team, elo_df):
+class BivariatePoisson:
 
-    if elo_df.empty:
-        return 0
+    def predict(self, lambda_home, lambda_away, rho=0.05):
 
-    home_row = elo_df[elo_df["Club"] == home_team]
-    away_row = elo_df[elo_df["Club"] == away_team]
+        max_goals = 6
 
-    if home_row.empty or away_row.empty:
-        return 0
+        home_win = 0
+        draw = 0
+        away_win = 0
 
-    home_elo = home_row.iloc[0]["Elo"]
-    away_elo = away_row.iloc[0]["Elo"]
+        for i in range(max_goals):
+            for j in range(max_goals):
 
-    return home_elo - away_elo
+                p_home = poisson.pmf(i, lambda_home)
+                p_away = poisson.pmf(j, lambda_away)
+
+                correlation = 1 + rho if i == j else 1
+
+                p = p_home * p_away * correlation
+
+                if i > j:
+                    home_win += p
+                elif i == j:
+                    draw += p
+                else:
+                    away_win += p
+
+        total = home_win + draw + away_win
+
+        return {
+            "home_win": home_win / total,
+            "draw": draw / total,
+            "away_win": away_win / total
+        }
 EOF
 
-CREA_FILE features/xg_features.py
-import pandas as pd
+CREA_FILE models/elo_model.py
+import math
 
 
-def extract_xg(team_data):
+class EloModel:
 
-    rows = []
+    def probability(self, elo_diff):
 
-    for match in team_data:
-
-        rows.append(
-            {
-                "date": match.get("datetime"),
-                "xg": float(match.get("xG", 0)),
-                "xga": float(match.get("xGA", 0)),
-                "result": match.get("result")
-            }
-        )
-
-    df = pd.DataFrame(rows)
-
-    return df
+        return 1 / (1 + 10 ** (-elo_diff / 400))
 EOF
 
-CREA_FILE features/feature_engine.py
-import pandas as pd
+CREA_FILE simulation/__init__.py
+# simulation package
+EOF
 
-from features.team_stats import build_team_stats
-from features.elo_features import elo_diff
+CREA_FILE simulation/monte_carlo.py
+import numpy as np
 
 
-class FeatureEngine:
+class MonteCarloSimulator:
 
-    def __init__(self, elo_df=None):
+    def simulate(self, lambda_home, lambda_away, simulations=20000):
 
-        self.elo_df = elo_df if elo_df is not None else pd.DataFrame()
+        home_goals = np.random.poisson(lambda_home, simulations)
+        away_goals = np.random.poisson(lambda_away, simulations)
 
-    def build_features(self, fixtures_df):
+        home_win = (home_goals > away_goals).mean()
+        draw = (home_goals == away_goals).mean()
+        away_win = (home_goals < away_goals).mean()
 
-        team_stats = build_team_stats(fixtures_df)
-
-        rows = []
-
-        for _, row in fixtures_df.iterrows():
-
-            home = row["home"]
-            away = row["away"]
-
-            home_stats = team_stats[team_stats["team"] == home]
-            away_stats = team_stats[team_stats["team"] == away]
-
-            if home_stats.empty or away_stats.empty:
-                continue
-
-            home_attack = home_stats.iloc[0]["goals_for"]
-            home_defense = home_stats.iloc[0]["goals_against"]
-
-            away_attack = away_stats.iloc[0]["goals_for"]
-            away_defense = away_stats.iloc[0]["goals_against"]
-
-            elo_difference = elo_diff(home, away, self.elo_df)
-
-            rows.append(
-                {
-                    "home": home,
-                    "away": away,
-                    "home_attack": home_attack,
-                    "home_defense": home_defense,
-                    "away_attack": away_attack,
-                    "away_defense": away_defense,
-                    "elo_diff": elo_difference
-                }
-            )
-
-        return pd.DataFrame(rows)
+        return {
+            "home_win": home_win,
+            "draw": draw,
+            "away_win": away_win
+        }
 EOF
 
 FIX_WHITESPACE
-

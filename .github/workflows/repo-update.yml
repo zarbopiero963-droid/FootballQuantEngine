@@ -20,7 +20,8 @@ jobs:
       PYTHONPATH: ${{ github.workspace }}
 
     steps:
-      - name: Checkout
+
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -39,10 +40,10 @@ jobs:
         run: |
           python repo_update_engine.py
 
-      - name: Commit + Push (robust)
+      - name: Commit and Push Safely
         shell: bash
         run: |
-          set -euo pipefail
+          set -e
 
           git config user.name "repo-bot"
           git config user.email "bot@github.com"
@@ -56,25 +57,11 @@ jobs:
 
           git commit -m "[skip ci] Automated DevOps Engine Update"
 
-          # Sempre aggiorna info dal remoto
+          echo "Fetching latest remote main..."
           git fetch origin main
 
-          # Tentativo 1: push normale
-          if git push origin HEAD:main; then
-            echo "Pushed successfully"
-            exit 0
-          fi
+          echo "Rebasing commit on latest main..."
+          git rebase origin/main || true
 
-          echo "Push rejected (fetch first). Syncing and retrying..."
-
-          # Salva l'hash del commit del bot
-          LAST_COMMIT="$(git rev-parse HEAD)"
-
-          # Allinea alla versione attuale del remoto
-          git reset --hard origin/main
-
-          # Riapplica il commit sopra l'ultima main
-          git cherry-pick "$LAST_COMMIT"
-
-          # Tentativo 2: push sicuro (non sovrascrive roba non vista)
+          echo "Pushing changes safely..."
           git push --force-with-lease origin HEAD:main

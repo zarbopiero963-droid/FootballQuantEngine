@@ -9,32 +9,42 @@ permissions:
   contents: write
 
 jobs:
-
   update:
-
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - run: pip install pytest
+      - name: Install dependencies
+        run: |
+          pip install pytest
 
-      - run: python repo_update_engine.py
+      - name: Run DevOps Engine
+        run: |
+          python repo_update_engine.py
 
-      - run: pytest
+      - name: Run tests
+        run: |
+          pytest
 
-      - run: |
+      - name: Commit changes
+        run: |
           git config user.name "repo-bot"
           git config user.email "bot@github.com"
 
           git add .
 
-          if [[ -n $(git status --porcelain) ]]; then
+          if [[ -n "$(git status --porcelain)" ]]; then
             git commit -m "[skip ci] Automated DevOps Engine Update"
             git push
+          else
+            echo "No changes to commit"
           fi

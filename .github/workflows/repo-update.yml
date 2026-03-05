@@ -9,18 +9,17 @@ permissions:
   contents: write
 
 jobs:
-
   update:
-
     runs-on: ubuntu-latest
 
     env:
       PYTHONPATH: ${{ github.workspace }}
 
     steps:
-
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -44,6 +43,11 @@ jobs:
 
           if [[ -n "$(git status --porcelain)" ]]; then
             git commit -m "[skip ci] Automated DevOps Engine Update"
+
+            # FIX: se nel frattempo main è cambiato su GitHub, aggiorna e ribasa
+            git pull --rebase origin main
+
+            # poi push
             git push
           else
             echo "No changes to commit"

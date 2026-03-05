@@ -19,6 +19,7 @@ KEEP_LAST_BACKUPS = 10
 # UTIL
 # ------------------------
 
+
 def timestamp():
     return datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
@@ -38,6 +39,7 @@ def log(msg):
 # ------------------------
 # BACKUP
 # ------------------------
+
 
 def list_backups():
     ensure_dir(BACKUP_DIR)
@@ -135,6 +137,7 @@ def restore_latest_backup():
 # FILE OPS
 # ------------------------
 
+
 def create_folder(path):
 
     os.makedirs(path, exist_ok=True)
@@ -225,6 +228,7 @@ def insert_line(path, number, text):
 # WHITESPACE
 # ------------------------
 
+
 def fix_whitespace():
 
     for root, dirs, files in os.walk("."):
@@ -267,6 +271,7 @@ def fix_whitespace():
 # FORMAT / TEST
 # ------------------------
 
+
 def run_black():
     log("Running Black")
     subprocess.run(["black", "."], check=False)
@@ -286,11 +291,7 @@ def run_pytest():
 
     log("Running pytest")
 
-    result = subprocess.run(
-        ["pytest", "-v"],
-        capture_output=True,
-        text=True
-    )
+    result = subprocess.run(["pytest", "-v"], capture_output=True, text=True)
 
     print(result.stdout)
 
@@ -304,6 +305,7 @@ def run_pytest():
 # ------------------------
 # PROCESS
 # ------------------------
+
 
 def process():
 

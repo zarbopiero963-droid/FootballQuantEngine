@@ -1,6 +1,6 @@
+import datetime
 import os
 import shutil
-import datetime
 import subprocess
 
 INSTRUCTIONS_FILE = "devops_update.txt"
@@ -14,6 +14,7 @@ LOG_FILE = os.path.join(LOG_DIR, "operations.log")
 # ------------------------
 # UTIL
 # ------------------------
+
 
 def timestamp():
     return datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -38,6 +39,7 @@ def log(msg):
 # BACKUP
 # ------------------------
 
+
 def backup_repository():
 
     ensure_dir(BACKUP_DIR)
@@ -54,6 +56,7 @@ def backup_repository():
 # ------------------------
 # FILE OPS
 # ------------------------
+
 
 def create_folder(path):
 
@@ -83,6 +86,7 @@ def append_file(path, content):
 # ------------------------
 # CLEAN WHITESPACE
 # ------------------------
+
 
 def fix_whitespace():
 
@@ -126,6 +130,7 @@ def fix_whitespace():
 # FORMAT + LINT + TEST
 # ------------------------
 
+
 def run_black():
 
     log("Running Black")
@@ -151,11 +156,7 @@ def run_pytest():
 
     log("Running pytest")
 
-    result = subprocess.run(
-        ["pytest", "-v"],
-        capture_output=True,
-        text=True
-    )
+    result = subprocess.run(["pytest", "-v"], capture_output=True, text=True)
 
     print(result.stdout)
 
@@ -171,6 +172,7 @@ def run_pytest():
 # ------------------------
 # PROCESS
 # ------------------------
+
 
 def process():
 

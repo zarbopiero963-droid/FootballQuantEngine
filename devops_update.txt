@@ -160,3 +160,4 @@ def get_logger():
 EOF
 
 FIX_WHITESPACE
+

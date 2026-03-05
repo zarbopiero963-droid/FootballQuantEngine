@@ -1,4 +1,10 @@
+requests
+pandas
+numpy
+scipy
+sqlalchemy
 pytest
-ruff
 black
 isort
+ruff
+

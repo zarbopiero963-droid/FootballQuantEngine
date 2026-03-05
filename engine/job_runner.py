@@ -1,57 +1,7 @@
-AUTO_BACKUP_BEFORE_RUN
-
-CREA_FILE engine/worker_pool.py
-from concurrent.futures import ThreadPoolExecutor
-
-
-class WorkerPool:
-
-    def __init__(self, workers=4):
-        self.executor = ThreadPoolExecutor(max_workers=workers)
-
-    def submit(self, fn, *args, **kwargs):
-        return self.executor.submit(fn, *args, **kwargs)
-
-    def shutdown(self):
-        self.executor.shutdown(wait=True)
-EOF
-
-CREA_FILE engine/scheduler.py
-import time
-from datetime import datetime
-
-
-class Scheduler:
-
-    def __init__(self, interval_minutes=10):
-        self.interval = interval_minutes * 60
-        self.jobs = []
-
-    def add_job(self, func):
-        self.jobs.append(func)
-
-    def run(self):
-
-        while True:
-
-            start = datetime.utcnow()
-
-            for job in self.jobs:
-                job()
-
-            elapsed = (datetime.utcnow() - start).total_seconds()
-
-            sleep_time = self.interval - elapsed
-
-            if sleep_time > 0:
-                time.sleep(sleep_time)
-EOF
-
-CREA_FILE engine/job_runner.py
 from data.api_football_collector import ApiFootballCollector
 from data.odds_collector import OddsCollector
-from features.feature_engine import FeatureEngine
 from engine.prediction_pipeline import PredictionPipeline
+from features.feature_engine import FeatureEngine
 
 
 class JobRunner:
@@ -78,7 +28,7 @@ class JobRunner:
                     "home": teams.get("home", {}).get("name"),
                     "away": teams.get("away", {}).get("name"),
                     "home_goals": 0,
-                    "away_goals": 0
+                    "away_goals": 0,
                 }
             )
 
@@ -132,27 +82,3 @@ class JobRunner:
         value_bets = self.pipeline.run(features_df, odds_data)
 
         return value_bets
-EOF
-
-CREA_FILE app/main.py
-from engine.scheduler import Scheduler
-from engine.job_runner import JobRunner
-
-
-def main():
-
-    scheduler = Scheduler(interval_minutes=10)
-
-    runner = JobRunner()
-
-    scheduler.add_job(runner.run_cycle)
-
-    scheduler.run()
-
-
-if __name__ == "__main__":
-    main()
-EOF
-
-FIX_WHITESPACE
-

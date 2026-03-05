@@ -1,46 +1,8 @@
-BACKUP_FILE repo_update_engine.py
+BACKUP_REPOSITORY
 
-AGGIUNGI repo_update_engine.py import subprocess
-AGGIUNGI repo_update_engine.py 
-AGGIUNGI repo_update_engine.py def run_black():
-AGGIUNGI repo_update_engine.py     log("Running Black formatter")
-AGGIUNGI repo_update_engine.py     subprocess.run(["black", "."], check=False)
-AGGIUNGI repo_update_engine.py 
-AGGIUNGI repo_update_engine.py def run_isort():
-AGGIUNGI repo_update_engine.py     log("Running isort")
-AGGIUNGI repo_update_engine.py     subprocess.run(["isort", "."], check=False)
-AGGIUNGI repo_update_engine.py 
-AGGIUNGI repo_update_engine.py def run_ruff():
-AGGIUNGI repo_update_engine.py     log("Running ruff")
-AGGIUNGI repo_update_engine.py     subprocess.run(["ruff", "check", ".", "--fix"], check=False)
-AGGIUNGI repo_update_engine.py 
-AGGIUNGI repo_update_engine.py def run_pytest():
-AGGIUNGI repo_update_engine.py     log("Running pytest")
-AGGIUNGI repo_update_engine.py     result = subprocess.run(["pytest"], capture_output=True, text=True)
-AGGIUNGI repo_update_engine.py     log(result.stdout)
-AGGIUNGI repo_update_engine.py     if result.returncode != 0:
-AGGIUNGI repo_update_engine.py         log("Tests FAILED")
-AGGIUNGI repo_update_engine.py         return False
-AGGIUNGI repo_update_engine.py     log("Tests PASSED")
-AGGIUNGI repo_update_engine.py     return True
-AGGIUNGI repo_update_engine.py 
-AGGIUNGI repo_update_engine.py def rollback():
-AGGIUNGI repo_update_engine.py     log("ROLLBACK STARTED")
-AGGIUNGI repo_update_engine.py     versions = sorted(os.listdir("backups"))
-AGGIUNGI repo_update_engine.py     if not versions:
-AGGIUNGI repo_update_engine.py         log("No backup available")
-AGGIUNGI repo_update_engine.py         return
-AGGIUNGI repo_update_engine.py     restore_version(versions[-1])
-AGGIUNGI repo_update_engine.py     log("ROLLBACK COMPLETED")
-AGGIUNGI repo_update_engine.py 
-AGGIUNGI repo_update_engine.py # ------------------------
-AGGIUNGI repo_update_engine.py # CI PIPELINE
-AGGIUNGI repo_update_engine.py # ------------------------
-AGGIUNGI repo_update_engine.py fix_whitespace()
-AGGIUNGI repo_update_engine.py run_black()
-AGGIUNGI repo_update_engine.py run_isort()
-AGGIUNGI repo_update_engine.py run_ruff()
-AGGIUNGI repo_update_engine.py tests_ok = run_pytest()
-AGGIUNGI repo_update_engine.py if not tests_ok:
-AGGIUNGI repo_update_engine.py     rollback()
-AGGIUNGI repo_update_engine.py     raise Exception("Test suite failed")
+CREA_CARTELLA test_engine
+
+CREA_FILE test_engine/hello.txt <<EOF
+Hello DevOps Engine
+This file was created automatically
+EOF

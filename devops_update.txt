@@ -1,148 +1,157 @@
 AUTO_BACKUP_BEFORE_RUN
 
-CREA_CARTELLA strategies
-CREA_CARTELLA engine
+CREA_FILE engine/worker_pool.py
+from concurrent.futures import ThreadPoolExecutor
 
-CREA_FILE strategies/__init__.py
-# strategies package
+
+class WorkerPool:
+
+    def __init__(self, workers=4):
+        self.executor = ThreadPoolExecutor(max_workers=workers)
+
+    def submit(self, fn, *args, **kwargs):
+        return self.executor.submit(fn, *args, **kwargs)
+
+    def shutdown(self):
+        self.executor.shutdown(wait=True)
 EOF
 
-CREA_FILE strategies/edge_detector.py
-from config.constants import EDGE_THRESHOLD
+CREA_FILE engine/scheduler.py
+import time
+from datetime import datetime
 
 
-class EdgeDetector:
+class Scheduler:
 
-    def calculate_edge(self, probability, odds):
+    def __init__(self, interval_minutes=10):
+        self.interval = interval_minutes * 60
+        self.jobs = []
 
-        if odds <= 0:
-            return 0
+    def add_job(self, func):
+        self.jobs.append(func)
 
-        implied_probability = 1 / odds
+    def run(self):
 
-        return probability - implied_probability
+        while True:
 
-    def is_value_bet(self, probability, odds):
+            start = datetime.utcnow()
 
-        edge = self.calculate_edge(probability, odds)
+            for job in self.jobs:
+                job()
 
-        return edge > EDGE_THRESHOLD
+            elapsed = (datetime.utcnow() - start).total_seconds()
+
+            sleep_time = self.interval - elapsed
+
+            if sleep_time > 0:
+                time.sleep(sleep_time)
 EOF
 
-CREA_FILE strategies/value_bet_strategy.py
-class ValueBetStrategy:
-
-    def find_value_bets(self, predictions, odds_data, edge_detector):
-
-        results = []
-
-        for match_id in predictions:
-
-            prediction = predictions[match_id]
-
-            if match_id not in odds_data:
-                continue
-
-            odds = odds_data[match_id]
-
-            home_prob = prediction.get("home_win")
-            draw_prob = prediction.get("draw")
-            away_prob = prediction.get("away_win")
-
-            home_odds = odds.get("home")
-            draw_odds = odds.get("draw")
-            away_odds = odds.get("away")
-
-            if edge_detector.is_value_bet(home_prob, home_odds):
-                results.append(
-                    {
-                        "match_id": match_id,
-                        "market": "home",
-                        "probability": home_prob,
-                        "odds": home_odds
-                    }
-                )
-
-            if edge_detector.is_value_bet(draw_prob, draw_odds):
-                results.append(
-                    {
-                        "match_id": match_id,
-                        "market": "draw",
-                        "probability": draw_prob,
-                        "odds": draw_odds
-                    }
-                )
-
-            if edge_detector.is_value_bet(away_prob, away_odds):
-                results.append(
-                    {
-                        "match_id": match_id,
-                        "market": "away",
-                        "probability": away_prob,
-                        "odds": away_odds
-                    }
-                )
-
-        return results
-EOF
-
-CREA_FILE engine/__init__.py
-# engine package
-EOF
-
-CREA_FILE engine/prediction_pipeline.py
-from models.poisson_model import PoissonModel
-from simulation.monte_carlo import MonteCarloSimulator
-from strategies.edge_detector import EdgeDetector
-from strategies.value_bet_strategy import ValueBetStrategy
+CREA_FILE engine/job_runner.py
+from data.api_football_collector import ApiFootballCollector
+from data.odds_collector import OddsCollector
+from features.feature_engine import FeatureEngine
+from engine.prediction_pipeline import PredictionPipeline
 
 
-class PredictionPipeline:
+class JobRunner:
 
     def __init__(self):
 
-        self.poisson = PoissonModel()
-        self.simulator = MonteCarloSimulator()
-        self.edge_detector = EdgeDetector()
-        self.strategy = ValueBetStrategy()
+        self.api = ApiFootballCollector()
+        self.odds = OddsCollector()
+        self.pipeline = PredictionPipeline()
 
-    def run(self, features_df, odds_data):
+    def run_cycle(self):
 
-        predictions = {}
+        fixtures_response = self.api.get_next_matches()
 
-        for _, row in features_df.iterrows():
+        fixtures = []
 
-            match_id = f"{row['home']}_vs_{row['away']}"
+        for match in fixtures_response.get("response", []):
 
-            model_probs = self.poisson.predict(
-                row["home_attack"],
-                row["home_defense"],
-                row["away_attack"],
-                row["away_defense"]
+            fixture = match.get("fixture", {})
+            teams = match.get("teams", {})
+
+            fixtures.append(
+                {
+                    "home": teams.get("home", {}).get("name"),
+                    "away": teams.get("away", {}).get("name"),
+                    "home_goals": 0,
+                    "away_goals": 0
+                }
             )
 
-            lambda_home = row["home_attack"] * row["away_defense"]
-            lambda_away = row["away_attack"] * row["home_defense"]
+        import pandas as pd
 
-            simulation_probs = self.simulator.simulate(
-                lambda_home,
-                lambda_away
-            )
+        fixtures_df = pd.DataFrame(fixtures)
 
-            predictions[match_id] = {
-                "home_win": (model_probs["home_win"] + simulation_probs["home_win"]) / 2,
-                "draw": (model_probs["draw"] + simulation_probs["draw"]) / 2,
-                "away_win": (model_probs["away_win"] + simulation_probs["away_win"]) / 2
-            }
+        feature_engine = FeatureEngine()
 
-        value_bets = self.strategy.find_value_bets(
-            predictions,
-            odds_data,
-            self.edge_detector
-        )
+        features_df = feature_engine.build_features(fixtures_df)
+
+        odds_response = self.odds.get_odds()
+
+        odds_data = {}
+
+        for event in odds_response:
+
+            home = event.get("home_team")
+            away = event.get("away_team")
+
+            match_id = f"{home}_vs_{away}"
+
+            bookmakers = event.get("bookmakers", [])
+
+            if not bookmakers:
+                continue
+
+            markets = bookmakers[0].get("markets", [])
+
+            if not markets:
+                continue
+
+            outcomes = markets[0].get("outcomes", [])
+
+            odds_map = {}
+
+            for outcome in outcomes:
+
+                name = outcome.get("name")
+                price = outcome.get("price")
+
+                if name == home:
+                    odds_map["home"] = price
+                elif name == away:
+                    odds_map["away"] = price
+                elif name.lower() == "draw":
+                    odds_map["draw"] = price
+
+            odds_data[match_id] = odds_map
+
+        value_bets = self.pipeline.run(features_df, odds_data)
 
         return value_bets
 EOF
 
-FIX_WHITESPACE
+CREA_FILE app/main.py
+from engine.scheduler import Scheduler
+from engine.job_runner import JobRunner
 
+
+def main():
+
+    scheduler = Scheduler(interval_minutes=10)
+
+    runner = JobRunner()
+
+    scheduler.add_job(runner.run_cycle)
+
+    scheduler.run()
+
+
+if __name__ == "__main__":
+    main()
+EOF
+
+FIX_WHITESPACE

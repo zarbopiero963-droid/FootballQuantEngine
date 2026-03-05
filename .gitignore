@@ -1,74 +1,26 @@
-# -----------------------
 # Python
-# -----------------------
-
 __pycache__/
 *.py[cod]
 *$py.class
-*.pyo
-*.pyd
 
-# -----------------------
-# C extensions
-# -----------------------
-
-*.so
-
-# -----------------------
-# Distribution
-# -----------------------
-
+# Build
 dist/
 build/
 *.egg-info/
-.eggs/
-*.spec
 
-# -----------------------
-# PyInstaller
-# -----------------------
-
-*.manifest
-
-# -----------------------
-# Database / datasets
-# -----------------------
-
-*.sqlite3
-*.db
-data/datasets/*.csv
-data/datasets/*.json
-
-# -----------------------
-# Virtual environments
-# -----------------------
-
+# Virtual env
 venv/
 env/
-ENV/
 .venv/
 
-# -----------------------
 # DevOps runtime
-# -----------------------
+logs/
+backups/
 
-logs/*
-patches/*
-
-# backups NON ignorato
-# così i backup vengono salvati su GitHub
-
-# -----------------------
 # IDE
-# -----------------------
-
 .idea/
 .vscode/
 
-# -----------------------
 # OS
-# -----------------------
-
-*.swp
 .DS_Store
 Thumbs.db

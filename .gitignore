@@ -15,7 +15,6 @@ env/
 
 # DevOps runtime
 logs/
-backups/
 
 # IDE
 .idea/

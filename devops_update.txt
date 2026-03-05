@@ -1,1 +1,9 @@
-GENERATE_PATCH
+
+AUTO_BACKUP_BEFORE_RUN
+
+CREA_CARTELLA devops_test
+
+CREA_FILE devops_test/test.txt <<EOF
+DevOps engine working
+Backup system active
+EOF

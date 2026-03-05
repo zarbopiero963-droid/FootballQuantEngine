@@ -39,10 +39,10 @@ jobs:
         run: |
           python repo_update_engine.py
 
-      - name: Commit changes
+      - name: Commit + Push (robust)
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
           git config user.name "repo-bot"
           git config user.email "bot@github.com"
@@ -56,9 +56,25 @@ jobs:
 
           git commit -m "[skip ci] Automated DevOps Engine Update"
 
-          # FIX: sync robusto con remoto
+          # Sempre aggiorna info dal remoto
           git fetch origin main
-          git rebase origin/main
 
-          # FIX: push sicuro in caso di concorrenza
+          # Tentativo 1: push normale
+          if git push origin HEAD:main; then
+            echo "Pushed successfully"
+            exit 0
+          fi
+
+          echo "Push rejected (fetch first). Syncing and retrying..."
+
+          # Salva l'hash del commit del bot
+          LAST_COMMIT="$(git rev-parse HEAD)"
+
+          # Allinea alla versione attuale del remoto
+          git reset --hard origin/main
+
+          # Riapplica il commit sopra l'ultima main
+          git cherry-pick "$LAST_COMMIT"
+
+          # Tentativo 2: push sicuro (non sovrascrive roba non vista)
           git push --force-with-lease origin HEAD:main

@@ -1,10 +1,22 @@
-```text
 AUTO_BACKUP_BEFORE_RUN
 
 CREA_CARTELLA .github
 CREA_CARTELLA .github/workflows
 
+CREA_FILE config/__init__.py
+# config package
+EOF
+
+CREA_FILE data/__init__.py
+# data package
+EOF
+
+CREA_FILE database/__init__.py
+# database package
+EOF
+
 APPEND requirements.txt
+openpyxl
 pyinstaller
 EOF
 
@@ -54,16 +66,11 @@ Motore quantitativo per calcio con:
 - Python 3.11+
 
 ## Setup
-```bash
 pip install -r requirements.txt
 
-```
-
 ## Configurazione (settings.json)
-
 Crea un file `settings.json` nella root:
 
-```json
 {
   "api_football_key": "YOUR_API_FOOTBALL_KEY",
   "odds_api_key": "YOUR_ODDS_API_KEY",
@@ -71,49 +78,20 @@ Crea un file `settings.json` nella root:
   "telegram_chat_id": ""
 }
 
-```
-
 ## Avvio (sviluppo)
-
-```bash
 python app/main.py
 
-```
-
-## Database
-
-Viene creato automaticamente `quant_engine.db` (SQLite) con tabelle:
-
-* fixtures
-* odds_history
-* predictions
-
-## Export
-
-* CSV: `export/csv_exporter.py`
-* Excel: `export/excel_exporter.py`
-
 ## Build EXE (locale)
-
-```bash
 pyinstaller football_quant_engine.spec
 
-```
-
-Output:
-`dist/FootballQuantEngine.exe`
-
 ## Build EXE su GitHub Actions
-
 Ad ogni commit viene generato un artifact scaricabile con l'EXE:
-
-1. vai in Actions
-2. apri il workflow Build Portable EXE
-3. scarica l'artifact FootballQuantEngine-Windows
+- vai in Actions
+- apri il workflow Build Portable EXE
+- scarica l'artifact FootballQuantEngine-Windows
 EOF
 
 CREA_FILE football_quant_engine.spec
-
 # -*- mode: python ; coding: utf-8 -*-
 
 from PyInstaller.utils.hooks import collect_all
@@ -125,56 +103,51 @@ binaries = []
 hiddenimports = []
 
 for pkg in ("numpy", "pandas", "scipy"):
-pkg_datas, pkg_binaries, pkg_hidden = collect_all(pkg)
-datas += pkg_datas
-binaries += pkg_binaries
-hiddenimports += pkg_hidden
+    pkg_datas, pkg_binaries, pkg_hidden = collect_all(pkg)
+    datas += pkg_datas
+    binaries += pkg_binaries
+    hiddenimports += pkg_hidden
 
 a = Analysis(
-["app/main.py"],
-pathex=["."],
-binaries=binaries,
-datas=datas,
-hiddenimports=hiddenimports,
-hookspath=[],
-hooksconfig={},
-runtime_hooks=[],
-excludes=[],
-win_no_prefer_redirects=False,
-win_private_assemblies=False,
-cipher=block_cipher,
-noarchive=False,
+    ["app/main.py"],
+    pathex=["."],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False,
 )
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
-pyz,
-a.scripts,
-[],
-exclude_binaries=True,
-name="FootballQuantEngine",
-debug=False,
-bootloader_ignore_signals=False,
-strip=False,
-upx=False,
-console=True,
-disable_windowed_traceback=False,
-argv_emulation=False,
-target_arch=None,
-codesign_identity=None,
-entitlements_file=None,
+    pyz,
+    a.scripts,
+    [],
+    exclude_binaries=True,
+    name="FootballQuantEngine",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    console=True,
 )
 
 coll = COLLECT(
-exe,
-a.binaries,
-a.zipfiles,
-a.datas,
-strip=False,
-upx=False,
-upx_exclude=[],
-name="FootballQuantEngine",
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name="FootballQuantEngine",
 )
 EOF
 
@@ -182,59 +155,51 @@ CREA_FILE .github/workflows/build.yml
 name: Build Portable EXE
 
 on:
-push:
-branches: ["**"]
+  push:
+    branches: ["**"]
 
 jobs:
-build-windows:
-runs-on: windows-latest
+  build-windows:
+    runs-on: windows-latest
 
-```
-steps:
-  - name: Checkout
-    uses: actions/checkout@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  - name: Setup Python
-    uses: actions/setup-python@v5
-    with:
-      python-version: "3.11"
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-  - name: Install dependencies
-    run: |
-      python -m pip install --upgrade pip
-      pip install -r requirements.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-  - name: Lint
-    run: |
-      ruff check .
-      black --check .
-      isort --check-only .
+      - name: Lint
+        run: |
+          ruff check .
+          black --check .
+          isort --check-only .
 
-  - name: Test
-    run: |
-      pytest -q
+      - name: Test
+        run: |
+          pytest -q
 
-  - name: Build EXE (PyInstaller)
-    run: |
-      pyinstaller football_quant_engine.spec
+      - name: Build EXE (PyInstaller)
+        run: |
+          pyinstaller football_quant_engine.spec
 
-  - name: Zip portable folder
-    shell: pwsh
-    run: |
-      Compress-Archive -Path dist\FootballQuantEngine\* -DestinationPath FootballQuantEngine-Portable.zip -Force
+      - name: Zip portable folder
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist\FootballQuantEngine\* -DestinationPath FootballQuantEngine-Portable.zip -Force
 
-  - name: Upload artifact
-    uses: actions/upload-artifact@v4
-    with:
-      name: FootballQuantEngine-Windows
-      path: FootballQuantEngine-Portable.zip
-
-```
-
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FootballQuantEngine-Windows
+          path: FootballQuantEngine-Portable.zip
 EOF
 
 FIX_WHITESPACE
-
-```
-
-```

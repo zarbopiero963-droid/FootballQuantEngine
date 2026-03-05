@@ -3,85 +3,59 @@ import ast
 import shutil
 import datetime
 import difflib
-import sys
 
 INSTRUCTIONS_FILE = "devops_update.txt"
 
 BACKUP_DIR = "backups"
 PATCH_DIR = "patches"
-LOG_FILE = "logs/operations.log"
-HISTORY_FILE = "backups/history.log"
+LOG_DIR = "logs"
 
-DRY_RUN = "--dry-run" in sys.argv
+LOG_FILE = os.path.join(LOG_DIR, "operations.log")
+HISTORY_FILE = os.path.join(BACKUP_DIR, "history.log")
 
 
-# -------------------------
+# ------------------------
 # UTIL
-# -------------------------
-
-def now():
-    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
+# ------------------------
 
 def timestamp():
     return datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
 
 def ensure_dir(path):
-    os.makedirs(path, exist_ok=True)
+    if path and not os.path.exists(path):
+        os.makedirs(path, exist_ok=True)
 
 
 def log(msg):
-    ensure_dir("logs")
+
+    ensure_dir(LOG_DIR)
 
     with open(LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(f"{now()} {msg}\n")
+        f.write(msg + "\n")
 
     print(msg)
 
 
 def history(msg):
-    ensure_dir("backups")
+
+    ensure_dir(BACKUP_DIR)
 
     with open(HISTORY_FILE, "a", encoding="utf-8") as f:
-        f.write(f"{now()} {msg}\n")
+        f.write(msg + "\n")
 
 
-# -------------------------
+# ------------------------
 # BACKUP
-# -------------------------
-
-def version_backup_path():
-
-    ts = timestamp()
-
-    path = os.path.join(BACKUP_DIR, ts)
-
-    os.makedirs(path, exist_ok=True)
-
-    return path, ts
-
-
-def backup_file(path):
-
-    if not os.path.exists(path):
-        return
-
-    root, ts = version_backup_path()
-
-    dst = os.path.join(root, path)
-
-    ensure_dir(os.path.dirname(dst))
-
-    shutil.copy2(path, dst)
-
-    log(f"backup file {path}")
-    history(f"BACKUP_FILE {path}")
-
+# ------------------------
 
 def backup_repository():
 
-    root, ts = version_backup_path()
+    ts = timestamp()
+
+    root = os.path.join(BACKUP_DIR, ts)
+
+    ensure_dir(root)
 
     for r, d, f in os.walk("."):
 
@@ -100,13 +74,32 @@ def backup_repository():
 
             shutil.copy2(src, dst)
 
-    log(f"backup repo {ts}")
     history(f"BACKUP_REPOSITORY {ts}")
+    log(f"Backup repository {ts}")
 
 
-# -------------------------
+def backup_file(path):
+
+    if not os.path.exists(path):
+        return
+
+    ts = timestamp()
+
+    root = os.path.join(BACKUP_DIR, ts)
+
+    dst = os.path.join(root, path)
+
+    ensure_dir(os.path.dirname(dst))
+
+    shutil.copy2(path, dst)
+
+    history(f"BACKUP_FILE {path}")
+    log(f"Backup file {path}")
+
+
+# ------------------------
 # RESTORE
-# -------------------------
+# ------------------------
 
 def restore_file(path):
 
@@ -126,7 +119,7 @@ def restore_file(path):
 
     shutil.copy2(src, path)
 
-    log(f"restore file {path}")
+    log(f"Restored file {path}")
 
 
 def restore_repository():
@@ -136,9 +129,7 @@ def restore_repository():
     if not versions:
         return
 
-    latest = versions[-1]
-
-    restore_version(latest)
+    restore_version(versions[-1])
 
 
 def restore_version(version):
@@ -162,68 +153,78 @@ def restore_version(version):
 
             shutil.copy2(src, dst)
 
-    log(f"restore version {version}")
-    history(f"RESTORE_VERSION {version}")
+    log(f"Restored version {version}")
 
 
-# -------------------------
+# ------------------------
 # FILE OPS
-# -------------------------
+# ------------------------
 
 def create_folder(path):
+
     os.makedirs(path, exist_ok=True)
-    log(f"folder created {path}")
+
+    log(f"Folder created {path}")
 
 
 def create_file(path, content):
-    ensure_dir(os.path.dirname(path) or ".")
+
+    ensure_dir(os.path.dirname(path))
+
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
-    log(f"file created {path}")
+
+    log(f"File created {path}")
 
 
 def overwrite(path, content):
+
     backup_file(path)
+
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
-    log(f"overwrite {path}")
+
+    log(f"Overwrite {path}")
 
 
-def append(path, content):
+def append_file(path, content):
+
     backup_file(path)
+
     with open(path, "a", encoding="utf-8") as f:
         f.write("\n" + content)
-    log(f"append {path}")
+
+    log(f"Append {path}")
 
 
-def replace(path, old, new):
+def replace_text(path, old, new):
 
     backup_file(path)
 
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path) as f:
         data = f.read()
 
     data = data.replace(old, new)
 
-    with open(path, "w", encoding="utf-8") as f:
+    with open(path, "w") as f:
         f.write(data)
 
-    log(f"replace text {path}")
+    log(f"Replace text in {path}")
 
 
 def insert_line(path, line_number, text):
 
     backup_file(path)
 
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path) as f:
         lines = f.readlines()
 
     lines.insert(line_number - 1, text + "\n")
 
-    with open(path, "w", encoding="utf-8") as f:
+    with open(path, "w") as f:
         f.writelines(lines)
 
-    log(f"insert line {path}")
+    log(f"Insert line {path}")
 
 
 def delete_file(path):
@@ -233,7 +234,7 @@ def delete_file(path):
     if os.path.exists(path):
         os.remove(path)
 
-    log(f"delete file {path}")
+    log(f"Delete file {path}")
 
 
 def move_file(src, dst):
@@ -244,7 +245,7 @@ def move_file(src, dst):
 
     shutil.move(src, dst)
 
-    log(f"move {src} -> {dst}")
+    log(f"Move {src} -> {dst}")
 
 
 def rename_file(src, dst):
@@ -253,38 +254,12 @@ def rename_file(src, dst):
 
     os.rename(src, dst)
 
-    log(f"rename {src} -> {dst}")
+    log(f"Rename {src} -> {dst}")
 
 
-# -------------------------
+# ------------------------
 # AST OPS
-# -------------------------
-
-def modify_function(file_path, func, new_body):
-
-    backup_file(file_path)
-
-    with open(file_path) as f:
-        code = f.read()
-
-    tree = ast.parse(code)
-
-    class Modifier(ast.NodeTransformer):
-
-        def visit_FunctionDef(self, node):
-
-            if node.name == func:
-                node.body = ast.parse(new_body).body
-
-            return node
-
-    tree = Modifier().visit(tree)
-
-    with open(file_path, "w") as f:
-        f.write(ast.unparse(tree))
-
-    log(f"modify function {func}")
-
+# ------------------------
 
 def patch_function(file_path, func, code):
 
@@ -309,15 +284,7 @@ def patch_function(file_path, func, code):
     with open(file_path, "w") as f:
         f.write(ast.unparse(tree))
 
-    log(f"patch function {func}")
-
-
-def safe_patch_function(file_path, func, code):
-
-    try:
-        patch_function(file_path, func, code)
-    except Exception as e:
-        log(f"safe patch failed {e}")
+    log(f"Patch function {func}")
 
 
 def delete_function(file_path, func):
@@ -343,12 +310,12 @@ def delete_function(file_path, func):
     with open(file_path, "w") as f:
         f.write(ast.unparse(tree))
 
-    log(f"delete function {func}")
+    log(f"Delete function {func}")
 
 
-# -------------------------
+# ------------------------
 # REFACTOR
-# -------------------------
+# ------------------------
 
 def refactor_repo(action, target, new):
 
@@ -380,12 +347,12 @@ def refactor_repo(action, target, new):
             with open(path, "w") as f:
                 f.write(ast.unparse(tree))
 
-    log(f"refactor {target}->{new}")
+    log(f"Refactor {target} -> {new}")
 
 
-# -------------------------
-# PATCH
-# -------------------------
+# ------------------------
+# PATCH GENERATOR
+# ------------------------
 
 def generate_patch():
 
@@ -393,14 +360,14 @@ def generate_patch():
 
     patch_file = os.path.join(PATCH_DIR, f"patch_{timestamp()}.diff")
 
-    diffs = []
-
     versions = sorted(os.listdir(BACKUP_DIR))
 
     if not versions:
         return
 
     latest = versions[-1]
+
+    diffs = []
 
     for r, d, f in os.walk("."):
 
@@ -429,12 +396,12 @@ def generate_patch():
     with open(patch_file, "w") as f:
         f.writelines(diffs)
 
-    log(f"patch generated {patch_file}")
+    log(f"Patch generated {patch_file}")
 
 
-# -------------------------
+# ------------------------
 # CLEAN
-# -------------------------
+# ------------------------
 
 def fix_whitespace():
 
@@ -468,28 +435,32 @@ def fix_whitespace():
             with open(path, "w") as f:
                 f.writelines(new)
 
-    log("whitespace fixed")
+    log("Whitespace fixed")
 
 
-# -------------------------
+# ------------------------
 # PROCESS
-# -------------------------
+# ------------------------
 
 def process():
 
     if not os.path.exists(INSTRUCTIONS_FILE):
-        log("instruction file missing")
         return
 
     with open(INSTRUCTIONS_FILE) as f:
         lines = f.readlines()
 
-    for line in lines:
+    i = 0
 
-        parts = line.strip().split()
+    while i < len(lines):
 
-        if not parts:
+        line = lines[i].strip()
+
+        if not line:
+            i += 1
             continue
+
+        parts = line.split()
 
         cmd = parts[0]
 
@@ -497,49 +468,40 @@ def process():
             create_folder(parts[1])
 
         elif cmd in ["CREA_FILE", "CREATE_FILE"]:
-            create_file(parts[1], "")
 
-        elif cmd in ["SOVRASCRIVI", "OVERWRITE"]:
-            overwrite(parts[1], "")
+            path = parts[1]
 
-        elif cmd in ["AGGIUNGI", "APPEND"]:
-            append(parts[1], " ".join(parts[2:]))
+            i += 1
+            content = []
 
-        elif cmd in ["SOSTITUISCI", "REPLACE"]:
-            replace(parts[1], parts[2], parts[3])
+            while i < len(lines) and not lines[i].strip().isupper():
+                content.append(lines[i])
+                i += 1
 
-        elif cmd in ["INSERISCI_RIGA", "INSERT_LINE"]:
-            insert_line(parts[1], int(parts[2]), " ".join(parts[3:]))
+            create_file(path, "".join(content))
 
-        elif cmd in ["DELETE_FILE", "ELIMINA_FILE"]:
-            delete_file(parts[1])
+            continue
 
-        elif cmd in ["MOVE_FILE", "SPOSTA_FILE"]:
-            move_file(parts[1], parts[2])
+        elif cmd == "BACKUP_REPOSITORY":
+            backup_repository()
 
-        elif cmd in ["RENAME_FILE", "RINOMINA_FILE"]:
-            rename_file(parts[1], parts[2])
+        elif cmd == "BACKUP_FILE":
+            backup_file(parts[1])
 
-        elif cmd in ["MODIFY_FUNCTION", "MODIFICA_FUNZIONE"]:
-            modify_function(parts[1], parts[2], " ".join(parts[3:]))
-
-        elif cmd in ["PATCH_FUNCTION", "PATCH_FUNZIONE"]:
+        elif cmd in ["PATCH_FUNZIONE", "PATCH_FUNCTION"]:
             patch_function(parts[1], parts[2], " ".join(parts[3:]))
 
-        elif cmd in ["SAFE_PATCH_FUNCTION", "SAFE_PATCH_FUNZIONE"]:
-            safe_patch_function(parts[1], parts[2], " ".join(parts[3:]))
-
-        elif cmd in ["DELETE_FUNCTION", "ELIMINA_FUNZIONE"]:
+        elif cmd == "DELETE_FUNCTION":
             delete_function(parts[1], parts[2])
 
         elif cmd == "REFACTOR_REPO":
             refactor_repo(parts[1], parts[2], parts[3])
 
-        elif cmd == "BACKUP_FILE":
-            backup_file(parts[1])
+        elif cmd == "GENERATE_PATCH":
+            generate_patch()
 
-        elif cmd == "BACKUP_REPOSITORY":
-            backup_repository()
+        elif cmd == "FIX_WHITESPACE":
+            fix_whitespace()
 
         elif cmd == "RIPRISTINA_FILE":
             restore_file(parts[1])
@@ -550,18 +512,12 @@ def process():
         elif cmd == "RIPRISTINA_VERSIONE":
             restore_version(parts[1])
 
-        elif cmd == "GENERATE_PATCH":
-            generate_patch()
-
-        elif cmd == "FIX_WHITESPACE":
-            fix_whitespace()
-
         elif cmd == "STORIA":
 
             if os.path.exists(HISTORY_FILE):
+                print(open(HISTORY_FILE).read())
 
-                with open(HISTORY_FILE) as f:
-                    print(f.read())
+        i += 1
 
 
 if __name__ == "__main__":

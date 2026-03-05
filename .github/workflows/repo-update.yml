@@ -2,15 +2,14 @@ name: Repo Update Engine ULTRA
 
 on:
   push:
+    branches:
+      - main
     paths:
       - devops_update.txt
+  workflow_dispatch:
 
 permissions:
   contents: write
-
-concurrency:
-  group: repo-update-main
-  cancel-in-progress: false
 
 jobs:
   update:
@@ -20,12 +19,10 @@ jobs:
       PYTHONPATH: ${{ github.workspace }}
 
     steps:
-
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: true
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -40,28 +37,16 @@ jobs:
         run: |
           python repo_update_engine.py
 
-      - name: Commit and Push Safely
-        shell: bash
+      - name: Commit changes
         run: |
-          set -e
-
           git config user.name "repo-bot"
           git config user.email "bot@github.com"
 
           git add .
 
-          if [[ -z "$(git status --porcelain)" ]]; then
-            echo "No changes to commit"
-            exit 0
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git commit -m "[skip ci] Automated DevOps Engine Update"
+            git push
+          else
+            echo "No changes"
           fi
-
-          git commit -m "[skip ci] Automated DevOps Engine Update"
-
-          echo "Fetching latest remote main..."
-          git fetch origin main
-
-          echo "Rebasing commit on latest main..."
-          git rebase origin/main || true
-
-          echo "Pushing changes safely..."
-          git push --force-with-lease origin HEAD:main

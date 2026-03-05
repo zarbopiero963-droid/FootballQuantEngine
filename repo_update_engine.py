@@ -11,10 +11,10 @@ LOG_DIR = "logs"
 
 LOG_FILE = os.path.join(LOG_DIR, "operations.log")
 
-# ✅ AUTO BACKUP ad ogni run (oltre al comando AUTO_BACKUP_BEFORE_RUN)
+# ✅ Backup automatico ad ogni run (oltre al comando AUTO_BACKUP_BEFORE_RUN)
 AUTO_BACKUP_ALWAYS = True
 
-# ✅ tieni solo gli ultimi N backup per non riempire il repo
+# ✅ Tieni solo gli ultimi N backup zip
 KEEP_LAST_BACKUPS = 10
 
 
@@ -71,9 +71,8 @@ def cleanup_old_backups():
 def backup_repository():
     """
     Backup ZIP del repository:
-    - pesa molto meno (compressione)
-    - evita di riempire la repo se tieni solo gli ultimi N
-    - esclude: .git, backups, logs (opzionale), __pycache__
+    - pesa meno grazie alla compressione
+    - esclude: .git, backups, logs, __pycache__, *.pyc
     """
     ensure_dir(BACKUP_DIR)
     ts = timestamp()
@@ -81,13 +80,10 @@ def backup_repository():
 
     def should_skip(rel_path: str) -> bool:
         rel = rel_path.replace("\\", "/")
-        if rel == ".gitignore":
-            return False
         if rel.startswith(".git/") or rel == ".git":
             return True
         if rel.startswith(f"{BACKUP_DIR}/") or rel == BACKUP_DIR:
             return True
-        # se vuoi includere i log nei backup, commenta le 2 righe sotto
         if rel.startswith(f"{LOG_DIR}/") or rel == LOG_DIR:
             return True
         if "/__pycache__/" in rel or rel.endswith("/__pycache__"):
@@ -98,11 +94,9 @@ def backup_repository():
 
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for root, dirs, files in os.walk("."):
-            # normalizza root
             rel_root = os.path.relpath(root, ".")
             rel_root = "." if rel_root == "." else rel_root.replace("\\", "/")
 
-            # filtra dirs in-place per non scendere in cartelle escluse
             keep_dirs = []
             for d in dirs:
                 rel_dir = d if rel_root == "." else f"{rel_root}/{d}"
@@ -124,7 +118,6 @@ def backup_repository():
 def restore_latest_backup():
     """
     Ripristina l'ultimo backup zip sopra la working tree (senza toccare .git e backups).
-    Utile per rollback in caso di test falliti.
     """
     zips = list_backup_zips()
     if not zips:
@@ -139,11 +132,8 @@ def restore_latest_backup():
             rel = member.replace("\\", "/")
             if rel.startswith(".git/") or rel.startswith(f"{BACKUP_DIR}/"):
                 continue
-            # logs sono esclusi dal backup, ma gestiamo comunque in sicurezza
             if rel.startswith(f"{LOG_DIR}/"):
                 continue
-
-            # evita directory entries
             if member.endswith("/"):
                 continue
 
@@ -180,6 +170,57 @@ def append_file(path, content):
     log(f"Append {path}")
 
 
+def replace_text(path, old, new):
+    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+        data = f.read()
+    data = data.replace(old, new)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(data)
+    log(f"Replace text in {path}")
+
+
+def replace_line(path, old, new):
+    """
+    REPLACE_LINE: sostituisce una stringa SOLO dentro le righe (soft)
+    Esempio:
+    REPLACE_LINE pytest.ini testpaths=test testpaths=test tests
+    """
+    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+        lines = f.readlines()
+
+    out = []
+    changed = False
+    for line in lines:
+        if old in line:
+            out.append(line.replace(old, new))
+            changed = True
+        else:
+            out.append(line)
+
+    if not changed:
+        log(f"REPLACE_LINE: pattern not found in {path} -> '{old}'")
+    else:
+        with open(path, "w", encoding="utf-8") as f:
+            f.writelines(out)
+        log(f"REPLACE_LINE applied in {path}")
+
+
+def insert_line(path, line_number, text):
+    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+        lines = f.readlines()
+
+    idx = max(0, line_number - 1)
+    if idx > len(lines):
+        idx = len(lines)
+
+    lines.insert(idx, text + "\n")
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+
+    log(f"Inserted line {line_number} in {path}")
+
+
 # ------------------------
 # CLEAN WHITESPACE
 # ------------------------
@@ -191,7 +232,7 @@ def fix_whitespace():
             continue
 
         for file in files:
-            if not file.endswith((".py", ".txt", ".md", ".yml", ".yaml", ".json")):
+            if not file.endswith((".py", ".txt", ".md", ".yml", ".yaml", ".json", ".ini")):
                 continue
 
             path = os.path.join(root, file)
@@ -302,6 +343,34 @@ def process():
                 i += 1
             append_file(path, "".join(content))
 
+        # ✅ REPLACE / SOSTITUISCI (soft, non riscrive tutto)
+        # Sintassi:
+        # REPLACE file_path <old...> <new...>
+        # Nota: con spazi è difficile senza EOF -> usa REPLACE_LINE o APPEND se devi mettere spazi.
+        elif cmd in ["REPLACE", "SOSTITUISCI"]:
+            path = parts[1]
+            old = parts[2]
+            new = " ".join(parts[3:])
+            replace_text(path, old, new)
+
+        # ✅ REPLACE_LINE (PER pytest.ini ecc.)
+        # Sintassi:
+        # REPLACE_LINE pytest.ini "testpaths = test" "testpaths = test tests"
+        # (se vuoi evitare virgolette, usa parole senza spazi)
+        elif cmd == "REPLACE_LINE":
+            path = parts[1]
+            old = parts[2]
+            new = " ".join(parts[3:])
+            replace_line(path, old, new)
+
+        # ✅ INSERT_LINE
+        # INSERT_LINE file 10 testo...
+        elif cmd in ["INSERT_LINE", "INSERISCI_RIGA"]:
+            path = parts[1]
+            line_no = int(parts[2])
+            text = " ".join(parts[3:])
+            insert_line(path, line_no, text)
+
         # FIX WHITESPACE
         elif cmd == "FIX_WHITESPACE":
             fix_whitespace()
@@ -319,11 +388,9 @@ def process():
         run_pytest()
     except Exception as e:
         log(f"CI FAILED -> {e}")
-        # ✅ rollback automatico all'ultimo backup
         ok = restore_latest_backup()
         if not ok:
             raise
-        # rilancia errore per far fallire la action (così il workflow segnala il problema)
         raise
 
 

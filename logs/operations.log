@@ -68,3 +68,19 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Backup created backups/backup_2026-03-05_14-36-19.zip
+Folder created models
+Folder created simulation
+File created models/__init__.py
+File created models/poisson_model.py
+File created models/bivariate_poisson.py
+File created models/elo_model.py
+File created simulation/__init__.py
+File created simulation/monte_carlo.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

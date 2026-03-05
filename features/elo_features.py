@@ -1,5 +1,3 @@
-
-
 def elo_diff(home_team, away_team, elo_df):
 
     if elo_df.empty:

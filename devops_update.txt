@@ -1,188 +1,135 @@
 AUTO_BACKUP_BEFORE_RUN
 
-CREA_CARTELLA data
+CREA_CARTELLA features
 
-CREA_FILE data/api_client.py
-import requests
-from utils.logger import get_logger
-
-logger = get_logger()
-
-
-class ApiClient:
-
-    def __init__(self, base_url, api_key=None):
-
-        self.base_url = base_url
-        self.api_key = api_key
-
-    def get(self, endpoint, params=None, headers=None):
-
-        if params is None:
-            params = {}
-
-        if headers is None:
-            headers = {}
-
-        url = f"{self.base_url}/{endpoint}"
-
-        response = requests.get(url, params=params, headers=headers)
-
-        if response.status_code != 200:
-            logger.error(f"API error {response.status_code}: {response.text}")
-            raise Exception("API request failed")
-
-        return response.json()
+CREA_FILE features/__init__.py
+# features package
 EOF
 
-CREA_FILE data/api_football_collector.py
-from config.constants import BASE_URL_API_FOOTBALL
-from config.settings_manager import load_settings
-from data.api_client import ApiClient
+CREA_FILE features/team_stats.py
+import pandas as pd
 
 
-class ApiFootballCollector:
+def build_team_stats(fixtures_df):
 
-    def __init__(self):
+    if fixtures_df.empty:
+        return pd.DataFrame()
 
-        settings = load_settings()
+    df = fixtures_df.copy()
 
-        self.client = ApiClient(
-            BASE_URL_API_FOOTBALL,
-            settings.api_football_key
-        )
+    home = df[["home", "home_goals", "away_goals"]].copy()
+    home.columns = ["team", "goals_for", "goals_against"]
 
-    def get_fixtures(self, league_id, season):
+    away = df[["away", "away_goals", "home_goals"]].copy()
+    away.columns = ["team", "goals_for", "goals_against"]
 
-        headers = {
-            "x-apisports-key": load_settings().api_football_key
-        }
+    teams = pd.concat([home, away])
 
-        return self.client.get(
-            "fixtures",
-            params={
-                "league": league_id,
-                "season": season
-            },
-            headers=headers
-        )
+    stats = teams.groupby("team").agg(
+        goals_for=("goals_for", "mean"),
+        goals_against=("goals_against", "mean"),
+        matches=("goals_for", "count")
+    ).reset_index()
 
-    def get_next_matches(self):
-
-        headers = {
-            "x-apisports-key": load_settings().api_football_key
-        }
-
-        return self.client.get(
-            "fixtures",
-            params={
-                "next": 50
-            },
-            headers=headers
-        )
+    return stats
 EOF
 
-CREA_FILE data/odds_collector.py
-from config.constants import ODDS_API_BASE_URL
-from config.settings_manager import load_settings
-from data.api_client import ApiClient
+CREA_FILE features/elo_features.py
+import pandas as pd
 
 
-class OddsCollector:
+def elo_diff(home_team, away_team, elo_df):
 
-    def __init__(self):
+    if elo_df.empty:
+        return 0
 
-        settings = load_settings()
+    home_row = elo_df[elo_df["Club"] == home_team]
+    away_row = elo_df[elo_df["Club"] == away_team]
 
-        self.api_key = settings.odds_api_key
+    if home_row.empty or away_row.empty:
+        return 0
 
-        self.client = ApiClient(ODDS_API_BASE_URL)
+    home_elo = home_row.iloc[0]["Elo"]
+    away_elo = away_row.iloc[0]["Elo"]
 
-    def get_odds(self):
+    return home_elo - away_elo
+EOF
 
-        return self.client.get(
-            "sports/soccer/odds",
-            params={
-                "apiKey": self.api_key,
-                "regions": "eu",
-                "markets": "h2h"
+CREA_FILE features/xg_features.py
+import pandas as pd
+
+
+def extract_xg(team_data):
+
+    rows = []
+
+    for match in team_data:
+
+        rows.append(
+            {
+                "date": match.get("datetime"),
+                "xg": float(match.get("xG", 0)),
+                "xga": float(match.get("xGA", 0)),
+                "result": match.get("result")
             }
         )
+
+    df = pd.DataFrame(rows)
+
+    return df
 EOF
 
-CREA_FILE data/clubelo_collector.py
+CREA_FILE features/feature_engine.py
 import pandas as pd
-import requests
-from io import StringIO
+
+from features.team_stats import build_team_stats
+from features.elo_features import elo_diff
 
 
-class ClubEloCollector:
+class FeatureEngine:
 
-    BASE_URL = "http://api.clubelo.com"
+    def __init__(self, elo_df=None):
 
-    def get_team_history(self, team):
+        self.elo_df = elo_df if elo_df is not None else pd.DataFrame()
 
-        url = f"{self.BASE_URL}/{team}"
+    def build_features(self, fixtures_df):
 
-        response = requests.get(url)
+        team_stats = build_team_stats(fixtures_df)
 
-        data = StringIO(response.text)
+        rows = []
 
-        df = pd.read_csv(data)
+        for _, row in fixtures_df.iterrows():
 
-        return df
+            home = row["home"]
+            away = row["away"]
 
-    def get_ranking(self):
+            home_stats = team_stats[team_stats["team"] == home]
+            away_stats = team_stats[team_stats["team"] == away]
 
-        url = f"{self.BASE_URL}/elo"
+            if home_stats.empty or away_stats.empty:
+                continue
 
-        response = requests.get(url)
+            home_attack = home_stats.iloc[0]["goals_for"]
+            home_defense = home_stats.iloc[0]["goals_against"]
 
-        data = StringIO(response.text)
+            away_attack = away_stats.iloc[0]["goals_for"]
+            away_defense = away_stats.iloc[0]["goals_against"]
 
-        df = pd.read_csv(data)
+            elo_difference = elo_diff(home, away, self.elo_df)
 
-        return df
-EOF
+            rows.append(
+                {
+                    "home": home,
+                    "away": away,
+                    "home_attack": home_attack,
+                    "home_defense": home_defense,
+                    "away_attack": away_attack,
+                    "away_defense": away_defense,
+                    "elo_diff": elo_difference
+                }
+            )
 
-CREA_FILE data/understat_collector.py
-import requests
-import json
-import re
-
-
-class UnderstatCollector:
-
-    BASE_URL = "https://understat.com"
-
-    def get_league_data(self, league):
-
-        url = f"{self.BASE_URL}/league/{league}"
-
-        response = requests.get(url)
-
-        pattern = re.compile(r"teamsData\s+=\s+JSON.parse\('(.*)'\)")
-
-        data = pattern.search(response.text).group(1)
-
-        decoded = json.loads(data.encode("utf-8").decode("unicode_escape"))
-
-        return decoded
-
-    def get_team_data(self, team, season):
-
-        url = f"{self.BASE_URL}/team/{team}/{season}"
-
-        response = requests.get(url)
-
-        pattern = re.compile(r"matchesData\s+=\s+JSON.parse\('(.*)'\)")
-
-        data = pattern.search(response.text).group(1)
-
-        decoded = json.loads(data.encode("utf-8").decode("unicode_escape"))
-
-        return decoded
+        return pd.DataFrame(rows)
 EOF
 
 FIX_WHITESPACE
-

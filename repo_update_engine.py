@@ -13,6 +13,7 @@ HISTORY_FILE = os.path.join(BACKUP_DIR, 'history.log')
 def timestamp():
     return datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     print('patched')
+    print('AST PATCH WORKING')
 
 def ensure_dir(path):
     if path and (not os.path.exists(path)):

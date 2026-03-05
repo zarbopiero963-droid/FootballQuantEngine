@@ -54,3 +54,17 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Backup created backups/backup_2026-03-05_14-31-58.zip
+Folder created features
+File created features/__init__.py
+File created features/team_stats.py
+File created features/elo_features.py
+File created features/xg_features.py
+File created features/feature_engine.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

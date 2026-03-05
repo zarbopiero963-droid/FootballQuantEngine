@@ -17,25 +17,21 @@ jobs:
     steps:
 
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - run: pip install pytest ruff black isort
+      - run: pip install pytest
 
       - run: python repo_update_engine.py
 
-      # commit anche backups, logs e patches
+      - run: pytest
+
       - run: |
           git config user.name "repo-bot"
           git config user.email "bot@github.com"
 
-          git add backups/
-          git add logs/
-          git add patches/
           git add .
 
           if [[ -n $(git status --porcelain) ]]; then

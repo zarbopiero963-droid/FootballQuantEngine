@@ -1,126 +1,245 @@
 AUTO_BACKUP_BEFORE_RUN
 
-CREA_FILE database/fixtures_repository.py
-from database.db_manager import connect
+CREA_FILE engine/odds_mapper.py
+def map_odds_events_to_match_id(odds_events):
 
+    odds_data = {}
 
-class FixturesRepository:
+    for event in odds_events:
 
-    def save_fixture(self, fixture):
+        home = event.get("home_team")
+        away = event.get("away_team")
 
-        conn = connect()
+        if not home or not away:
+            continue
 
-        cursor = conn.cursor()
+        match_id = f"{home}_vs_{away}"
 
-        cursor.execute(
-            """
-            INSERT OR REPLACE INTO fixtures(
-                fixture_id,
-                league,
-                season,
-                home,
-                away,
-                match_date,
-                home_goals,
-                away_goals,
-                status
-            )
-            VALUES(?,?,?,?,?,?,?,?,?)
-            """,
-            (
-                fixture.get("fixture_id"),
-                fixture.get("league"),
-                fixture.get("season"),
-                fixture.get("home"),
-                fixture.get("away"),
-                fixture.get("match_date"),
-                fixture.get("home_goals"),
-                fixture.get("away_goals"),
-                fixture.get("status")
-            )
-        )
+        bookmakers = event.get("bookmakers", [])
+        if not bookmakers:
+            continue
 
-        conn.commit()
-        conn.close()
+        markets = bookmakers[0].get("markets", [])
+        if not markets:
+            continue
+
+        outcomes = markets[0].get("outcomes", [])
+        if not outcomes:
+            continue
+
+        odds_map = {}
+
+        for outcome in outcomes:
+
+            name = outcome.get("name")
+            price = outcome.get("price")
+
+            if name == home:
+                odds_map["home"] = price
+            elif name == away:
+                odds_map["away"] = price
+            elif isinstance(name, str) and name.lower() == "draw":
+                odds_map["draw"] = price
+
+        if "home" in odds_map and "draw" in odds_map and "away" in odds_map:
+            odds_data[match_id] = odds_map
+
+    return odds_data
 EOF
 
-CREA_FILE database/odds_repository.py
-from datetime import datetime
-from database.db_manager import connect
+CREA_FILE engine/fixture_mapper.py
+def map_api_football_response_to_fixtures(fixtures_response):
 
+    fixtures = []
 
-class OddsRepository:
+    for match in fixtures_response.get("response", []):
 
-    def save_odds(self, fixture_id, home_odds, draw_odds, away_odds):
+        fixture = match.get("fixture", {})
+        league = match.get("league", {})
+        teams = match.get("teams", {})
+        goals = match.get("goals", {})
 
-        conn = connect()
+        fixture_id = fixture.get("id")
+        match_date = fixture.get("date")
+        status = fixture.get("status", {}).get("short")
 
-        cursor = conn.cursor()
+        home = teams.get("home", {}).get("name")
+        away = teams.get("away", {}).get("name")
 
-        cursor.execute(
-            """
-            INSERT INTO odds_history(
-                fixture_id,
-                timestamp,
-                home_odds,
-                draw_odds,
-                away_odds
-            )
-            VALUES(?,?,?,?,?)
-            """,
-            (
-                fixture_id,
-                datetime.utcnow().isoformat(),
-                home_odds,
-                draw_odds,
-                away_odds
-            )
+        if fixture_id is None or not home or not away:
+            continue
+
+        fixtures.append(
+            {
+                "fixture_id": fixture_id,
+                "league": league.get("name"),
+                "season": league.get("season"),
+                "home": home,
+                "away": away,
+                "match_date": match_date,
+                "home_goals": goals.get("home"),
+                "away_goals": goals.get("away"),
+                "status": status
+            }
         )
 
-        conn.commit()
-        conn.close()
+    return fixtures
 EOF
 
-CREA_FILE database/prediction_repository.py
-from datetime import datetime
-from database.db_manager import connect
+CREA_FILE engine/fixture_id_resolver.py
+def resolve_fixture_id(match_id, fixtures):
+
+    for f in fixtures:
+        if f"{f['home']}_vs_{f['away']}" == match_id:
+            return f["fixture_id"]
+
+    return None
+EOF
+
+CREA_FILE engine/repository_saver.py
+from strategies.edge_detector import EdgeDetector
+from database.fixtures_repository import FixturesRepository
+from database.odds_repository import OddsRepository
+from database.prediction_repository import PredictionRepository
 
 
-class PredictionRepository:
+class RepositorySaver:
 
-    def save_prediction(self, fixture_id, model, home_prob, draw_prob, away_prob, edge):
+    def __init__(self):
 
-        conn = connect()
+        self.fixtures_repo = FixturesRepository()
+        self.odds_repo = OddsRepository()
+        self.pred_repo = PredictionRepository()
+        self.edge_detector = EdgeDetector()
 
-        cursor = conn.cursor()
+    def save_all(self, fixtures, odds_data, value_bets):
 
-        cursor.execute(
-            """
-            INSERT INTO predictions(
+        for f in fixtures:
+            self.fixtures_repo.save_fixture(f)
+
+        for match_id, odds in odds_data.items():
+
+            fixture_id = None
+            for f in fixtures:
+                if f"{f['home']}_vs_{f['away']}" == match_id:
+                    fixture_id = f["fixture_id"]
+                    break
+
+            if fixture_id is None:
+                continue
+
+            self.odds_repo.save_odds(
                 fixture_id,
-                model,
-                home_prob,
-                draw_prob,
-                away_prob,
-                edge,
-                created_at
+                odds.get("home"),
+                odds.get("draw"),
+                odds.get("away")
             )
-            VALUES(?,?,?,?,?,?,?)
-            """,
-            (
-                fixture_id,
-                model,
-                home_prob,
-                draw_prob,
-                away_prob,
-                edge,
-                datetime.utcnow().isoformat()
-            )
-        )
 
-        conn.commit()
-        conn.close()
+        for vb in value_bets:
+
+            match_id = vb.get("match_id")
+
+            fixture_id = None
+            for f in fixtures:
+                if f"{f['home']}_vs_{f['away']}" == match_id:
+                    fixture_id = f["fixture_id"]
+                    break
+
+            if fixture_id is None:
+                continue
+
+            prob = vb.get("probability")
+            odds = vb.get("odds")
+
+            edge = self.edge_detector.calculate_edge(prob, odds)
+
+            if vb.get("market") == "home":
+                home_prob = prob
+                draw_prob = None
+                away_prob = None
+            elif vb.get("market") == "draw":
+                home_prob = None
+                draw_prob = prob
+                away_prob = None
+            else:
+                home_prob = None
+                draw_prob = None
+                away_prob = prob
+
+            self.pred_repo.save_prediction(
+                fixture_id=fixture_id,
+                model="ensemble",
+                home_prob=home_prob,
+                draw_prob=draw_prob,
+                away_prob=away_prob,
+                edge=edge
+            )
+EOF
+
+CREA_FILE engine/job_runner.py
+import pandas as pd
+
+from config.settings_manager import load_settings
+from database.db_manager import init_db
+from data.api_football_collector import ApiFootballCollector
+from data.odds_collector import OddsCollector
+from features.feature_engine import FeatureEngine
+from engine.prediction_pipeline import PredictionPipeline
+from engine.fixture_mapper import map_api_football_response_to_fixtures
+from engine.odds_mapper import map_odds_events_to_match_id
+from engine.repository_saver import RepositorySaver
+
+
+class JobRunner:
+
+    def __init__(self):
+
+        self.api = ApiFootballCollector()
+        self.odds = OddsCollector()
+        self.pipeline = PredictionPipeline()
+        self.saver = RepositorySaver()
+
+        init_db()
+
+    def run_cycle(self):
+
+        settings = load_settings()
+
+        if not settings.api_football_key or not settings.odds_api_key:
+            raise Exception("Missing API keys in settings.json")
+
+        fixtures_response = self.api.get_next_matches()
+
+        fixtures = map_api_football_response_to_fixtures(fixtures_response)
+
+        rows = []
+
+        for f in fixtures:
+
+            rows.append(
+                {
+                    "home": f["home"],
+                    "away": f["away"],
+                    "home_goals": f.get("home_goals") or 0,
+                    "away_goals": f.get("away_goals") or 0
+                }
+            )
+
+        fixtures_df = pd.DataFrame(rows)
+
+        feature_engine = FeatureEngine()
+
+        features_df = feature_engine.build_features(fixtures_df)
+
+        odds_events = self.odds.get_odds()
+
+        odds_data = map_odds_events_to_match_id(odds_events)
+
+        value_bets = self.pipeline.run(features_df, odds_data)
+
+        self.saver.save_all(fixtures, odds_data, value_bets)
+
+        return value_bets
 EOF
 
 FIX_WHITESPACE
-

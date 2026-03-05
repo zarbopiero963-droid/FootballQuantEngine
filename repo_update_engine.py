@@ -11,17 +11,13 @@ LOG_DIR = "logs"
 
 LOG_FILE = os.path.join(LOG_DIR, "operations.log")
 
-# ✅ Backup automatico ad ogni run (oltre al comando AUTO_BACKUP_BEFORE_RUN)
 AUTO_BACKUP_ALWAYS = True
-
-# ✅ Tieni solo gli ultimi N backup zip
 KEEP_LAST_BACKUPS = 10
 
 
 # ------------------------
 # UTIL
 # ------------------------
-
 
 def timestamp():
     return datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -39,110 +35,99 @@ def log(msg):
     print(msg)
 
 
-def list_backup_zips():
+# ------------------------
+# BACKUP
+# ------------------------
+
+def list_backups():
     ensure_dir(BACKUP_DIR)
-    zips = [
+    files = [
         os.path.join(BACKUP_DIR, f)
         for f in os.listdir(BACKUP_DIR)
         if f.startswith("backup_") and f.endswith(".zip")
     ]
-    zips.sort()
-    return zips
+    files.sort()
+    return files
 
 
 def cleanup_old_backups():
-    zips = list_backup_zips()
-    if len(zips) <= KEEP_LAST_BACKUPS:
+    backups = list_backups()
+
+    if len(backups) <= KEEP_LAST_BACKUPS:
         return
-    to_delete = zips[:-KEEP_LAST_BACKUPS]
-    for p in to_delete:
+
+    old = backups[:-KEEP_LAST_BACKUPS]
+
+    for f in old:
         try:
-            os.remove(p)
-            log(f"Deleted old backup {p}")
+            os.remove(f)
+            log(f"Deleted old backup {f}")
         except Exception as e:
-            log(f"Failed deleting old backup {p}: {e}")
-
-
-# ------------------------
-# BACKUP (ZIP compresso)
-# ------------------------
+            log(f"Cannot delete {f}: {e}")
 
 
 def backup_repository():
-    """
-    Backup ZIP del repository:
-    - pesa meno grazie alla compressione
-    - esclude: .git, backups, logs, __pycache__, *.pyc
-    """
+
     ensure_dir(BACKUP_DIR)
+
     ts = timestamp()
+
     zip_path = os.path.join(BACKUP_DIR, f"backup_{ts}.zip")
 
-    def should_skip(rel_path: str) -> bool:
-        rel = rel_path.replace("\\", "/")
-        if rel.startswith(".git/") or rel == ".git":
-            return True
-        if rel.startswith(f"{BACKUP_DIR}/") or rel == BACKUP_DIR:
-            return True
-        if rel.startswith(f"{LOG_DIR}/") or rel == LOG_DIR:
-            return True
-        if "/__pycache__/" in rel or rel.endswith("/__pycache__"):
-            return True
-        if rel.endswith(".pyc"):
-            return True
-        return False
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
 
-    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for root, dirs, files in os.walk("."):
-            rel_root = os.path.relpath(root, ".")
-            rel_root = "." if rel_root == "." else rel_root.replace("\\", "/")
 
-            keep_dirs = []
-            for d in dirs:
-                rel_dir = d if rel_root == "." else f"{rel_root}/{d}"
-                if not should_skip(rel_dir):
-                    keep_dirs.append(d)
-            dirs[:] = keep_dirs
+            if ".git" in root:
+                continue
+
+            if BACKUP_DIR in root:
+                continue
 
             for file in files:
-                src = os.path.join(root, file)
-                rel = os.path.relpath(src, ".").replace("\\", "/")
-                if should_skip(rel):
+
+                if file.endswith(".pyc"):
                     continue
-                zf.write(src, rel)
+
+                path = os.path.join(root, file)
+
+                rel = os.path.relpath(path, ".")
+
+                z.write(path, rel)
 
     log(f"Backup created {zip_path}")
+
     cleanup_old_backups()
 
 
 def restore_latest_backup():
-    """
-    Ripristina l'ultimo backup zip sopra la working tree (senza toccare .git e backups).
-    """
-    zips = list_backup_zips()
-    if not zips:
-        log("No backup zip found -> cannot rollback")
+
+    backups = list_backups()
+
+    if not backups:
+        log("No backup found")
         return False
 
-    latest = zips[-1]
-    log(f"ROLLBACK: restoring from {latest}")
+    latest = backups[-1]
 
-    with zipfile.ZipFile(latest, "r") as zf:
-        for member in zf.namelist():
-            rel = member.replace("\\", "/")
-            if rel.startswith(".git/") or rel.startswith(f"{BACKUP_DIR}/"):
-                continue
-            if rel.startswith(f"{LOG_DIR}/"):
-                continue
-            if member.endswith("/"):
+    log(f"Rollback using {latest}")
+
+    with zipfile.ZipFile(latest, "r") as z:
+
+        for member in z.namelist():
+
+            if member.startswith(".git"):
                 continue
 
-            dest_path = os.path.join(".", rel)
-            ensure_dir(os.path.dirname(dest_path))
-            with zf.open(member) as src, open(dest_path, "wb") as dst:
+            dest = os.path.join(".", member)
+
+            ensure_dir(os.path.dirname(dest))
+
+            with z.open(member) as src, open(dest, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
-    log("ROLLBACK completed")
+    log("Rollback completed")
+
     return True
 
 
@@ -150,66 +135,81 @@ def restore_latest_backup():
 # FILE OPS
 # ------------------------
 
-
 def create_folder(path):
+
     os.makedirs(path, exist_ok=True)
+
     log(f"Folder created {path}")
 
 
 def create_file(path, content):
+
     ensure_dir(os.path.dirname(path))
+
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
+
     log(f"File created {path}")
 
 
 def append_file(path, content):
+
     ensure_dir(os.path.dirname(path))
+
     with open(path, "a", encoding="utf-8") as f:
         f.write("\n" + content)
+
     log(f"Append {path}")
 
 
 def replace_text(path, old, new):
+
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
         data = f.read()
+
     data = data.replace(old, new)
+
     with open(path, "w", encoding="utf-8") as f:
         f.write(data)
+
     log(f"Replace text in {path}")
 
 
 def replace_line(path, old, new):
-    """
-    REPLACE_LINE: sostituisce una stringa SOLO dentro le righe (soft)
-    Esempio:
-    REPLACE_LINE pytest.ini testpaths=test testpaths=test tests
-    """
+
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
         lines = f.readlines()
 
     out = []
     changed = False
+
     for line in lines:
+
         if old in line:
             out.append(line.replace(old, new))
             changed = True
         else:
             out.append(line)
 
-    if not changed:
-        log(f"REPLACE_LINE: pattern not found in {path} -> '{old}'")
-    else:
+    if changed:
+
         with open(path, "w", encoding="utf-8") as f:
             f.writelines(out)
+
         log(f"REPLACE_LINE applied in {path}")
 
+    else:
 
-def insert_line(path, line_number, text):
+        log(f"Pattern not found in {path}")
+
+
+def insert_line(path, number, text):
+
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
         lines = f.readlines()
 
-    idx = max(0, line_number - 1)
+    idx = max(0, number - 1)
+
     if idx > len(lines):
         idx = len(lines)
 
@@ -218,21 +218,23 @@ def insert_line(path, line_number, text):
     with open(path, "w", encoding="utf-8") as f:
         f.writelines(lines)
 
-    log(f"Inserted line {line_number} in {path}")
+    log(f"Inserted line {number} in {path}")
 
 
 # ------------------------
-# CLEAN WHITESPACE
+# WHITESPACE
 # ------------------------
-
 
 def fix_whitespace():
+
     for root, dirs, files in os.walk("."):
+
         if ".git" in root:
             continue
 
         for file in files:
-            if not file.endswith((".py", ".txt", ".md", ".yml", ".yaml", ".json", ".ini")):
+
+            if not file.endswith((".py", ".txt", ".md", ".yml", ".json", ".ini")):
                 continue
 
             path = os.path.join(root, file)
@@ -240,27 +242,30 @@ def fix_whitespace():
             with open(path, "r", encoding="utf-8", errors="ignore") as f:
                 lines = f.readlines()
 
-            new_lines = []
+            new = []
+
             for line in lines:
+
                 line = line.rstrip()
+
                 line = line.replace("\t", "    ")
-                new_lines.append(line + "\n")
 
-            while new_lines and new_lines[-1].strip() == "":
-                new_lines.pop()
+                new.append(line + "\n")
 
-            new_lines.append("\n")
+            while new and new[-1].strip() == "":
+                new.pop()
+
+            new.append("\n")
 
             with open(path, "w", encoding="utf-8") as f:
-                f.writelines(new_lines)
+                f.writelines(new)
 
     log("Whitespace fixed")
 
 
 # ------------------------
-# FORMAT + LINT + TEST
+# FORMAT / TEST
 # ------------------------
-
 
 def run_black():
     log("Running Black")
@@ -278,12 +283,21 @@ def run_ruff():
 
 
 def run_pytest():
+
     log("Running pytest")
-    result = subprocess.run(["pytest", "-v"], capture_output=True, text=True)
+
+    result = subprocess.run(
+        ["pytest", "-v"],
+        capture_output=True,
+        text=True
+    )
+
     print(result.stdout)
+
     if result.returncode != 0:
         log("Tests FAILED")
         raise Exception("Tests failed")
+
     log("Tests PASSED")
 
 
@@ -291,13 +305,12 @@ def run_pytest():
 # PROCESS
 # ------------------------
 
-
 def process():
+
     if not os.path.exists(INSTRUCTIONS_FILE):
         log("No instruction file")
         return
 
-    # ✅ Backup automatico ad ogni run (1 sola volta)
     if AUTO_BACKUP_ALWAYS:
         backup_repository()
 
@@ -305,7 +318,9 @@ def process():
         lines = f.readlines()
 
     i = 0
+
     while i < len(lines):
+
         line = lines[i].strip()
 
         if not line:
@@ -313,84 +328,103 @@ def process():
             continue
 
         parts = line.split()
+
         cmd = parts[0]
 
-        # AUTO BACKUP (manuale esplicito)
         if cmd == "AUTO_BACKUP_BEFORE_RUN":
             backup_repository()
 
-        # CREATE FOLDER
         elif cmd in ["CREA_CARTELLA", "CREATE_FOLDER"]:
             create_folder(parts[1])
 
-        # CREATE FILE MULTILINE (termina con EOF)
         elif cmd in ["CREA_FILE", "CREATE_FILE"]:
+
             path = parts[1]
+
             i += 1
             content = []
+
             while i < len(lines) and lines[i].strip() != "EOF":
                 content.append(lines[i])
                 i += 1
+
             create_file(path, "".join(content))
 
-        # APPEND MULTILINE (termina con EOF)
-        elif cmd in ["AGGIUNGI", "APPEND"]:
+        elif cmd in ["APPEND", "AGGIUNGI"]:
+
             path = parts[1]
+
             i += 1
             content = []
+
             while i < len(lines) and lines[i].strip() != "EOF":
                 content.append(lines[i])
                 i += 1
+
             append_file(path, "".join(content))
 
-        # ✅ REPLACE / SOSTITUISCI (soft, non riscrive tutto)
-        # Sintassi:
-        # REPLACE file_path <old...> <new...>
-        # Nota: con spazi è difficile senza EOF -> usa REPLACE_LINE o APPEND se devi mettere spazi.
         elif cmd in ["REPLACE", "SOSTITUISCI"]:
+
             path = parts[1]
             old = parts[2]
             new = " ".join(parts[3:])
+
             replace_text(path, old, new)
 
-        # ✅ REPLACE_LINE (PER pytest.ini ecc.)
-        # Sintassi:
-        # REPLACE_LINE pytest.ini "testpaths = test" "testpaths = test tests"
-        # (se vuoi evitare virgolette, usa parole senza spazi)
         elif cmd == "REPLACE_LINE":
-            path = parts[1]
-            old = parts[2]
-            new = " ".join(parts[3:])
-            replace_line(path, old, new)
 
-        # ✅ INSERT_LINE
-        # INSERT_LINE file 10 testo...
+            path = parts[1]
+
+            if parts[2] == "<<EOF":
+
+                i += 1
+                old = lines[i].rstrip("\n")
+
+                i += 1
+                new = lines[i].rstrip("\n")
+
+                while i < len(lines) and lines[i].strip() != "EOF":
+                    i += 1
+
+                replace_line(path, old, new)
+
+            else:
+
+                old = parts[2]
+                new = " ".join(parts[3:])
+
+                replace_line(path, old, new)
+
         elif cmd in ["INSERT_LINE", "INSERISCI_RIGA"]:
-            path = parts[1]
-            line_no = int(parts[2])
-            text = " ".join(parts[3:])
-            insert_line(path, line_no, text)
 
-        # FIX WHITESPACE
+            path = parts[1]
+            number = int(parts[2])
+            text = " ".join(parts[3:])
+
+            insert_line(path, number, text)
+
         elif cmd == "FIX_WHITESPACE":
             fix_whitespace()
 
         i += 1
 
-    # ------------------------
-    # CI PIPELINE
-    # ------------------------
     try:
+
         fix_whitespace()
         run_black()
         run_isort()
         run_ruff()
         run_pytest()
+
     except Exception as e:
-        log(f"CI FAILED -> {e}")
+
+        log(f"CI FAILED: {e}")
+
         ok = restore_latest_backup()
+
         if not ok:
             raise
+
         raise
 
 

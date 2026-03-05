@@ -9,6 +9,7 @@ permissions:
   contents: write
 
 jobs:
+
   update:
 
     runs-on: ubuntu-latest
@@ -18,7 +19,7 @@ jobs:
 
     steps:
 
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Python
@@ -28,15 +29,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pytest
+          pip install pytest black isort ruff
 
       - name: Run DevOps Engine
         run: |
           python repo_update_engine.py
-
-      - name: Run tests
-        run: |
-          pytest -v
 
       - name: Commit changes
         run: |

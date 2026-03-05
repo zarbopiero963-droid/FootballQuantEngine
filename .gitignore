@@ -1,166 +1,72 @@
-# =========================
-# PYTHON CACHE
-# =========================
+# -----------------------
+# Python
+# -----------------------
+
 __pycache__/
 *.py[cod]
 *$py.class
-*.pyc
 *.pyo
 *.pyd
 
-# Python cache directories ovunque
-**/__pycache__/
+# -----------------------
+# C extensions
+# -----------------------
 
-# =========================
-# C EXTENSIONS
-# =========================
 *.so
 
-# =========================
-# BUILD / DISTRIBUTION
-# =========================
-.Python
-build/
+# -----------------------
+# Distribution
+# -----------------------
+
 dist/
-develop-eggs/
-downloads/
-eggs/
-.eggs/
+build/
 *.egg-info/
-*.egg
+.eggs/
 *.spec
-pip-wheel-metadata/
 
-# =========================
-# INSTALLER LOGS
-# =========================
-pip-log.txt
-pip-delete-this-directory.txt
+# -----------------------
+# PyInstaller
+# -----------------------
 
-# =========================
-# TEST / COVERAGE
-# =========================
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.pytest_cache/
+*.manifest
 
-# =========================
-# DATABASE LOCALI
-# =========================
+# -----------------------
+# Database / datasets
+# -----------------------
+
 *.sqlite3
 *.db
-
-# =========================
-# DATASETS LOCALI
-# =========================
 data/datasets/*.csv
 data/datasets/*.json
 
-# =========================
-# VIRTUAL ENVIRONMENTS
-# =========================
+# -----------------------
+# Virtual environments
+# -----------------------
+
 venv/
 env/
 ENV/
 .venv/
-.env
-.env.*
-.python-version
 
-# =========================
-# JUPYTER
-# =========================
-.ipynb_checkpoints
+# -----------------------
+# DevOps runtime
+# -----------------------
 
-# =========================
-# IDE
-# =========================
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# =========================
-# OS FILES
-# =========================
-.DS_Store
-Thumbs.db
-Desktop.ini
-ehthumbs.db
-
-# =========================
-# LOG FILES
-# =========================
-*.log
 logs/
-
-# =========================
-# DEVOPS ENGINE FILES
-# =========================
 backups/
 patches/
 
-# =========================
-# TEMPORARY FILES
-# =========================
-*.tmp
-*.temp
-*.bak
-*.old
-*.orig
-*.rej
+# -----------------------
+# IDE
+# -----------------------
 
-# =========================
-# MACOS
-# =========================
-.AppleDouble
-.LSOverride
+.idea/
+.vscode/
 
-# =========================
-# WINDOWS
-# =========================
-$RECYCLE.BIN/
+# -----------------------
+# OS
+# -----------------------
 
-# =========================
-# GIT / CI TEMP
-# =========================
-.git-credentials
-.gitconfig.local
-
-# =========================
-# CACHE TOOLS
-# =========================
-.mypy_cache/
-.ruff_cache/
-.pyre/
-.pytype/
-
-# =========================
-# FORMATTERS
-# =========================
-.black_cache/
-
-# =========================
-# DEVOPS AUTOMATION OUTPUT
-# =========================
-patches/*.diff
-patches/*.patch
-
-# =========================
-# ENGINE HISTORY
-# =========================
-backups/history.log
-
-# =========================
-# LOCAL CONFIG
-# =========================
-config/local_settings.py
-config/secrets.py
+*.swp
+.DS_Store
+Thumbs.db

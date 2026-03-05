@@ -1,15 +1,3 @@
 BACKUP_REPOSITORY
 
-CREA_CARTELLA devops_test
-
-CREA_FILE devops_test/file1.txt <<EOF
-Line 1
-Line 2
-Line 3
-EOF
-
-APPEND devops_test/file1.txt <<EOF
-
-Line 4
-Line 5
-EOF
+PATCH_FUNCTION repo_update_engine.py timestamp print("AST PATCH WORKING")

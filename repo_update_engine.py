@@ -1,29 +1,26 @@
 import os
-import ast
 import shutil
 import datetime
-import zipfile
+import subprocess
 
 INSTRUCTIONS_FILE = "devops_update.txt"
 
 BACKUP_DIR = "backups"
 LOG_DIR = "logs"
-PATCH_DIR = "patches"
 
 LOG_FILE = os.path.join(LOG_DIR, "operations.log")
 
 
-# -----------------------
+# ------------------------
 # UTIL
-# -----------------------
+# ------------------------
 
 def timestamp():
     return datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
 
 def ensure_dir(path):
-
-    if not os.path.exists(path):
+    if path and not os.path.exists(path):
         os.makedirs(path, exist_ok=True)
 
 
@@ -31,22 +28,15 @@ def log(msg):
 
     ensure_dir(LOG_DIR)
 
-    with open(LOG_FILE, "a") as f:
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(msg + "\n")
 
     print(msg)
 
 
-# -----------------------
-# AUTO BACKUP
-# -----------------------
-
-AUTO_BACKUP = True
-
-
-# -----------------------
-# BACKUP ZIP
-# -----------------------
+# ------------------------
+# BACKUP
+# ------------------------
 
 def backup_repository():
 
@@ -54,55 +44,16 @@ def backup_repository():
 
     ts = timestamp()
 
-    zip_path = os.path.join(BACKUP_DIR, f"backup_{ts}.zip")
+    dst = os.path.join(BACKUP_DIR, f"backup_{ts}")
 
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+    shutil.make_archive(dst, "zip", ".")
 
-        for root, dirs, files in os.walk("."):
-
-            if root.startswith("./backups"):
-                continue
-
-            if root.startswith("./.git"):
-                continue
-
-            for file in files:
-
-                path = os.path.join(root, file)
-
-                arc = os.path.relpath(path, ".")
-
-                zipf.write(path, arc)
-
-    log(f"Backup created {zip_path}")
+    log(f"Backup created {dst}.zip")
 
 
-# -----------------------
-# RESTORE ZIP
-# -----------------------
-
-def restore_latest():
-
-    files = sorted(os.listdir(BACKUP_DIR))
-
-    if not files:
-        log("No backups found")
-        return
-
-    latest = files[-1]
-
-    path = os.path.join(BACKUP_DIR, latest)
-
-    with zipfile.ZipFile(path, "r") as zipf:
-
-        zipf.extractall(".")
-
-    log(f"Restored backup {latest}")
-
-
-# -----------------------
+# ------------------------
 # FILE OPS
-# -----------------------
+# ------------------------
 
 def create_folder(path):
 
@@ -113,12 +64,9 @@ def create_folder(path):
 
 def create_file(path, content):
 
-    folder = os.path.dirname(path)
+    ensure_dir(os.path.dirname(path))
 
-    if folder:
-        ensure_dir(folder)
-
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write(content)
 
     log(f"File created {path}")
@@ -126,19 +74,22 @@ def create_file(path, content):
 
 def append_file(path, content):
 
-    with open(path, "a") as f:
-        f.write(content)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write("\n" + content)
 
     log(f"Append {path}")
 
 
-# -----------------------
-# WHITESPACE FIX
-# -----------------------
+# ------------------------
+# CLEAN WHITESPACE
+# ------------------------
 
 def fix_whitespace():
 
     for root, dirs, files in os.walk("."):
+
+        if ".git" in root:
+            continue
 
         for file in files:
 
@@ -150,7 +101,7 @@ def fix_whitespace():
             with open(path, "r", encoding="utf-8", errors="ignore") as f:
                 lines = f.readlines()
 
-            new = []
+            new_lines = []
 
             for line in lines:
 
@@ -158,52 +109,76 @@ def fix_whitespace():
 
                 line = line.replace("\t", "    ")
 
-                new.append(line + "\n")
+                new_lines.append(line + "\n")
 
-            while new and new[-1].strip() == "":
-                new.pop()
+            while new_lines and new_lines[-1].strip() == "":
+                new_lines.pop()
 
-            new.append("\n")
+            new_lines.append("\n")
 
-            with open(path, "w") as f:
-                f.writelines(new)
+            with open(path, "w", encoding="utf-8") as f:
+                f.writelines(new_lines)
 
     log("Whitespace fixed")
 
 
-# -----------------------
-# MULTILINE PARSER
-# -----------------------
+# ------------------------
+# FORMAT + LINT + TEST
+# ------------------------
 
-def read_block(lines, start):
+def run_black():
 
-    content = []
+    log("Running Black")
 
-    i = start
-
-    while i < len(lines) and lines[i].strip() != "EOF":
-
-        content.append(lines[i])
-
-        i += 1
-
-    return "".join(content), i
+    subprocess.run(["black", "."], check=False)
 
 
-# -----------------------
+def run_isort():
+
+    log("Running isort")
+
+    subprocess.run(["isort", "."], check=False)
+
+
+def run_ruff():
+
+    log("Running ruff")
+
+    subprocess.run(["ruff", "check", ".", "--fix"], check=False)
+
+
+def run_pytest():
+
+    log("Running pytest")
+
+    result = subprocess.run(
+        ["pytest", "-v"],
+        capture_output=True,
+        text=True
+    )
+
+    print(result.stdout)
+
+    if result.returncode != 0:
+
+        log("Tests FAILED")
+
+        raise Exception("Tests failed")
+
+    log("Tests PASSED")
+
+
+# ------------------------
 # PROCESS
-# -----------------------
+# ------------------------
 
 def process():
 
     if not os.path.exists(INSTRUCTIONS_FILE):
+        log("No instruction file")
         return
 
-    if AUTO_BACKUP:
-        backup_repository()
-
     with open(INSTRUCTIONS_FILE) as f:
-
         lines = f.readlines()
 
     i = 0
@@ -220,53 +195,71 @@ def process():
 
         cmd = parts[0]
 
-        if cmd in ["CREA_CARTELLA", "CREATE_FOLDER"]:
+        # AUTO BACKUP
+        if cmd == "AUTO_BACKUP_BEFORE_RUN":
+
+            backup_repository()
+
+        # CREATE FOLDER
+        elif cmd in ["CREA_CARTELLA", "CREATE_FOLDER"]:
 
             create_folder(parts[1])
 
+        # CREATE FILE MULTILINE
         elif cmd in ["CREA_FILE", "CREATE_FILE"]:
 
             path = parts[1]
 
-            if len(parts) > 2 and parts[2] == "<<EOF":
+            i += 1
 
-                content, i = read_block(lines, i + 1)
+            content = []
 
-                create_file(path, content)
+            while i < len(lines) and lines[i].strip() != "EOF":
 
-            else:
+                content.append(lines[i])
 
-                create_file(path, " ".join(parts[2:]))
+                i += 1
 
-        elif cmd in ["APPEND", "AGGIUNGI"]:
+            create_file(path, "".join(content))
+
+        # APPEND
+        elif cmd == "APPEND":
 
             path = parts[1]
 
-            if len(parts) > 2 and parts[2] == "<<EOF":
+            i += 1
 
-                content, i = read_block(lines, i + 1)
+            content = []
 
-                append_file(path, content)
+            while i < len(lines) and lines[i].strip() != "EOF":
 
-            else:
+                content.append(lines[i])
 
-                append_file(path, " ".join(parts[2:]))
+                i += 1
 
-        elif cmd == "BACKUP_REPOSITORY":
+            append_file(path, "".join(content))
 
-            backup_repository()
-
-        elif cmd == "RESTORE_LATEST":
-
-            restore_latest()
-
+        # FIX WHITESPACE
         elif cmd == "FIX_WHITESPACE":
 
             fix_whitespace()
 
         i += 1
 
+    # ------------------------
+    # CI PIPELINE
+    # ------------------------
+
+    fix_whitespace()
+
+    run_black()
+
+    run_isort()
+
+    run_ruff()
+
+    run_pytest()
+
 
 if __name__ == "__main__":
-
     process()

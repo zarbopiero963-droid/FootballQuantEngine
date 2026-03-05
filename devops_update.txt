@@ -1,163 +1,187 @@
 AUTO_BACKUP_BEFORE_RUN
 
-CREA_CARTELLA app
-CREA_CARTELLA config
-CREA_CARTELLA database
-CREA_CARTELLA utils
+CREA_CARTELLA data
 
-CREA_FILE requirements.txt
-requests
-pandas
-numpy
-scipy
-sqlalchemy
-pytest
-black
-isort
-ruff
+CREA_FILE data/api_client.py
+import requests
+from utils.logger import get_logger
+
+logger = get_logger()
+
+
+class ApiClient:
+
+    def __init__(self, base_url, api_key=None):
+
+        self.base_url = base_url
+        self.api_key = api_key
+
+    def get(self, endpoint, params=None, headers=None):
+
+        if params is None:
+            params = {}
+
+        if headers is None:
+            headers = {}
+
+        url = f"{self.base_url}/{endpoint}"
+
+        response = requests.get(url, params=params, headers=headers)
+
+        if response.status_code != 200:
+            logger.error(f"API error {response.status_code}: {response.text}")
+            raise Exception("API request failed")
+
+        return response.json()
 EOF
 
-CREA_FILE config/constants.py
-BASE_URL_API_FOOTBALL = "https://v3.football.api-sports.io"
-ODDS_API_BASE_URL = "https://api.the-odds-api.com/v4"
-
-DATABASE_NAME = "quant_engine.db"
-
-ODDS_SNAPSHOT_INTERVAL_MINUTES = 10
-
-EDGE_THRESHOLD = 0.05
-EOF
-
-CREA_FILE config/settings_manager.py
-import json
-import os
-
-SETTINGS_FILE = "settings.json"
+CREA_FILE data/api_football_collector.py
+from config.constants import BASE_URL_API_FOOTBALL
+from config.settings_manager import load_settings
+from data.api_client import ApiClient
 
 
-class Settings:
+class ApiFootballCollector:
 
     def __init__(self):
 
-        self.api_football_key = ""
-        self.odds_api_key = ""
-        self.telegram_token = ""
-        self.telegram_chat_id = ""
+        settings = load_settings()
 
-
-def load_settings():
-
-    if not os.path.exists(SETTINGS_FILE):
-        return Settings()
-
-    with open(SETTINGS_FILE) as f:
-        data = json.load(f)
-
-    s = Settings()
-
-    s.api_football_key = data.get("api_football_key", "")
-    s.odds_api_key = data.get("odds_api_key", "")
-    s.telegram_token = data.get("telegram_token", "")
-    s.telegram_chat_id = data.get("telegram_chat_id", "")
-
-    return s
-
-
-def save_settings(settings):
-
-    data = {
-        "api_football_key": settings.api_football_key,
-        "odds_api_key": settings.odds_api_key,
-        "telegram_token": settings.telegram_token,
-        "telegram_chat_id": settings.telegram_chat_id
-    }
-
-    with open(SETTINGS_FILE, "w") as f:
-        json.dump(data, f, indent=2)
-EOF
-
-CREA_FILE database/schema.sql
-CREATE TABLE IF NOT EXISTS fixtures(
-
-    fixture_id INTEGER PRIMARY KEY,
-    league TEXT,
-    season INTEGER,
-    home TEXT,
-    away TEXT,
-    match_date TEXT,
-    home_goals INTEGER,
-    away_goals INTEGER,
-    status TEXT
-);
-
-CREATE TABLE IF NOT EXISTS odds_history(
-
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    fixture_id INTEGER,
-    timestamp TEXT,
-    home_odds REAL,
-    draw_odds REAL,
-    away_odds REAL
-);
-
-CREATE TABLE IF NOT EXISTS predictions(
-
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    fixture_id INTEGER,
-    model TEXT,
-    home_prob REAL,
-    draw_prob REAL,
-    away_prob REAL,
-    edge REAL,
-    created_at TEXT
-);
-EOF
-
-CREA_FILE database/db_manager.py
-import sqlite3
-from config.constants import DATABASE_NAME
-
-
-def connect():
-
-    return sqlite3.connect(DATABASE_NAME)
-
-
-def init_db():
-
-    conn = connect()
-
-    with open("database/schema.sql") as f:
-        conn.executescript(f.read())
-
-    conn.commit()
-    conn.close()
-EOF
-
-CREA_FILE utils/logger.py
-import logging
-
-
-def get_logger():
-
-    logger = logging.getLogger("quant_engine")
-
-    if not logger.handlers:
-
-        handler = logging.StreamHandler()
-
-        formatter = logging.Formatter(
-            "%(asctime)s - %(levelname)s - %(message)s"
+        self.client = ApiClient(
+            BASE_URL_API_FOOTBALL,
+            settings.api_football_key
         )
 
-        handler.setFormatter(formatter)
+    def get_fixtures(self, league_id, season):
 
-        logger.addHandler(handler)
+        headers = {
+            "x-apisports-key": load_settings().api_football_key
+        }
 
-        logger.setLevel(logging.INFO)
+        return self.client.get(
+            "fixtures",
+            params={
+                "league": league_id,
+                "season": season
+            },
+            headers=headers
+        )
 
-    return logger
+    def get_next_matches(self):
+
+        headers = {
+            "x-apisports-key": load_settings().api_football_key
+        }
+
+        return self.client.get(
+            "fixtures",
+            params={
+                "next": 50
+            },
+            headers=headers
+        )
+EOF
+
+CREA_FILE data/odds_collector.py
+from config.constants import ODDS_API_BASE_URL
+from config.settings_manager import load_settings
+from data.api_client import ApiClient
+
+
+class OddsCollector:
+
+    def __init__(self):
+
+        settings = load_settings()
+
+        self.api_key = settings.odds_api_key
+
+        self.client = ApiClient(ODDS_API_BASE_URL)
+
+    def get_odds(self):
+
+        return self.client.get(
+            "sports/soccer/odds",
+            params={
+                "apiKey": self.api_key,
+                "regions": "eu",
+                "markets": "h2h"
+            }
+        )
+EOF
+
+CREA_FILE data/clubelo_collector.py
+import pandas as pd
+import requests
+from io import StringIO
+
+
+class ClubEloCollector:
+
+    BASE_URL = "http://api.clubelo.com"
+
+    def get_team_history(self, team):
+
+        url = f"{self.BASE_URL}/{team}"
+
+        response = requests.get(url)
+
+        data = StringIO(response.text)
+
+        df = pd.read_csv(data)
+
+        return df
+
+    def get_ranking(self):
+
+        url = f"{self.BASE_URL}/elo"
+
+        response = requests.get(url)
+
+        data = StringIO(response.text)
+
+        df = pd.read_csv(data)
+
+        return df
+EOF
+
+CREA_FILE data/understat_collector.py
+import requests
+import json
+import re
+
+
+class UnderstatCollector:
+
+    BASE_URL = "https://understat.com"
+
+    def get_league_data(self, league):
+
+        url = f"{self.BASE_URL}/league/{league}"
+
+        response = requests.get(url)
+
+        pattern = re.compile(r"teamsData\s+=\s+JSON.parse\('(.*)'\)")
+
+        data = pattern.search(response.text).group(1)
+
+        decoded = json.loads(data.encode("utf-8").decode("unicode_escape"))
+
+        return decoded
+
+    def get_team_data(self, team, season):
+
+        url = f"{self.BASE_URL}/team/{team}/{season}"
+
+        response = requests.get(url)
+
+        pattern = re.compile(r"matchesData\s+=\s+JSON.parse\('(.*)'\)")
+
+        data = pattern.search(response.text).group(1)
+
+        decoded = json.loads(data.encode("utf-8").decode("unicode_escape"))
+
+        return decoded
 EOF
 
 FIX_WHITESPACE
-

@@ -145,3 +145,4 @@ class PredictionPipeline:
 EOF
 
 FIX_WHITESPACE
+

@@ -1,5 +1,3 @@
-
-
 class EloModel:
 
     def probability(self, elo_diff):

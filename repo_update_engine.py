@@ -1,12 +1,12 @@
+import os
 import ast
+import shutil
 import datetime
 import difflib
-import os
-import shutil
-import subprocess
 import sys
 
 INSTRUCTIONS_FILE = "devops_update.txt"
+
 BACKUP_DIR = "backups"
 PATCH_DIR = "patches"
 LOG_FILE = "logs/operations.log"
@@ -15,28 +15,68 @@ HISTORY_FILE = "backups/history.log"
 DRY_RUN = "--dry-run" in sys.argv
 
 
+# -------------------------
+# UTIL
+# -------------------------
+
+def now():
+    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
 def timestamp():
     return datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
 
+def ensure_dir(path):
+    os.makedirs(path, exist_ok=True)
+
+
 def log(msg):
-    os.makedirs("logs", exist_ok=True)
-    with open(LOG_FILE, "a") as f:
-        f.write(f"{datetime.datetime.now()} {msg}\n")
+    ensure_dir("logs")
+
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(f"{now()} {msg}\n")
+
     print(msg)
 
 
 def history(msg):
-    os.makedirs(BACKUP_DIR, exist_ok=True)
-    with open(HISTORY_FILE, "a") as f:
-        f.write(f"{datetime.datetime.now()} {msg}\n")
+    ensure_dir("backups")
 
+    with open(HISTORY_FILE, "a", encoding="utf-8") as f:
+        f.write(f"{now()} {msg}\n")
+
+
+# -------------------------
+# BACKUP
+# -------------------------
 
 def version_backup_path():
+
     ts = timestamp()
+
     path = os.path.join(BACKUP_DIR, ts)
+
     os.makedirs(path, exist_ok=True)
+
     return path, ts
+
+
+def backup_file(path):
+
+    if not os.path.exists(path):
+        return
+
+    root, ts = version_backup_path()
+
+    dst = os.path.join(root, path)
+
+    ensure_dir(os.path.dirname(dst))
+
+    shutil.copy2(path, dst)
+
+    log(f"backup file {path}")
+    history(f"BACKUP_FILE {path}")
 
 
 def backup_repository():
@@ -56,17 +96,57 @@ def backup_repository():
 
             dst = os.path.join(root, rel)
 
-            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            ensure_dir(os.path.dirname(dst))
 
             shutil.copy2(src, dst)
 
+    log(f"backup repo {ts}")
     history(f"BACKUP_REPOSITORY {ts}")
-    log(f"backup version {ts}")
+
+
+# -------------------------
+# RESTORE
+# -------------------------
+
+def restore_file(path):
+
+    versions = sorted(os.listdir(BACKUP_DIR))
+
+    if not versions:
+        return
+
+    latest = versions[-1]
+
+    src = os.path.join(BACKUP_DIR, latest, path)
+
+    if not os.path.exists(src):
+        return
+
+    ensure_dir(os.path.dirname(path))
+
+    shutil.copy2(src, path)
+
+    log(f"restore file {path}")
+
+
+def restore_repository():
+
+    versions = sorted(os.listdir(BACKUP_DIR))
+
+    if not versions:
+        return
+
+    latest = versions[-1]
+
+    restore_version(latest)
 
 
 def restore_version(version):
 
     root = os.path.join(BACKUP_DIR, version)
+
+    if not os.path.exists(root):
+        return
 
     for r, d, f in os.walk(root):
 
@@ -78,64 +158,294 @@ def restore_version(version):
 
             dst = rel
 
-            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            ensure_dir(os.path.dirname(dst))
 
             shutil.copy2(src, dst)
 
+    log(f"restore version {version}")
+    history(f"RESTORE_VERSION {version}")
 
-def safe_patch_function(file_path, func_name, new_code):
+
+# -------------------------
+# FILE OPS
+# -------------------------
+
+def create_folder(path):
+    os.makedirs(path, exist_ok=True)
+    log(f"folder created {path}")
+
+
+def create_file(path, content):
+    ensure_dir(os.path.dirname(path) or ".")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
+    log(f"file created {path}")
+
+
+def overwrite(path, content):
+    backup_file(path)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
+    log(f"overwrite {path}")
+
+
+def append(path, content):
+    backup_file(path)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write("\n" + content)
+    log(f"append {path}")
+
+
+def replace(path, old, new):
+
+    backup_file(path)
+
+    with open(path, "r", encoding="utf-8") as f:
+        data = f.read()
+
+    data = data.replace(old, new)
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(data)
+
+    log(f"replace text {path}")
+
+
+def insert_line(path, line_number, text):
+
+    backup_file(path)
+
+    with open(path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    lines.insert(line_number - 1, text + "\n")
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+
+    log(f"insert line {path}")
+
+
+def delete_file(path):
+
+    backup_file(path)
+
+    if os.path.exists(path):
+        os.remove(path)
+
+    log(f"delete file {path}")
+
+
+def move_file(src, dst):
+
+    backup_file(src)
+
+    ensure_dir(os.path.dirname(dst))
+
+    shutil.move(src, dst)
+
+    log(f"move {src} -> {dst}")
+
+
+def rename_file(src, dst):
+
+    backup_file(src)
+
+    os.rename(src, dst)
+
+    log(f"rename {src} -> {dst}")
+
+
+# -------------------------
+# AST OPS
+# -------------------------
+
+def modify_function(file_path, func, new_body):
+
+    backup_file(file_path)
 
     with open(file_path) as f:
         code = f.read()
 
     tree = ast.parse(code)
 
-    class SafePatch(ast.NodeTransformer):
+    class Modifier(ast.NodeTransformer):
 
         def visit_FunctionDef(self, node):
 
-            if node.name == func_name:
-
-                patch = ast.parse(new_code).body
-
-                node.body.extend(patch)
+            if node.name == func:
+                node.body = ast.parse(new_body).body
 
             return node
 
-    tree = SafePatch().visit(tree)
-
-    new_code_text = ast.unparse(tree)
+    tree = Modifier().visit(tree)
 
     with open(file_path, "w") as f:
-        f.write(new_code_text)
+        f.write(ast.unparse(tree))
+
+    log(f"modify function {func}")
 
 
-def run_lint():
-    subprocess.run(["ruff", "check", "."])
+def patch_function(file_path, func, code):
+
+    backup_file(file_path)
+
+    with open(file_path) as f:
+        source = f.read()
+
+    tree = ast.parse(source)
+
+    class Patcher(ast.NodeTransformer):
+
+        def visit_FunctionDef(self, node):
+
+            if node.name == func:
+                node.body.extend(ast.parse(code).body)
+
+            return node
+
+    tree = Patcher().visit(tree)
+
+    with open(file_path, "w") as f:
+        f.write(ast.unparse(tree))
+
+    log(f"patch function {func}")
 
 
-def run_tests():
-    subprocess.run(["pytest"])
+def safe_patch_function(file_path, func, code):
+
+    try:
+        patch_function(file_path, func, code)
+    except Exception as e:
+        log(f"safe patch failed {e}")
 
 
-def run_formatters():
-    subprocess.run(["black", "."])
-    subprocess.run(["isort", "."])
+def delete_function(file_path, func):
 
+    backup_file(file_path)
+
+    with open(file_path) as f:
+        code = f.read()
+
+    tree = ast.parse(code)
+
+    new_body = []
+
+    for node in tree.body:
+
+        if isinstance(node, ast.FunctionDef) and node.name == func:
+            continue
+
+        new_body.append(node)
+
+    tree.body = new_body
+
+    with open(file_path, "w") as f:
+        f.write(ast.unparse(tree))
+
+    log(f"delete function {func}")
+
+
+# -------------------------
+# REFACTOR
+# -------------------------
+
+def refactor_repo(action, target, new):
+
+    for r, d, f in os.walk("."):
+
+        for file in f:
+
+            if not file.endswith(".py"):
+                continue
+
+            path = os.path.join(r, file)
+
+            with open(path) as f:
+                code = f.read()
+
+            tree = ast.parse(code)
+
+            class Refactor(ast.NodeTransformer):
+
+                def visit_FunctionDef(self, node):
+
+                    if action == "rename_function" and node.name == target:
+                        node.name = new
+
+                    return node
+
+            tree = Refactor().visit(tree)
+
+            with open(path, "w") as f:
+                f.write(ast.unparse(tree))
+
+    log(f"refactor {target}->{new}")
+
+
+# -------------------------
+# PATCH
+# -------------------------
+
+def generate_patch():
+
+    ensure_dir(PATCH_DIR)
+
+    patch_file = os.path.join(PATCH_DIR, f"patch_{timestamp()}.diff")
+
+    diffs = []
+
+    versions = sorted(os.listdir(BACKUP_DIR))
+
+    if not versions:
+        return
+
+    latest = versions[-1]
+
+    for r, d, f in os.walk("."):
+
+        for file in f:
+
+            if not file.endswith(".py"):
+                continue
+
+            path = os.path.join(r, file)
+
+            backup = os.path.join(BACKUP_DIR, latest, path)
+
+            if not os.path.exists(backup):
+                continue
+
+            with open(path) as f:
+                new = f.readlines()
+
+            with open(backup) as f:
+                old = f.readlines()
+
+            diff = difflib.unified_diff(old, new)
+
+            diffs.extend(diff)
+
+    with open(patch_file, "w") as f:
+        f.writelines(diffs)
+
+    log(f"patch generated {patch_file}")
+
+
+# -------------------------
+# CLEAN
+# -------------------------
 
 def fix_whitespace():
 
-    for root, dirs, files in os.walk("."):
+    for r, d, f in os.walk("."):
 
-        if root.startswith("./.git"):
-            continue
-
-        for file in files:
+        for file in f:
 
             if not file.endswith((".py", ".txt", ".md", ".yml", ".json")):
                 continue
 
-            path = os.path.join(root, file)
+            path = os.path.join(r, file)
 
             with open(path, "r", encoding="utf-8", errors="ignore") as f:
                 lines = f.readlines()
@@ -143,8 +453,11 @@ def fix_whitespace():
             new = []
 
             for line in lines:
+
                 line = line.rstrip()
+
                 line = line.replace("\t", "    ")
+
                 new.append(line + "\n")
 
             while new and new[-1].strip() == "":
@@ -155,18 +468,21 @@ def fix_whitespace():
             with open(path, "w") as f:
                 f.writelines(new)
 
+    log("whitespace fixed")
+
+
+# -------------------------
+# PROCESS
+# -------------------------
 
 def process():
 
     if not os.path.exists(INSTRUCTIONS_FILE):
+        log("instruction file missing")
         return
 
     with open(INSTRUCTIONS_FILE) as f:
         lines = f.readlines()
-
-    if DRY_RUN:
-        print(lines)
-        return
 
     for line in lines:
 
@@ -177,20 +493,75 @@ def process():
 
         cmd = parts[0]
 
-        if cmd == "BACKUP_REPOSITORY":
+        if cmd in ["CREA_CARTELLA", "CREATE_FOLDER"]:
+            create_folder(parts[1])
+
+        elif cmd in ["CREA_FILE", "CREATE_FILE"]:
+            create_file(parts[1], "")
+
+        elif cmd in ["SOVRASCRIVI", "OVERWRITE"]:
+            overwrite(parts[1], "")
+
+        elif cmd in ["AGGIUNGI", "APPEND"]:
+            append(parts[1], " ".join(parts[2:]))
+
+        elif cmd in ["SOSTITUISCI", "REPLACE"]:
+            replace(parts[1], parts[2], parts[3])
+
+        elif cmd in ["INSERISCI_RIGA", "INSERT_LINE"]:
+            insert_line(parts[1], int(parts[2]), " ".join(parts[3:]))
+
+        elif cmd in ["DELETE_FILE", "ELIMINA_FILE"]:
+            delete_file(parts[1])
+
+        elif cmd in ["MOVE_FILE", "SPOSTA_FILE"]:
+            move_file(parts[1], parts[2])
+
+        elif cmd in ["RENAME_FILE", "RINOMINA_FILE"]:
+            rename_file(parts[1], parts[2])
+
+        elif cmd in ["MODIFY_FUNCTION", "MODIFICA_FUNZIONE"]:
+            modify_function(parts[1], parts[2], " ".join(parts[3:]))
+
+        elif cmd in ["PATCH_FUNCTION", "PATCH_FUNZIONE"]:
+            patch_function(parts[1], parts[2], " ".join(parts[3:]))
+
+        elif cmd in ["SAFE_PATCH_FUNCTION", "SAFE_PATCH_FUNZIONE"]:
+            safe_patch_function(parts[1], parts[2], " ".join(parts[3:]))
+
+        elif cmd in ["DELETE_FUNCTION", "ELIMINA_FUNZIONE"]:
+            delete_function(parts[1], parts[2])
+
+        elif cmd == "REFACTOR_REPO":
+            refactor_repo(parts[1], parts[2], parts[3])
+
+        elif cmd == "BACKUP_FILE":
+            backup_file(parts[1])
+
+        elif cmd == "BACKUP_REPOSITORY":
             backup_repository()
 
-        elif cmd == "SAFE_PATCH_FUNZIONE":
-            safe_patch_function(parts[1], parts[2], " ".join(parts[3:]))
+        elif cmd == "RIPRISTINA_FILE":
+            restore_file(parts[1])
+
+        elif cmd == "RIPRISTINA_REPOSITORY":
+            restore_repository()
+
+        elif cmd == "RIPRISTINA_VERSIONE":
+            restore_version(parts[1])
+
+        elif cmd == "GENERATE_PATCH":
+            generate_patch()
 
         elif cmd == "FIX_WHITESPACE":
             fix_whitespace()
 
-    run_formatters()
+        elif cmd == "STORIA":
 
-    run_lint()
+            if os.path.exists(HISTORY_FILE):
 
-    run_tests()
+                with open(HISTORY_FILE) as f:
+                    print(f.read())
 
 
 if __name__ == "__main__":

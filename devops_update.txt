@@ -1,8 +1,1 @@
-BACKUP_REPOSITORY
-
-CREA_CARTELLA test_engine
-
-CREA_FILE test_engine/hello.txt <<EOF
-Hello DevOps Engine
-This file was created automatically
-EOF
+PATCH_FUNCTION repo_update_engine.py timestamp print("patched")

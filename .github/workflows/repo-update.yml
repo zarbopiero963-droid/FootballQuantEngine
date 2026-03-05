@@ -11,6 +11,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: repo-update-main
+  cancel-in-progress: false
+
 jobs:
   update:
     runs-on: ubuntu-latest
@@ -23,6 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: true
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -31,22 +36,80 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pytest black isort ruff
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-      - name: Run DevOps Engine
+      - name: Run DevOps Engine (with rollback on failure)
+        shell: bash
         run: |
-          python repo_update_engine.py
+          set -euo pipefail
 
-      - name: Commit changes
+          mkdir -p backups
+
+          # esegui engine; se fallisce (pytest/lint ecc), fai rollback dall'ultimo backup zip
+          if python repo_update_engine.py; then
+            echo "Engine OK"
+            exit 0
+          fi
+
+          echo "Engine FAILED -> starting rollback from latest backup zip"
+
+          latest_zip="$(ls -1t backups/*.zip 2>/dev/null | head -n 1 || true)"
+          if [[ -z "$latest_zip" ]]; then
+            echo "No backup zip found in backups/. Cannot rollback."
+            exit 1
+          fi
+
+          echo "Using backup: $latest_zip"
+
+          # ripristina i file (escludendo .git) sopra la working tree
+          rm -rf .rollback_tmp
+          mkdir -p .rollback_tmp
+          unzip -q "$latest_zip" -d .rollback_tmp
+
+          # Copia tutto il contenuto del backup nella root del repo
+          # (senza toccare .git e senza copiare la cartella backups dal backup stesso)
+          rsync -a --delete \
+            --exclude ".git/" \
+            --exclude "backups/" \
+            ".rollback_tmp/" "./"
+
+          echo "Rollback applied."
+
+      - name: Commit changes (or rollback)
+        shell: bash
         run: |
+          set -euo pipefail
+
           git config user.name "repo-bot"
           git config user.email "bot@github.com"
 
-          git add .
+          git add -A
 
-          if [[ -n "$(git status --porcelain)" ]]; then
-            git commit -m "[skip ci] Automated DevOps Engine Update"
-            git push
-          else
+          if [[ -z "$(git status --porcelain)" ]]; then
             echo "No changes"
+            exit 0
           fi
+
+          # Messaggio diverso se è rollback
+          msg="[skip ci] Automated DevOps Engine Update"
+          if grep -qi "Engine FAILED" "$GITHUB_STEP_SUMMARY" 2>/dev/null; then
+            msg="[skip ci] DevOps Engine Rollback (tests/lint failed)"
+          fi
+
+          git commit -m "$msg"
+
+          # Push robusto (evita fetch first)
+          git fetch origin main
+
+          if git push origin HEAD:main; then
+            echo "Pushed successfully"
+            exit 0
+          fi
+
+          echo "Push rejected (fetch first). Sync + retry..."
+
+          LAST_COMMIT="$(git rev-parse HEAD)"
+          git reset --hard origin/main
+          git cherry-pick "$LAST_COMMIT"
+          git push --force-with-lease origin HEAD:main

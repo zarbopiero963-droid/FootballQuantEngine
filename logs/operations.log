@@ -40,3 +40,17 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Backup created backups/backup_2026-03-05_14-29-29.zip
+Folder created data
+File created data/api_client.py
+File created data/api_football_collector.py
+File created data/odds_collector.py
+File created data/clubelo_collector.py
+File created data/understat_collector.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

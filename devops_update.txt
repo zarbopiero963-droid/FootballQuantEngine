@@ -1,318 +1,84 @@
-CREA_FILE analysis/market_inefficiency.py
-import pandas as pd
-
-
-class MarketInefficiencyScanner:
-
-    def scan(self, predictions_df):
-
-        if predictions_df.empty:
-            return pd.DataFrame()
-
-        df = predictions_df.copy()
-
-        required = {
-            "home_win",
-            "draw",
-            "away_win",
-        }
-
-        if not required.issubset(df.columns):
-            return pd.DataFrame()
-
-        rows = []
-
-        for _, row in df.iterrows():
-
-            probs = {
-                "home": row["home_win"],
-                "draw": row["draw"],
-                "away": row["away_win"],
-            }
-
-            best_market = max(probs, key=probs.get)
-            best_probability = probs[best_market]
-
-            inefficiency_score = best_probability - (1 / 3)
-
-            rows.append(
-                {
-                    "team": row.get("team"),
-                    "best_market": best_market,
-                    "best_probability": best_probability,
-                    "inefficiency_score": inefficiency_score,
-                }
-            )
-
-        result = pd.DataFrame(rows)
-
-        return result.sort_values(
-            by="inefficiency_score",
-            ascending=False,
-        )
-EOF
-
-CREA_FILE analysis/ai_feature_generation.py
-import pandas as pd
-
-
-class AIFeatureGenerator:
-
-    def generate(self, features_df, manual_context=None):
-
-        if features_df.empty:
-            return pd.DataFrame()
-
-        df = features_df.copy()
-
-        if "weighted_form_score" in df.columns and "goals_for_avg" in df.columns:
-            df["ai_confidence_score"] = (
-                (df["weighted_form_score"] * 0.6) +
-                (df["goals_for_avg"] * 0.4)
-            )
-        else:
-            df["ai_confidence_score"] = 0.0
-
-        if "clean_sheet_rate" in df.columns and "btts_rate" in df.columns:
-            df["ai_defensive_index"] = (
-                df["clean_sheet_rate"] - df["btts_rate"]
-            )
-        else:
-            df["ai_defensive_index"] = 0.0
-
-        if manual_context is not None and not manual_context.empty:
-            context_cols = [c for c in manual_context.columns if c in df.columns]
-            for col in context_cols:
-                df[f"ai_context_{col}"] = df[col]
-
-        return df
-EOF
-
-CREA_FILE tests/test_market_inefficiency.py
-import pandas as pd
-
-from analysis.market_inefficiency import MarketInefficiencyScanner
-
-
-def test_market_inefficiency_runs():
-
-    df = pd.DataFrame(
-        [
-            {
-                "team": "TeamA",
-                "home_win": 0.60,
-                "draw": 0.20,
-                "away_win": 0.20,
-            },
-            {
-                "team": "TeamB",
-                "home_win": 0.40,
-                "draw": 0.30,
-                "away_win": 0.30,
-            },
-        ]
-    )
-
-    result = MarketInefficiencyScanner().scan(df)
-
-    assert isinstance(result, pd.DataFrame)
-    assert "inefficiency_score" in result.columns
-EOF
-
-CREA_FILE tests/test_ai_feature_generation.py
-import pandas as pd
-
-from analysis.ai_feature_generation import AIFeatureGenerator
-
-
-def test_ai_feature_generation_runs():
-
-    df = pd.DataFrame(
-        [
-            {
-                "team": "TeamA",
-                "weighted_form_score": 5.0,
-                "goals_for_avg": 1.6,
-                "clean_sheet_rate": 0.4,
-                "btts_rate": 0.5,
-            }
-        ]
-    )
-
-    result = AIFeatureGenerator().generate(df)
-
-    assert isinstance(result, pd.DataFrame)
-    assert "ai_confidence_score" in result.columns
-    assert "ai_defensive_index" in result.columns
-EOF
-
-CREA_FILE engine/offline_engine.py
-import pandas as pd
-
-from analysis.ai_feature_generation import AIFeatureGenerator
-from analysis.manual_context import ManualContextManager
-from analysis.market_inefficiency import MarketInefficiencyScanner
-from analysis.probability_markets import ProbabilityMarkets
-from analysis.report_generator import ReportGenerator
-from features.offline_features import OfflineFeatureBuilder
-from models.bayesian_model import BayesianModel
-from notifications.desktop_popup import DesktopPopup
-from training.backtest_engine import BacktestEngine
-from training.backtest_metrics import BacktestMetrics
-from training.csv_importer import CsvImporter
-from training.dataset_builder import DatasetBuilder
-from training.local_automl import LocalAutoML
-
-
-class OfflineEngine:
-
-    def __init__(self):
-
-        self.csv_importer = CsvImporter()
-        self.feature_builder = OfflineFeatureBuilder()
-        self.ai_feature_generator = AIFeatureGenerator()
-        self.bayesian = BayesianModel()
-        self.markets = ProbabilityMarkets()
-        self.manual_context = ManualContextManager()
-        self.market_scanner = MarketInefficiencyScanner()
-        self.dataset_builder = DatasetBuilder()
-        self.backtest_engine = BacktestEngine()
-        self.backtest_metrics = BacktestMetrics()
-        self.report_generator = ReportGenerator()
-        self.desktop_popup = DesktopPopup()
-        self.local_automl = LocalAutoML()
-
-    def import_csv_data(self, matches_csv=None, odds_csv=None):
-
-        if matches_csv:
-            self.csv_importer.import_matches(matches_csv)
-
-        if odds_csv:
-            self.csv_importer.import_odds(odds_csv)
-
-    def run_offline_analysis(self, fixtures_df):
-
-        if fixtures_df.empty:
-            return {
-                "features": pd.DataFrame(),
-                "predictions": pd.DataFrame(),
-                "market_inefficiency": pd.DataFrame(),
-            }
-
-        features_df = self.feature_builder.build_team_offline_features(fixtures_df)
-        features_df = self.ai_feature_generator.generate(features_df)
-
-        rows = []
-
-        for _, row in features_df.iterrows():
-
-            bayes = self.bayesian.predict(
-                home_attack=row["goals_for_avg"],
-                home_defense=row["goals_against_avg"],
-                away_attack=row["goals_for_avg"],
-                away_defense=row["goals_against_avg"],
-            )
-
-            goal_rate = max(row["goals_for_avg"], 0.1)
-            concede_rate = max(row["goals_against_avg"], 0.1)
-
-            over_under = self.markets.over_under_25(
-                lambda_home=goal_rate,
-                lambda_away=concede_rate,
-            )
-
-            btts = self.markets.btts(
-                lambda_home=goal_rate,
-                lambda_away=concede_rate,
-            )
-
-            rows.append(
-                {
-                    "team": row["team"],
-                    "home_win": bayes["home_win"],
-                    "draw": bayes["draw"],
-                    "away_win": bayes["away_win"],
-                    "over_2_5": over_under["over_2_5"],
-                    "under_2_5": over_under["under_2_5"],
-                    "btts_yes": btts["btts_yes"],
-                    "btts_no": btts["btts_no"],
-                    "clean_sheet_rate": row["clean_sheet_rate"],
-                    "over_2_5_rate": row["over_2_5_rate"],
-                    "btts_rate": row["btts_rate"],
-                    "rolling_goals_for_avg": row["rolling_goals_for_avg"],
-                    "rolling_goals_against_avg": row["rolling_goals_against_avg"],
-                    "weighted_form_score": row["weighted_form_score"],
-                    "ai_confidence_score": row["ai_confidence_score"],
-                    "ai_defensive_index": row["ai_defensive_index"],
-                }
-            )
-
-        predictions_df = pd.DataFrame(rows)
-        market_inefficiency_df = self.market_scanner.scan(predictions_df)
-
-        return {
-            "features": features_df,
-            "predictions": predictions_df,
-            "market_inefficiency": market_inefficiency_df,
-        }
-
-    def run_reports(self, ranked_df=None):
-
-        backtest_df = self.backtest_engine.run()
-        metrics = self.backtest_metrics.calculate(backtest_df)
-
-        self.report_generator.generate(
-            metrics=metrics,
-            ranked_df=ranked_df,
-        )
-
-        self.desktop_popup.notify(
-            "Football Quant Engine",
-            "Advanced report generated in outputs/advanced_report.html",
-        )
-
-        dataset_df = self.dataset_builder.build_training_dataset()
-        automl_status = self.local_automl.run(dataset_df)
-
-        return {
-            "metrics": metrics,
-            "automl": automl_status,
-        }
-EOF
-
-CREA_FILE tests/test_offline_engine.py
-import pandas as pd
-
-from engine.offline_engine import OfflineEngine
-
-
-def test_offline_engine_analysis_runs():
-
-    fixtures_df = pd.DataFrame(
-        [
-            {
-                "home": "TeamA",
-                "away": "TeamB",
-                "home_goals": 2,
-                "away_goals": 1,
-            },
-            {
-                "home": "TeamB",
-                "away": "TeamA",
-                "home_goals": 0,
-                "away_goals": 1,
-            },
-        ]
-    )
-
-    engine = OfflineEngine()
-
-    result = engine.run_offline_analysis(fixtures_df)
-
-    assert "features" in result
-    assert "predictions" in result
-    assert "market_inefficiency" in result
-EOF
-
-FIX_WHITESPACE
-
+CREA_FILE README.md
+# ⚽ Football Quant Engine
+
+Football Quant Engine è un motore quantitativo per analisi e predizione delle partite di calcio, costruito in Python con architettura modulare, modelli matematici, dataset locale e supporto a workflow desktop/offline-first.
+
+Il progetto è pensato per:
+
+- analisi pre-match
+- value betting
+- backtesting
+- importazione dati da CSV
+- gestione di dati locali e API
+- export risultati
+- build automatica EXE portabile per Windows
+
+---
+
+## 🚀 Caratteristiche principali
+
+- Motore di analisi modulare
+- Sistema plugin per modelli predittivi
+- Analisi probabilistica delle partite
+- Monte Carlo simulation
+- Edge detection (value betting)
+- Ranking automatico partite
+- Tracking quote e mercato
+- Dataset builder automatico
+- Backtest engine
+- Export CSV / Excel
+- Notifiche Telegram
+- Report HTML avanzato
+- Dashboard HTML locale
+- UI desktop PySide6
+- Build automatica EXE portabile con GitHub Actions
+- Modalità offline-first con import CSV
+
+---
+
+## 🧠 Modelli matematici inclusi
+
+Il motore include:
+
+- Poisson Model
+- Bivariate Poisson
+- Elo Rating Model
+- Bayesian Probability Model
+- Probability Markets (Over/Under 2.5, BTTS)
+- Monte Carlo Simulation
+
+---
+
+## 📊 Analisi avanzata
+
+Il sistema include anche:
+
+- Market inefficiency scanner
+- League predictability score
+- AI feature generation locale
+- Closing line builder
+- Odds history aggregation
+- Market pressure analysis
+- Backtest metrics:
+  - ROI
+  - Yield
+  - Hit rate
+  - Brier score
+  - Log loss
+
+---
+
+## 🖥️ Interfaccia e modalità di utilizzo
+
+Il progetto supporta più modalità:
+
+- **Desktop UI PySide6**
+- **CLI**
+- **HTML dashboard locale**
+- **Workflow offline-first**
+- **Workflow API-based**
+
+### Avvio UI desktop
+
+```bash
+python app/main.py

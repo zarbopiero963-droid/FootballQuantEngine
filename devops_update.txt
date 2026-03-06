@@ -237,3 +237,4 @@ def test_backtest_engine_class_exists():
 EOF
 
 FIX_WHITESPACE
+

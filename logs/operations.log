@@ -233,3 +233,18 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-06_17-08-06.zip
+Backup created backups/backup_2026-03-06_17-08-06.zip
+[CREATE] file analysis/market_pressure.py
+[CREATE] file training/odds_history_builder.py
+[CREATE] file training/closing_line_builder.py
+[CREATE] file training/backtest_engine.py
+[CREATE] file tests/test_market_pressure.py
+[CREATE] file tests/test_backtest_engine.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

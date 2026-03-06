@@ -1,115 +1,50 @@
-CREA_FILE README.md
-# ⚽ Football Quant Engine
-
-Football Quant Engine è un motore quantitativo per analisi e predizione delle partite di calcio, costruito in Python con architettura modulare, modelli matematici, dataset locale e supporto a workflow desktop/offline-first.
-
-## Caratteristiche principali
-
-- Motore di analisi modulare
-- Sistema plugin per modelli predittivi
-- Analisi probabilistica delle partite
-- Monte Carlo simulation
-- Edge detection
-- Ranking automatico
-- Dataset builder
-- Backtest engine
-- Export CSV / Excel
-- Report HTML
-- Dashboard HTML locale
-- UI desktop PySide6
-- Modalità offline-first con import CSV
-- Build automatica EXE con GitHub Actions
-
-## Modelli inclusi
-
-- Poisson Model
-- Bivariate Poisson
-- Elo Model
-- Bayesian Model
-- Probability Markets (Over/Under 2.5, BTTS)
-- Monte Carlo
-
-## Avvio
-
-UI desktop:
-
-python app/main.py
-
-CLI:
-
-python app/cli.py
-
-## Build locale
-
-python -m PyInstaller football_quant_engine.spec
-
-## Build GitHub
-
-Workflow:
-
-.github/workflows/build.yml
-
-Artifact atteso:
-
-FootballQuantEngine-Windows.zip
+CREA_FILE requirements.txt
+requests
+pandas
+numpy
+scipy
+scikit-learn
+matplotlib
+PySide6
+openpyxl
+sqlalchemy
+pytest
+black
+isort
+ruff
+pyinstaller
 EOF
 
-CREA_FILE football_quant_engine.spec
-# -*- mode: python ; coding: utf-8 -*-
+CREA_FILE tests/test_requirements_alignment.py
+from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_all
 
-block_cipher = None
+def test_requirements_contains_core_dependencies():
 
-datas = []
-binaries = []
-hiddenimports = []
+    requirements = Path("requirements.txt")
 
-for pkg in ("numpy", "pandas", "scipy", "PySide6"):
-    pkg_datas, pkg_binaries, pkg_hidden = collect_all(pkg)
-    datas += pkg_datas
-    binaries += pkg_binaries
-    hiddenimports += pkg_hidden
+    assert requirements.exists()
 
-a = Analysis(
-    ["app/desktop_launcher.py"],
-    pathex=["."],
-    binaries=binaries,
-    datas=datas,
-    hiddenimports=hiddenimports,
-    hookspath=[],
-    runtime_hooks=[],
-    excludes=[],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
-)
+    content = requirements.read_text(encoding="utf-8")
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+    required = [
+        "requests",
+        "pandas",
+        "numpy",
+        "scipy",
+        "scikit-learn",
+        "matplotlib",
+        "PySide6",
+        "openpyxl",
+        "pytest",
+        "black",
+        "isort",
+        "ruff",
+        "pyinstaller",
+    ]
 
-exe = EXE(
-    pyz,
-    a.scripts,
-    [],
-    exclude_binaries=True,
-    name="FootballQuantEngine",
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=False,
-    console=True,
-)
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=False,
-    name="FootballQuantEngine",
-)
+    for item in required:
+        assert item in content
 EOF
 
 FIX_WHITESPACE
-

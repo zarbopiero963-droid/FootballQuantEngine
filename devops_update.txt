@@ -1,44 +1,4 @@
-CREA_FILE ui/final_check_window.py
-import json
-
-from PySide6.QtWidgets import (
-    QPushButton,
-    QTextEdit,
-    QVBoxLayout,
-    QWidget,
-)
-
-from app.final_check import run_final_check
-
-
-class FinalCheckWindow(QWidget):
-
-    def __init__(self):
-
-        super().__init__()
-
-        self.setWindowTitle("Final Project Check")
-
-        self.run_button = QPushButton("Run Final Check")
-        self.output = QTextEdit()
-        self.output.setReadOnly(True)
-
-        self.run_button.clicked.connect(self.run_check)
-
-        layout = QVBoxLayout()
-        layout.addWidget(self.run_button)
-        layout.addWidget(self.output)
-
-        self.setLayout(layout)
-
-    def run_check(self):
-
-        result = run_final_check()
-
-        self.output.setPlainText(
-            json.dumps(result, indent=2)
-        )
-EOF
+CREA_CARTELLA ui
 
 CREA_FILE ui/main_window.py
 from PySide6.QtWidgets import (
@@ -168,32 +128,6 @@ class MainWindow(QMainWindow):
                 str(exc),
             )
             self.status_label.setText("Error")
-EOF
-
-CREA_FILE tests/test_final_check_window.py
-import pytest
-
-
-def test_final_check_window_import():
-
-    try:
-        from ui.final_check_window import FinalCheckWindow
-    except (ModuleNotFoundError, ImportError) as exc:
-        pytest.skip(f"UI dependencies not available in CI: {exc}")
-
-    assert FinalCheckWindow is not None
-EOF
-
-CREA_FILE tests/test_final_check_button_in_main_window.py
-from pathlib import Path
-
-
-def test_main_window_contains_final_check_button():
-
-    content = Path("ui/main_window.py").read_text(encoding="utf-8")
-
-    assert "Final Check" in content
-    assert "open_final_check" in content
 EOF
 
 FIX_WHITESPACE

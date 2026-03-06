@@ -1,225 +1,384 @@
-AUTO_BACKUP_BEFORE_RUN
+import os
+import shutil
+import datetime
+import subprocess
+import difflib
 
-CREA_CARTELLA analysis
-CREA_CARTELLA training
+INSTRUCTIONS_FILE = "devops_update.txt"
 
-CREA_FILE analysis/__init__.py
-# analysis package
-EOF
+BACKUP_DIR = "backups"
+LOG_DIR = "logs"
 
-CREA_FILE analysis/betfair_leagues.py
-BETFAIR_EXCHANGE_ITALIA_LEAGUES = {
-    "Serie A",
-    "Serie B",
-    "Premier League",
-    "Championship",
-    "League One",
-    "League Two",
-    "La Liga",
-    "Segunda Division",
-    "Bundesliga",
-    "2. Bundesliga",
-    "Ligue 1",
-    "Ligue 2",
-    "Eredivisie",
-    "Primeira Liga",
-    "Super Lig",
-    "Belgian Pro League",
-    "Serie A Brazil",
-    "Primera Division"
-}
+LOG_FILE = os.path.join(LOG_DIR, "operations.log")
 
 
-def is_betfair_league(league_name):
+# -------------------------
+# UTIL
+# -------------------------
 
-    if not league_name:
-        return False
-
-    return league_name in BETFAIR_EXCHANGE_ITALIA_LEAGUES
-EOF
-
-CREA_FILE analysis/league_predictability.py
-import pandas as pd
+def timestamp():
+    return datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
 
-class LeaguePredictability:
+def ensure_dir(path):
+    if path and not os.path.exists(path):
+        os.makedirs(path, exist_ok=True)
 
-    def score(self, fixtures_df):
 
-        if fixtures_df.empty:
-            return pd.DataFrame(
-                columns=["league", "predictability_score"]
-            )
+def log(msg):
 
-        rows = []
+    ensure_dir(LOG_DIR)
 
-        for league in fixtures_df["league"].dropna().unique():
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(msg + "\n")
 
-            league_df = fixtures_df[
-                fixtures_df["league"] == league
-            ].copy()
+    print(msg)
 
-            if league_df.empty:
+
+# -------------------------
+# BACKUP
+# -------------------------
+
+def backup_repository():
+
+    ensure_dir(BACKUP_DIR)
+
+    ts = timestamp()
+
+    dst = os.path.join(BACKUP_DIR, f"backup_{ts}")
+
+    shutil.make_archive(dst, "zip", ".")
+
+    log(f"Backup created {dst}.zip")
+
+
+def rollback():
+
+    backups = sorted(os.listdir(BACKUP_DIR))
+
+    if not backups:
+        log("No backup available")
+        return
+
+    latest = backups[-1]
+
+    path = os.path.join(BACKUP_DIR, latest)
+
+    log(f"Rollback using {latest}")
+
+    shutil.unpack_archive(path, ".")
+
+    log("Rollback completed")
+
+
+# -------------------------
+# FILE OPS
+# -------------------------
+
+def create_folder(path):
+
+    if os.path.exists(path):
+        log(f"[SKIP] folder exists {path}")
+        return
+
+    os.makedirs(path, exist_ok=True)
+
+    log(f"[CREATE] folder {path}")
+
+
+def create_file(path, content):
+
+    ensure_dir(os.path.dirname(path))
+
+    if os.path.exists(path):
+
+        with open(path, "r", encoding="utf-8") as f:
+            existing = f.read()
+
+        if existing == content:
+            log(f"[SKIP] file identical {path}")
+            return
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    log(f"[CREATE] file {path}")
+
+
+def append_file(path, content):
+
+    if not os.path.exists(path):
+        log(f"[SKIP] append target missing {path}")
+        return
+
+    with open(path, "a", encoding="utf-8") as f:
+        f.write("\n" + content)
+
+    log(f"[MODIFY] append {path}")
+
+
+def replace_line(path, old, new):
+
+    if not os.path.exists(path):
+        log(f"[SKIP] replace target missing {path}")
+        return
+
+    with open(path, "r", encoding="utf-8") as f:
+        data = f.read()
+
+    if old not in data:
+        log(f"[SKIP] line not found {path}")
+        return
+
+    data = data.replace(old, new)
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(data)
+
+    log(f"[MODIFY] replace line {path}")
+
+
+# -------------------------
+# CLEAN WHITESPACE
+# -------------------------
+
+def fix_whitespace():
+
+    for root, dirs, files in os.walk("."):
+
+        if ".git" in root:
+            continue
+
+        for file in files:
+
+            if not file.endswith((".py", ".txt", ".md", ".yml", ".json")):
                 continue
 
-            home_wins = (
-                league_df["home_goals"] > league_df["away_goals"]
-            ).mean()
+            path = os.path.join(root, file)
 
-            draws = (
-                league_df["home_goals"] == league_df["away_goals"]
-            ).mean()
+            with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()
 
-            away_wins = (
-                league_df["home_goals"] < league_df["away_goals"]
-            ).mean()
+            new_lines = []
 
-            score = max(home_wins, draws, away_wins)
+            for line in lines:
 
-            rows.append(
-                {
-                    "league": league,
-                    "predictability_score": score
-                }
-            )
+                line = line.rstrip()
 
-        result = pd.DataFrame(rows)
+                line = line.replace("\t", "    ")
 
-        if result.empty:
-            return result
+                new_lines.append(line + "\n")
 
-        return result.sort_values(
-            by="predictability_score",
-            ascending=False
-        )
-EOF
+            while new_lines and new_lines[-1].strip() == "":
+                new_lines.pop()
 
-CREA_FILE training/__init__.py
-# training package
-EOF
+            new_lines.append("\n")
 
-CREA_FILE training/dataset_builder.py
-import pandas as pd
+            with open(path, "w", encoding="utf-8") as f:
+                f.writelines(new_lines)
 
-from analysis.betfair_leagues import is_betfair_league
-from database.db_manager import connect
+    log("Whitespace fixed")
 
 
-class DatasetBuilder:
+# -------------------------
+# FORMAT + LINT + TEST
+# -------------------------
 
-    def load_fixtures(self):
+def run_black():
 
-        conn = connect()
+    log("Running Black")
 
-        fixtures_df = pd.read_sql_query(
-            """
-            SELECT
-                fixture_id,
-                league,
-                season,
-                home,
-                away,
-                match_date,
-                home_goals,
-                away_goals,
-                status
-            FROM fixtures
-            WHERE status = 'FT'
-            """,
-            conn
-        )
-
-        conn.close()
-
-        return fixtures_df
-
-    def build_training_dataset(self):
-
-        fixtures_df = self.load_fixtures()
-
-        if fixtures_df.empty:
-            return pd.DataFrame()
-
-        fixtures_df = fixtures_df[
-            fixtures_df["league"].apply(is_betfair_league)
-        ].copy()
-
-        if fixtures_df.empty:
-            return pd.DataFrame()
-
-        fixtures_df["target_home_win"] = (
-            fixtures_df["home_goals"] >
-            fixtures_df["away_goals"]
-        ).astype(int)
-
-        fixtures_df["target_draw"] = (
-            fixtures_df["home_goals"] ==
-            fixtures_df["away_goals"]
-        ).astype(int)
-
-        fixtures_df["target_away_win"] = (
-            fixtures_df["home_goals"] <
-            fixtures_df["away_goals"]
-        ).astype(int)
-
-        return fixtures_df
-EOF
-
-CREA_FILE tests/test_league_predictability.py
-import pandas as pd
-
-from analysis.league_predictability import LeaguePredictability
+    subprocess.run(["black", "."], check=False)
 
 
-def test_league_predictability_runs():
+def run_isort():
 
-    df = pd.DataFrame(
-        [
-            {
-                "league": "Serie A",
-                "home_goals": 2,
-                "away_goals": 1
-            },
-            {
-                "league": "Serie A",
-                "home_goals": 1,
-                "away_goals": 1
-            },
-            {
-                "league": "Premier League",
-                "home_goals": 0,
-                "away_goals": 2
-            }
-        ]
+    log("Running isort")
+
+    subprocess.run(["isort", "."], check=False)
+
+
+def run_ruff():
+
+    log("Running ruff")
+
+    subprocess.run(["ruff", "check", ".", "--fix"], check=False)
+
+
+def run_pytest():
+
+    log("Running pytest")
+
+    result = subprocess.run(["pytest", "-v"], capture_output=True, text=True)
+
+    print(result.stdout)
+
+    if result.returncode != 0:
+        log("Tests FAILED")
+        raise Exception("Tests failed")
+
+    log("Tests PASSED")
+
+
+# -------------------------
+# DIFF PREVIEW
+# -------------------------
+
+def generate_diff():
+
+    diff = subprocess.run(
+        ["git", "diff"],
+        capture_output=True,
+        text=True
     )
 
-    analyzer = LeaguePredictability()
-
-    result = analyzer.score(df)
-
-    assert isinstance(result, pd.DataFrame)
-    assert "league" in result.columns
-    assert "predictability_score" in result.columns
-EOF
-
-CREA_FILE tests/test_dataset_builder.py
-import pandas as pd
-
-from training.dataset_builder import DatasetBuilder
+    if diff.stdout:
+        log("Patch diff:")
+        print(diff.stdout)
 
 
-def test_dataset_builder_class_exists():
+# -------------------------
+# PROCESS
+# -------------------------
 
-    builder = DatasetBuilder()
+def process():
 
-    assert isinstance(builder, DatasetBuilder)
+    if not os.path.exists(INSTRUCTIONS_FILE):
+        log("No instruction file")
+        return
+
+    with open(INSTRUCTIONS_FILE) as f:
+        lines = f.readlines()
+
+    i = 0
+
+    while i < len(lines):
+
+        line = lines[i].strip()
+
+        if not line:
+            i += 1
+            continue
+
+        parts = line.split()
+
+        cmd = parts[0]
+
+        # -------------------------
+        # AUTO BACKUP
+        # -------------------------
+
+        if cmd == "AUTO_BACKUP_BEFORE_RUN":
+
+            backup_repository()
+
+        # -------------------------
+        # CREATE FOLDER
+        # -------------------------
+
+        elif cmd in ["CREA_CARTELLA", "CREATE_FOLDER"]:
+
+            create_folder(parts[1])
+
+        # -------------------------
+        # CREATE FILE
+        # -------------------------
+
+        elif cmd in ["CREA_FILE", "CREATE_FILE"]:
+
+            path = parts[1]
+
+            i += 1
+
+            content = []
+
+            while i < len(lines) and lines[i].strip() != "EOF":
+
+                content.append(lines[i])
+
+                i += 1
+
+            create_file(path, "".join(content))
+
+        # -------------------------
+        # APPEND
+        # -------------------------
+
+        elif cmd == "APPEND":
+
+            path = parts[1]
+
+            i += 1
+
+            content = []
+
+            while i < len(lines) and lines[i].strip() != "EOF":
+
+                content.append(lines[i])
+
+                i += 1
+
+            append_file(path, "".join(content))
+
+        # -------------------------
+        # REPLACE LINE
+        # -------------------------
+
+        elif cmd == "REPLACE_LINE":
+
+            path = parts[1]
+
+            i += 1
+
+            content = []
+
+            while i < len(lines) and lines[i].strip() != "EOF":
+
+                content.append(lines[i])
+
+                i += 1
+
+            old = content[0].strip()
+            new = content[1].strip()
+
+            replace_line(path, old, new)
+
+        # -------------------------
+        # FIX WHITESPACE
+        # -------------------------
+
+        elif cmd == "FIX_WHITESPACE":
+
+            fix_whitespace()
+
+        i += 1
+
+    # -------------------------
+    # PIPELINE
+    # -------------------------
+
+    try:
+
+        fix_whitespace()
+
+        run_black()
+
+        run_isort()
+
+        run_ruff()
+
+        generate_diff()
+
+        run_pytest()
+
+    except Exception:
+
+        log("Pipeline failed → rollback")
+
+        rollback()
+
+        raise
 
 
-def test_dataset_builder_empty_df_shape():
-
-    df = pd.DataFrame()
-
-    assert isinstance(df, pd.DataFrame)
-EOF
-
-FIX_WHITESPACE
+if __name__ == "__main__":
+    process()

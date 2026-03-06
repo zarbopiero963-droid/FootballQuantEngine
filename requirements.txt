@@ -9,4 +9,4 @@ scipy
 sqlalchemy
 openpyxl
 pyinstaller
-
+PySide6

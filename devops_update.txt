@@ -166,3 +166,4 @@ def test_outputs_related_imports():
 EOF
 
 FIX_WHITESPACE
+

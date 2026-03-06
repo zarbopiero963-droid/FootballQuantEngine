@@ -13,3 +13,6 @@ PySide6
 matplotlib
 scikit-learn
 
+
+Pillow
+

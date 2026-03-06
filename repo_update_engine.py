@@ -15,6 +15,8 @@ LOG_FILE = os.path.join(LOG_DIR, "operations.log")
 AUTO_BACKUP_ALWAYS = True
 KEEP_LAST_BACKUPS = 10
 
+CURRENT_COMMAND = "SYSTEM"
+
 
 # -------------------------
 # UTIL
@@ -36,20 +38,29 @@ def log(msg):
     print(msg)
 
 
+def set_current_command(cmd):
+    global CURRENT_COMMAND
+    CURRENT_COMMAND = cmd
+
+
+def command_prefix():
+    return f"[CMD: {CURRENT_COMMAND}]"
+
+
 def log_file_created(path):
-    log(f"[CREATE] {path}")
+    log(f"{command_prefix()} [CREATE] {path}")
 
 
 def log_file_modified(path):
-    log(f"[MODIFY] {path}")
+    log(f"{command_prefix()} [MODIFY] {path}")
 
 
 def log_file_deleted(path):
-    log(f"[DELETE] {path}")
+    log(f"{command_prefix()} [DELETE] {path}")
 
 
 def log_already_done(msg):
-    log(f"[SKIP] {msg} -> già fatto")
+    log(f"{command_prefix()} [SKIP] {msg} -> già fatto")
 
 
 # -------------------------
@@ -78,9 +89,9 @@ def cleanup_old_backups():
     for f in old:
         try:
             os.remove(f)
-            log(f"Deleted old backup {f}")
+            log(f"{command_prefix()} Deleted old backup {f}")
         except Exception as e:
-            log(f"Cannot delete {f}: {e}")
+            log(f"{command_prefix()} Cannot delete {f}: {e}")
 
 
 def backup_repository():
@@ -105,7 +116,7 @@ def backup_repository():
 
                 z.write(src, rel)
 
-    log(f"Backup created {zip_path}")
+    log(f"{command_prefix()} Backup created {zip_path}")
     cleanup_old_backups()
     return zip_path
 
@@ -119,22 +130,22 @@ def latest_backup():
 
 def restore_backup(zip_path):
     if not zip_path or not os.path.exists(zip_path):
-        log("Backup zip not found")
+        log(f"{command_prefix()} Backup zip not found")
         return False
 
-    log(f"RESTORE from {zip_path}")
+    log(f"{command_prefix()} RESTORE from {zip_path}")
 
     with zipfile.ZipFile(zip_path, "r") as z:
         z.extractall(".")
 
-    log("RESTORE completed")
+    log(f"{command_prefix()} RESTORE completed")
     return True
 
 
 def restore_last_backup():
     z = latest_backup()
     if not z:
-        log("No backup available")
+        log(f"{command_prefix()} No backup available")
         return False
     return restore_backup(z)
 
@@ -150,7 +161,7 @@ def restore_version(version_name):
 
 def restore_file_from_zip(zip_path, file_path):
     if not zip_path or not os.path.exists(zip_path):
-        log("Backup zip not found")
+        log(f"{command_prefix()} Backup zip not found")
         return False
 
     normalized = file_path.replace("\\", "/")
@@ -159,7 +170,7 @@ def restore_file_from_zip(zip_path, file_path):
         names = z.namelist()
 
         if normalized not in names:
-            log(f"File not found in backup: {normalized}")
+            log(f"{command_prefix()} File not found in backup: {normalized}")
             return False
 
         ensure_dir(os.path.dirname(normalized))
@@ -167,14 +178,14 @@ def restore_file_from_zip(zip_path, file_path):
         with z.open(normalized) as src, open(normalized, "wb") as dst:
             shutil.copyfileobj(src, dst)
 
-    log(f"RESTORE FILE completed: {normalized}")
+    log(f"{command_prefix()} RESTORE FILE completed: {normalized}")
     return True
 
 
 def restore_file_latest(file_path):
     z = latest_backup()
     if not z:
-        log("No backup available")
+        log(f"{command_prefix()} No backup available")
         return False
     return restore_file_from_zip(z, file_path)
 
@@ -189,7 +200,7 @@ def create_folder(path):
         return
 
     os.makedirs(path, exist_ok=True)
-    log(f"Folder created {path}")
+    log(f"{command_prefix()} Folder created {path}")
 
 
 def create_file(path, content):
@@ -206,8 +217,7 @@ def create_file(path, content):
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
 
-    if os.path.exists(path):
-        log_file_created(path)
+    log_file_created(path)
 
 
 def append_file(path, content):
@@ -249,7 +259,7 @@ def overwrite_file(path, content):
 
 def replace_text(path, old, new):
     if not os.path.exists(path):
-        log(f"[WARN] File not found for replace: {path}")
+        log(f"{command_prefix()} [WARN] File not found for replace: {path}")
         return
 
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
@@ -259,7 +269,7 @@ def replace_text(path, old, new):
         if new in data:
             log_already_done(f"Replace already applied in {path}")
         else:
-            log(f"[WARN] Pattern not found in {path}: {old}")
+            log(f"{command_prefix()} [WARN] Pattern not found in {path}: {old}")
         return
 
     data2 = data.replace(old, new)
@@ -272,7 +282,7 @@ def replace_text(path, old, new):
 
 def insert_line(path, line_number, text):
     if not os.path.exists(path):
-        log(f"[WARN] File not found for insert line: {path}")
+        log(f"{command_prefix()} [WARN] File not found for insert line: {path}")
         return
 
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
@@ -310,7 +320,7 @@ def move_file(src, dst):
 
     ensure_dir(os.path.dirname(dst))
     shutil.move(src, dst)
-    log(f"[MOVE] {src} -> {dst}")
+    log(f"{command_prefix()} [MOVE] {src} -> {dst}")
 
 
 def rename_file(src, dst):
@@ -322,7 +332,7 @@ def rename_file(src, dst):
 
     ensure_dir(os.path.dirname(dst))
     os.rename(src, dst)
-    log(f"[RENAME] {src} -> {dst}")
+    log(f"{command_prefix()} [RENAME] {src} -> {dst}")
 
 
 def replace_line_block(path, old_block, new_block):
@@ -336,7 +346,7 @@ def replace_line_block(path, old_block, new_block):
         if new_block in data:
             log_already_done(f"Block already replaced in {path}")
             return
-        log(f"[WARN] old block not found in {path}")
+        log(f"{command_prefix()} [WARN] old block not found in {path}")
         return
 
     data2 = data.replace(old_block, new_block, 1)
@@ -410,7 +420,7 @@ def patch_function(path, func_name, patch_code):
         raise Exception(f"Function not found: {func_name} in {path}")
 
     _write_python_file(path, tree)
-    log(f"[PATCH_FUNCTION] {path}:{func_name}")
+    log(f"{command_prefix()} [PATCH_FUNCTION] {path}:{func_name}")
 
 
 def safe_patch_function(path, func_name, patch_code):
@@ -471,7 +481,7 @@ def safe_patch_function(path, func_name, patch_code):
         f.write(generated + "\n")
 
     log_file_modified(path)
-    log(f"[SAFE_PATCH_FUNCTION] {path}:{func_name}")
+    log(f"{command_prefix()} [SAFE_PATCH_FUNCTION] {path}:{func_name}")
 
 
 def refactor_repo(action, old_name, new_name):
@@ -533,7 +543,7 @@ def refactor_repo(action, old_name, new_name):
         log_already_done(f"Refactor already applied or nothing to change ({old_name} -> {new_name})")
         return
 
-    log(f"[REFACTOR_REPO] action={action} old={old_name} new={new_name} changed_files={changed_files}")
+    log(f"{command_prefix()} [REFACTOR_REPO] action={action} old={old_name} new={new_name} changed_files={changed_files}")
 
 
 # -------------------------
@@ -570,7 +580,7 @@ def fix_whitespace():
             with open(path, "w", encoding="utf-8") as f:
                 f.writelines(new_lines)
 
-    log("Whitespace fixed")
+    log(f"{command_prefix()} Whitespace fixed")
 
 
 # -------------------------
@@ -578,22 +588,22 @@ def fix_whitespace():
 # -------------------------
 
 def run_black():
-    log("Running Black")
+    log(f"{command_prefix()} Running Black")
     subprocess.run(["black", "."], check=False)
 
 
 def run_isort():
-    log("Running isort")
+    log(f"{command_prefix()} Running isort")
     subprocess.run(["isort", "."], check=False)
 
 
 def run_ruff():
-    log("Running ruff")
+    log(f"{command_prefix()} Running ruff")
     subprocess.run(["ruff", "check", ".", "--fix"], check=False)
 
 
 def run_pytest():
-    log("Running pytest")
+    log(f"{command_prefix()} Running pytest")
 
     result = subprocess.run(
         ["pytest", "-v"],
@@ -605,10 +615,10 @@ def run_pytest():
     print(result.stderr)
 
     if result.returncode != 0:
-        log("Tests FAILED")
+        log(f"{command_prefix()} Tests FAILED")
         return False
 
-    log("Tests PASSED")
+    log(f"{command_prefix()} Tests PASSED")
     return True
 
 
@@ -632,6 +642,7 @@ def read_block(lines, start_index):
 # -------------------------
 
 def process():
+    set_current_command("AUTO_BACKUP_ALWAYS")
     if AUTO_BACKUP_ALWAYS:
         backup_repository()
 
@@ -654,6 +665,7 @@ def process():
 
         parts = line.split()
         cmd = parts[0]
+        set_current_command(line)
 
         if cmd == "AUTO_BACKUP_BEFORE_RUN":
             backup_repository()
@@ -786,10 +798,11 @@ def process():
             i += 1
             continue
 
-        log(f"[WARN] Unknown command: {line}")
+        log(f"{command_prefix()} [WARN] Unknown command")
         i += 1
 
     try:
+        set_current_command("CI_PIPELINE")
         fix_whitespace()
         run_black()
         run_isort()
@@ -800,7 +813,8 @@ def process():
             raise RuntimeError("Tests failed")
 
     except Exception as e:
-        log(f"CI FAILED: {e}")
+        set_current_command("ROLLBACK")
+        log(f"{command_prefix()} CI FAILED: {e}")
         rollback_last_backup()
         raise
 

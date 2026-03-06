@@ -1,266 +1,28 @@
-CREA_FILE engine/cli_runner.py
-from engine.job_runner import JobRunner
+CREA_FILE database/db_manager.py
+from pathlib import Path
+import sqlite3
 
+from config.constants import DATABASE_NAME
 
-class CliRunner:
 
-    def __init__(self):
+BASE_DIR = Path(__file__).resolve().parent
+SCHEMA_PATH = BASE_DIR / "schema.sql"
 
-        self.runner = JobRunner()
 
-    def run_once(self):
+def connect():
 
-        return self.runner.run_cycle()
-EOF
+    return sqlite3.connect(DATABASE_NAME)
 
-CREA_FILE analysis/dashboard_renderer.py
-import os
 
+def init_db():
 
-class DashboardRenderer:
+    conn = connect()
 
-    def __init__(self):
+    with open(SCHEMA_PATH, encoding="utf-8") as f:
+        conn.executescript(f.read())
 
-        os.makedirs("outputs", exist_ok=True)
-
-    def render(self, ranked_df):
-
-        html = []
-        html.append("<html>")
-        html.append("<head><title>Football Quant Engine Dashboard</title></head>")
-        html.append("<body>")
-        html.append("<h1>Football Quant Engine Dashboard</h1>")
-
-        if ranked_df.empty:
-            html.append("<p>No ranked value bets available.</p>")
-        else:
-            html.append("<table border='1' cellpadding='6' cellspacing='0'>")
-            html.append("<tr>")
-
-            for col in ranked_df.columns:
-                html.append(f"<th>{col}</th>")
-
-            html.append("</tr>")
-
-            for _, row in ranked_df.iterrows():
-                html.append("<tr>")
-                for col in ranked_df.columns:
-                    html.append(f"<td>{row[col]}</td>")
-                html.append("</tr>")
-
-            html.append("</table>")
-
-        html.append("</body>")
-        html.append("</html>")
-
-        with open("outputs/dashboard.html", "w", encoding="utf-8") as f:
-            f.write("\n".join(html))
-EOF
-
-CREA_FILE engine/dashboard_manager.py
-from analysis.dashboard_renderer import DashboardRenderer
-
-
-class DashboardManager:
-
-    def __init__(self):
-
-        self.renderer = DashboardRenderer()
-
-    def build(self, ranked_df):
-
-        self.renderer.render(ranked_df)
-EOF
-
-CREA_FILE engine/scheduler.py
-import time
-from datetime import datetime
-
-
-class Scheduler:
-
-    def __init__(self, interval_minutes=10):
-        self.interval = interval_minutes * 60
-        self.jobs = []
-
-    def add_job(self, func):
-        self.jobs.append(func)
-
-    def run_once(self):
-
-        results = []
-
-        for job in self.jobs:
-            results.append(job())
-
-        return results
-
-    def run(self):
-
-        while True:
-
-            start = datetime.utcnow()
-
-            self.run_once()
-
-            elapsed = (datetime.utcnow() - start).total_seconds()
-
-            sleep_time = self.interval - elapsed
-
-            if sleep_time > 0:
-                time.sleep(sleep_time)
-EOF
-
-CREA_FILE engine/job_runner.py
-import pandas as pd
-
-from config.settings_manager import load_settings
-from database.db_manager import init_db
-from data.api_football_collector import ApiFootballCollector
-from data.odds_collector import OddsCollector
-from engine.dashboard_manager import DashboardManager
-from engine.fixture_mapper import map_api_football_response_to_fixtures
-from engine.match_ranker import MatchRanker
-from engine.odds_mapper import map_odds_events_to_match_id
-from engine.output_manager import OutputManager
-from engine.prediction_pipeline import PredictionPipeline
-from engine.repository_saver import RepositorySaver
-from engine.training_manager import TrainingManager
-from engine.value_bet_notifier import ValueBetNotifier
-from features.feature_engine import FeatureEngine
-
-
-class JobRunner:
-
-    def __init__(self):
-
-        self.api = ApiFootballCollector()
-        self.odds = OddsCollector()
-        self.pipeline = PredictionPipeline()
-        self.saver = RepositorySaver()
-        self.notifier = ValueBetNotifier()
-        self.ranker = MatchRanker()
-        self.output_manager = OutputManager()
-        self.training_manager = TrainingManager()
-        self.dashboard_manager = DashboardManager()
-
-        init_db()
-
-    def run_cycle(self):
-
-        settings = load_settings()
-
-        if not settings.api_football_key or not settings.odds_api_key:
-            raise Exception("Missing API keys in settings.json")
-
-        fixtures_response = self.api.get_next_matches()
-        fixtures = map_api_football_response_to_fixtures(fixtures_response)
-
-        rows = []
-
-        for fixture in fixtures:
-            rows.append(
-                {
-                    "home": fixture["home"],
-                    "away": fixture["away"],
-                    "home_goals": fixture.get("home_goals") or 0,
-                    "away_goals": fixture.get("away_goals") or 0,
-                }
-            )
-
-        fixtures_df = pd.DataFrame(rows)
-
-        feature_engine = FeatureEngine()
-        features_df = feature_engine.build_features(fixtures_df)
-
-        odds_events = self.odds.get_odds()
-        odds_data = map_odds_events_to_match_id(odds_events)
-
-        value_bets = self.pipeline.run(features_df, odds_data)
-
-        self.saver.save_all(fixtures, odds_data, value_bets)
-        self.notifier.notify(value_bets)
-
-        ranked = self.ranker.rank(value_bets)
-        self.output_manager.export_value_bets(value_bets)
-
-        if not ranked.empty:
-            self.output_manager.export_dataframe(
-                ranked,
-                "ranked_value_bets",
-            )
-
-        dataset_df = self.training_manager.build_dataset()
-
-        if not dataset_df.empty:
-            self.output_manager.export_dataframe(
-                dataset_df,
-                "training_dataset",
-            )
-
-        backtest_df = self.training_manager.run_backtest()
-
-        if not backtest_df.empty:
-            self.output_manager.export_dataframe(
-                backtest_df,
-                "backtest_results",
-            )
-
-        self.dashboard_manager.build(ranked)
-
-        return ranked
-EOF
-
-CREA_FILE app/cli.py
-from engine.cli_runner import CliRunner
-
-
-def main():
-
-    runner = CliRunner()
-
-    result = runner.run_once()
-
-    print(result)
-
-
-if __name__ == "__main__":
-    main()
-EOF
-
-CREA_FILE tests/test_dashboard_manager.py
-import pandas as pd
-
-from engine.dashboard_manager import DashboardManager
-
-
-def test_dashboard_manager_class_exists():
-
-    manager = DashboardManager()
-
-    assert isinstance(manager, DashboardManager)
-
-
-def test_dashboard_manager_build_empty():
-
-    manager = DashboardManager()
-
-    df = pd.DataFrame()
-
-    manager.build(df)
-
-    assert isinstance(df, pd.DataFrame)
-EOF
-
-CREA_FILE tests/test_cli_runner.py
-from engine.cli_runner import CliRunner
-
-
-def test_cli_runner_class_exists():
-
-    runner = CliRunner()
-
-    assert isinstance(runner, CliRunner)
+    conn.commit()
+    conn.close()
 EOF
 
 FIX_WHITESPACE

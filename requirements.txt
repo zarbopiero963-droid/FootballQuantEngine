@@ -9,3 +9,4 @@ scipy
 sqlalchemy
 openpyxl
 pyinstaller
+

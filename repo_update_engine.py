@@ -1,6 +1,5 @@
 import datetime
 import os
-import shutil
 import subprocess
 import zipfile
 
@@ -217,7 +216,9 @@ def fix_whitespace():
             continue
 
         for file in files:
-            if not file.endswith((".py", ".txt", ".md", ".yml", ".yaml", ".json", ".ini")):
+            if not file.endswith(
+                (".py", ".txt", ".md", ".yml", ".yaml", ".json", ".ini")
+            ):
                 continue
 
             path = os.path.join(root, file)

@@ -199,3 +199,22 @@ Tests PASSED
 [CMD: CI_PIPELINE] Running ruff
 [CMD: CI_PIPELINE] Running pytest
 [CMD: CI_PIPELINE] Tests PASSED
+Starting backup backups/backup_2026-03-06_17-01-14.zip
+Backup created backups/backup_2026-03-06_17-01-14.zip
+Deleted old backup backups/backup_2026-03-05_13-11-11.zip
+[CREATE] folder analysis
+[CREATE] folder training
+[CREATE] file analysis/__init__.py
+[CREATE] file analysis/betfair_leagues.py
+[CREATE] file analysis/league_predictability.py
+[CREATE] file training/__init__.py
+[CREATE] file training/dataset_builder.py
+[CREATE] file tests/test_league_predictability.py
+[CREATE] file tests/test_dataset_builder.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

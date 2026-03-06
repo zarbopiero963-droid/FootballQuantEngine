@@ -1,6 +1,5 @@
-import datetime
 import os
-import shutil
+import datetime
 import subprocess
 import zipfile
 
@@ -12,13 +11,11 @@ LOG_DIR = "logs"
 LOG_FILE = os.path.join(LOG_DIR, "operations.log")
 
 AUTO_BACKUP_ALWAYS = True
-KEEP_LAST_BACKUPS = 10
 
 
-# ------------------------
+# -------------------------
 # UTIL
-# ------------------------
-
+# -------------------------
 
 def timestamp():
     return datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -30,43 +27,30 @@ def ensure_dir(path):
 
 
 def log(msg):
+
     ensure_dir(LOG_DIR)
+
     with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(msg + "\n")
+
     print(msg)
 
 
-# ------------------------
+def log_file_created(path):
+    log(f"[CREATE] {path}")
+
+
+def log_file_modified(path):
+    log(f"[MODIFY] {path}")
+
+
+def log_file_deleted(path):
+    log(f"[DELETE] {path}")
+
+
+# -------------------------
 # BACKUP
-# ------------------------
-
-
-def list_backups():
-    ensure_dir(BACKUP_DIR)
-    files = [
-        os.path.join(BACKUP_DIR, f)
-        for f in os.listdir(BACKUP_DIR)
-        if f.startswith("backup_") and f.endswith(".zip")
-    ]
-    files.sort()
-    return files
-
-
-def cleanup_old_backups():
-    backups = list_backups()
-
-    if len(backups) <= KEEP_LAST_BACKUPS:
-        return
-
-    old = backups[:-KEEP_LAST_BACKUPS]
-
-    for f in old:
-        try:
-            os.remove(f)
-            log(f"Deleted old backup {f}")
-        except Exception as e:
-            log(f"Cannot delete {f}: {e}")
-
+# -------------------------
 
 def backup_repository():
 
@@ -88,55 +72,34 @@ def backup_repository():
 
             for file in files:
 
-                if file.endswith(".pyc"):
-                    continue
+                src = os.path.join(root, file)
 
-                path = os.path.join(root, file)
+                rel = os.path.relpath(src, ".")
 
-                rel = os.path.relpath(path, ".")
-
-                z.write(path, rel)
+                z.write(src, rel)
 
     log(f"Backup created {zip_path}")
 
-    cleanup_old_backups()
 
+def restore_last_backup():
 
-def restore_latest_backup():
-
-    backups = list_backups()
+    backups = sorted(os.listdir(BACKUP_DIR))
 
     if not backups:
-        log("No backup found")
-        return False
+        log("No backup available")
+        return
 
-    latest = backups[-1]
+    latest = os.path.join(BACKUP_DIR, backups[-1])
 
-    log(f"Rollback using {latest}")
+    log(f"Rollback from {latest}")
 
     with zipfile.ZipFile(latest, "r") as z:
-
-        for member in z.namelist():
-
-            if member.startswith(".git"):
-                continue
-
-            dest = os.path.join(".", member)
-
-            ensure_dir(os.path.dirname(dest))
-
-            with z.open(member) as src, open(dest, "wb") as dst:
-                shutil.copyfileobj(src, dst)
-
-    log("Rollback completed")
-
-    return True
+        z.extractall(".")
 
 
-# ------------------------
+# -------------------------
 # FILE OPS
-# ------------------------
-
+# -------------------------
 
 def create_folder(path):
 
@@ -152,7 +115,7 @@ def create_file(path, content):
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
 
-    log(f"File created {path}")
+    log_file_created(path)
 
 
 def append_file(path, content):
@@ -162,72 +125,12 @@ def append_file(path, content):
     with open(path, "a", encoding="utf-8") as f:
         f.write("\n" + content)
 
-    log(f"Append {path}")
+    log_file_modified(path)
 
 
-def replace_text(path, old, new):
-
-    with open(path, "r", encoding="utf-8", errors="ignore") as f:
-        data = f.read()
-
-    data = data.replace(old, new)
-
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(data)
-
-    log(f"Replace text in {path}")
-
-
-def replace_line(path, old, new):
-
-    with open(path, "r", encoding="utf-8", errors="ignore") as f:
-        lines = f.readlines()
-
-    out = []
-    changed = False
-
-    for line in lines:
-
-        if old in line:
-            out.append(line.replace(old, new))
-            changed = True
-        else:
-            out.append(line)
-
-    if changed:
-
-        with open(path, "w", encoding="utf-8") as f:
-            f.writelines(out)
-
-        log(f"REPLACE_LINE applied in {path}")
-
-    else:
-
-        log(f"Pattern not found in {path}")
-
-
-def insert_line(path, number, text):
-
-    with open(path, "r", encoding="utf-8", errors="ignore") as f:
-        lines = f.readlines()
-
-    idx = max(0, number - 1)
-
-    if idx > len(lines):
-        idx = len(lines)
-
-    lines.insert(idx, text + "\n")
-
-    with open(path, "w", encoding="utf-8") as f:
-        f.writelines(lines)
-
-    log(f"Inserted line {number} in {path}")
-
-
-# ------------------------
+# -------------------------
 # WHITESPACE
-# ------------------------
-
+# -------------------------
 
 def fix_whitespace():
 
@@ -238,197 +141,177 @@ def fix_whitespace():
 
         for file in files:
 
-            if not file.endswith((".py", ".txt", ".md", ".yml", ".json", ".ini")):
+            if not file.endswith((".py",".txt",".md",".yml",".json",".ini")):
                 continue
 
-            path = os.path.join(root, file)
+            path=os.path.join(root,file)
 
-            with open(path, "r", encoding="utf-8", errors="ignore") as f:
-                lines = f.readlines()
+            with open(path,"r",encoding="utf-8",errors="ignore") as f:
+                lines=f.readlines()
 
-            new = []
+            new=[]
 
             for line in lines:
 
-                line = line.rstrip()
+                line=line.rstrip()
 
-                line = line.replace("\t", "    ")
+                line=line.replace("\t","    ")
 
-                new.append(line + "\n")
+                new.append(line+"\n")
 
-            while new and new[-1].strip() == "":
+            while new and new[-1].strip()=="":
                 new.pop()
 
             new.append("\n")
 
-            with open(path, "w", encoding="utf-8") as f:
+            with open(path,"w",encoding="utf-8") as f:
                 f.writelines(new)
 
     log("Whitespace fixed")
 
 
-# ------------------------
-# FORMAT / TEST
-# ------------------------
-
+# -------------------------
+# FORMAT
+# -------------------------
 
 def run_black():
+
     log("Running Black")
-    subprocess.run(["black", "."], check=False)
+
+    subprocess.run(["black","."],check=False)
 
 
 def run_isort():
+
     log("Running isort")
-    subprocess.run(["isort", "."], check=False)
+
+    subprocess.run(["isort","."],check=False)
 
 
 def run_ruff():
-    log("Running ruff")
-    subprocess.run(["ruff", "check", ".", "--fix"], check=False)
 
+    log("Running ruff")
+
+    subprocess.run(["ruff","check",".","--fix"],check=False)
+
+
+# -------------------------
+# TEST
+# -------------------------
 
 def run_pytest():
 
     log("Running pytest")
 
-    result = subprocess.run(["pytest", "-v"], capture_output=True, text=True)
+    result=subprocess.run(
+        ["pytest","-v"],
+        capture_output=True,
+        text=True
+    )
 
     print(result.stdout)
 
-    if result.returncode != 0:
+    if result.returncode!=0:
+
         log("Tests FAILED")
+
         raise Exception("Tests failed")
 
     log("Tests PASSED")
 
 
-# ------------------------
+# -------------------------
 # PROCESS
-# ------------------------
-
+# -------------------------
 
 def process():
+
+    if AUTO_BACKUP_ALWAYS:
+        backup_repository()
 
     if not os.path.exists(INSTRUCTIONS_FILE):
         log("No instruction file")
         return
 
-    if AUTO_BACKUP_ALWAYS:
-        backup_repository()
+    with open(INSTRUCTIONS_FILE) as f:
+        lines=f.readlines()
 
-    with open(INSTRUCTIONS_FILE, encoding="utf-8") as f:
-        lines = f.readlines()
+    i=0
 
-    i = 0
+    while i<len(lines):
 
-    while i < len(lines):
-
-        line = lines[i].strip()
+        line=lines[i].strip()
 
         if not line:
-            i += 1
+            i+=1
             continue
 
-        parts = line.split()
+        parts=line.split()
 
-        cmd = parts[0]
+        cmd=parts[0]
 
-        if cmd == "AUTO_BACKUP_BEFORE_RUN":
-            backup_repository()
+        if cmd in ["CREA_CARTELLA","CREATE_FOLDER"]:
 
-        elif cmd in ["CREA_CARTELLA", "CREATE_FOLDER"]:
             create_folder(parts[1])
 
-        elif cmd in ["CREA_FILE", "CREATE_FILE"]:
+        elif cmd in ["CREA_FILE","CREATE_FILE"]:
 
-            path = parts[1]
+            path=parts[1]
 
-            i += 1
-            content = []
+            i+=1
 
-            while i < len(lines) and lines[i].strip() != "EOF":
+            content=[]
+
+            while i<len(lines) and lines[i].strip()!="EOF":
+
                 content.append(lines[i])
-                i += 1
 
-            create_file(path, "".join(content))
+                i+=1
 
-        elif cmd in ["APPEND", "AGGIUNGI"]:
+            create_file(path,"".join(content))
 
-            path = parts[1]
+        elif cmd in ["APPEND","AGGIUNGI"]:
 
-            i += 1
-            content = []
+            path=parts[1]
 
-            while i < len(lines) and lines[i].strip() != "EOF":
+            i+=1
+
+            content=[]
+
+            while i<len(lines) and lines[i].strip()!="EOF":
+
                 content.append(lines[i])
-                i += 1
 
-            append_file(path, "".join(content))
+                i+=1
 
-        elif cmd in ["REPLACE", "SOSTITUISCI"]:
+            append_file(path,"".join(content))
 
-            path = parts[1]
-            old = parts[2]
-            new = " ".join(parts[3:])
+        elif cmd=="FIX_WHITESPACE":
 
-            replace_text(path, old, new)
-
-        elif cmd == "REPLACE_LINE":
-
-            path = parts[1]
-
-            if parts[2] == "<<EOF":
-
-                i += 1
-                old = lines[i].rstrip("\n")
-
-                i += 1
-                new = lines[i].rstrip("\n")
-
-                while i < len(lines) and lines[i].strip() != "EOF":
-                    i += 1
-
-                replace_line(path, old, new)
-
-            else:
-
-                old = parts[2]
-                new = " ".join(parts[3:])
-
-                replace_line(path, old, new)
-
-        elif cmd in ["INSERT_LINE", "INSERISCI_RIGA"]:
-
-            path = parts[1]
-            number = int(parts[2])
-            text = " ".join(parts[3:])
-
-            insert_line(path, number, text)
-
-        elif cmd == "FIX_WHITESPACE":
             fix_whitespace()
 
-        i += 1
+        i+=1
 
     try:
 
         fix_whitespace()
+
         run_black()
+
         run_isort()
+
         run_ruff()
+
         run_pytest()
 
     except Exception as e:
 
         log(f"CI FAILED: {e}")
 
-        ok = restore_latest_backup()
-
-        if not ok:
-            raise
+        restore_last_backup()
 
         raise
 
 
-if __name__ == "__main__":
+if __name__=="__main__":
     process()

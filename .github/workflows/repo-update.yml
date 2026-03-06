@@ -97,4 +97,4 @@ jobs:
         if: steps.engine.outcome == 'failure'
         run: |
           echo "Engine failed. Rollback was committed."
-          exit 1
+          exit 1 

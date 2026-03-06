@@ -2,83 +2,53 @@
 
 Football Quant Engine è un motore quantitativo per analisi e predizione delle partite di calcio, costruito in Python con architettura modulare, modelli matematici, dataset locale e supporto a workflow desktop/offline-first.
 
-Il progetto è pensato per:
-
-- analisi pre-match
-- value betting
-- backtesting
-- importazione dati da CSV
-- gestione di dati locali e API
-- export risultati
-- build automatica EXE portabile per Windows
-
----
-
-## 🚀 Caratteristiche principali
+## Caratteristiche principali
 
 - Motore di analisi modulare
 - Sistema plugin per modelli predittivi
 - Analisi probabilistica delle partite
 - Monte Carlo simulation
-- Edge detection (value betting)
-- Ranking automatico partite
-- Tracking quote e mercato
-- Dataset builder automatico
+- Edge detection
+- Ranking automatico
+- Dataset builder
 - Backtest engine
 - Export CSV / Excel
-- Notifiche Telegram
-- Report HTML avanzato
+- Report HTML
 - Dashboard HTML locale
 - UI desktop PySide6
-- Build automatica EXE portabile con GitHub Actions
 - Modalità offline-first con import CSV
+- Build automatica EXE con GitHub Actions
 
----
-
-## 🧠 Modelli matematici inclusi
-
-Il motore include:
+## Modelli inclusi
 
 - Poisson Model
 - Bivariate Poisson
-- Elo Rating Model
-- Bayesian Probability Model
+- Elo Model
+- Bayesian Model
 - Probability Markets (Over/Under 2.5, BTTS)
-- Monte Carlo Simulation
+- Monte Carlo
 
----
+## Avvio
 
-## 📊 Analisi avanzata
+UI desktop:
 
-Il sistema include anche:
-
-- Market inefficiency scanner
-- League predictability score
-- AI feature generation locale
-- Closing line builder
-- Odds history aggregation
-- Market pressure analysis
-- Backtest metrics:
-  - ROI
-  - Yield
-  - Hit rate
-  - Brier score
-  - Log loss
-
----
-
-## 🖥️ Interfaccia e modalità di utilizzo
-
-Il progetto supporta più modalità:
-
-- **Desktop UI PySide6**
-- **CLI**
-- **HTML dashboard locale**
-- **Workflow offline-first**
-- **Workflow API-based**
-
-### Avvio UI desktop
-
-```bash
 python app/main.py
+
+CLI:
+
+python app/cli.py
+
+## Build locale
+
+python -m PyInstaller football_quant_engine.spec
+
+## Build GitHub
+
+Workflow:
+
+.github/workflows/build.yml
+
+Artifact atteso:
+
+FootballQuantEngine-Windows.zip
 

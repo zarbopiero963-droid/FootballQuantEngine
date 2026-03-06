@@ -436,3 +436,14 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-06_23-43-28.zip
+Backup created backups/backup_2026-03-06_23-43-28.zip
+[CREATE] file README.md
+[SKIP] file identical football_quant_engine.spec
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

@@ -1,201 +1,271 @@
-CREA_CARTELLA plugins
-CREA_CARTELLA plugins/models
+CREA_CARTELLA ui
 
-CREA_FILE plugins/__init__.py
-# plugins package
+APPEND requirements.txt
+PySide6
 EOF
 
-CREA_FILE plugins/models/__init__.py
-# plugins.models package
+CREA_FILE ui/__init__.py
+# ui package
 EOF
 
-CREA_FILE plugins/models/poisson_plugin.py
-from models.poisson_model import PoissonModel
+CREA_FILE ui/settings_window.py
+from PySide6.QtWidgets import (
+    QFormLayout,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
+
+from config.settings_manager import Settings, load_settings, save_settings
 
 
-class ModelPlugin:
-
-    name = "poisson"
+class SettingsWindow(QWidget):
 
     def __init__(self):
 
-        self.model = PoissonModel()
+        super().__init__()
 
-    def predict(self, row):
+        self.setWindowTitle("Settings")
 
-        return self.model.predict(
-            home_attack=row["home_attack"],
-            home_defense=row["home_defense"],
-            away_attack=row["away_attack"],
-            away_defense=row["away_defense"],
+        self.api_football_input = QLineEdit()
+        self.odds_api_input = QLineEdit()
+        self.telegram_token_input = QLineEdit()
+        self.telegram_chat_id_input = QLineEdit()
+
+        self.save_button = QPushButton("Save")
+        self.save_button.clicked.connect(self.save)
+
+        form = QFormLayout()
+        form.addRow("API-Football Key", self.api_football_input)
+        form.addRow("Odds API Key", self.odds_api_input)
+        form.addRow("Telegram Token", self.telegram_token_input)
+        form.addRow("Telegram Chat ID", self.telegram_chat_id_input)
+
+        layout = QVBoxLayout()
+        layout.addLayout(form)
+        layout.addWidget(self.save_button)
+
+        self.setLayout(layout)
+
+        self.load_values()
+
+    def load_values(self):
+
+        settings = load_settings()
+
+        self.api_football_input.setText(settings.api_football_key)
+        self.odds_api_input.setText(settings.odds_api_key)
+        self.telegram_token_input.setText(settings.telegram_token)
+        self.telegram_chat_id_input.setText(settings.telegram_chat_id)
+
+    def save(self):
+
+        settings = Settings()
+        settings.api_football_key = self.api_football_input.text().strip()
+        settings.odds_api_key = self.odds_api_input.text().strip()
+        settings.telegram_token = self.telegram_token_input.text().strip()
+        settings.telegram_chat_id = self.telegram_chat_id_input.text().strip()
+
+        save_settings(settings)
+
+        QMessageBox.information(
+            self,
+            "Settings",
+            "Settings saved successfully.",
         )
 EOF
 
-CREA_FILE plugins/models/elo_plugin.py
-from models.elo_model import EloModel
+CREA_FILE ui/dashboard_view.py
+from PySide6.QtWidgets import QLabel, QTextEdit, QVBoxLayout, QWidget
 
 
-class ModelPlugin:
-
-    name = "elo"
+class DashboardView(QWidget):
 
     def __init__(self):
 
-        self.model = EloModel()
+        super().__init__()
 
-    def predict(self, row):
+        self.title = QLabel("Football Quant Engine Dashboard")
+        self.output = QTextEdit()
+        self.output.setReadOnly(True)
 
-        probability = self.model.probability(row["elo_diff"])
+        layout = QVBoxLayout()
+        layout.addWidget(self.title)
+        layout.addWidget(self.output)
 
-        draw_probability = 0.20
+        self.setLayout(layout)
 
-        away_probability = 1 - probability - draw_probability
+    def set_text(self, text):
 
-        if away_probability < 0:
-            away_probability = 0
-
-        total = probability + draw_probability + away_probability
-
-        if total == 0:
-            return {
-                "home_win": 0.0,
-                "draw": 0.0,
-                "away_win": 0.0,
-            }
-
-        return {
-            "home_win": probability / total,
-            "draw": draw_probability / total,
-            "away_win": away_probability / total,
-        }
+        self.output.setPlainText(text)
 EOF
 
-CREA_FILE plugins/models/bivariate_plugin.py
-from models.bivariate_poisson import BivariatePoisson
+CREA_FILE ui/about_dialog.py
+from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 
-class ModelPlugin:
-
-    name = "bivariate_poisson"
+class AboutDialog(QWidget):
 
     def __init__(self):
 
-        self.model = BivariatePoisson()
+        super().__init__()
 
-    def predict(self, row):
+        self.setWindowTitle("About")
 
-        lambda_home = row["home_attack"] * row["away_defense"]
-        lambda_away = row["away_attack"] * row["home_defense"]
-
-        return self.model.predict(
-            lambda_home=lambda_home,
-            lambda_away=lambda_away,
-            rho=0.05,
+        label = QLabel(
+            "Football Quant Engine\n"
+            "Quantitative football analysis engine\n"
+            "Poisson + Monte Carlo + Value Betting"
         )
+
+        layout = QVBoxLayout()
+        layout.addWidget(label)
+
+        self.setLayout(layout)
 EOF
 
-CREA_FILE engine/plugin_loader.py
-import importlib
-import pkgutil
+CREA_FILE ui/main_window.py
+from PySide6.QtWidgets import (
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QToolBar,
+)
+
+from ui.about_dialog import AboutDialog
+from ui.dashboard_view import DashboardView
+from ui.settings_window import SettingsWindow
 
 
-class PluginLoader:
+class MainWindow(QMainWindow):
 
-    def __init__(self, package_name="plugins.models"):
+    def __init__(self, controller):
 
-        self.package_name = package_name
+        super().__init__()
 
-    def load_plugins(self):
+        self.controller = controller
 
-        package = importlib.import_module(self.package_name)
+        self.setWindowTitle("Football Quant Engine")
+        self.resize(1000, 700)
 
-        plugins = []
+        self.dashboard = DashboardView()
+        self.setCentralWidget(self.dashboard)
 
-        for _, module_name, _ in pkgutil.iter_modules(package.__path__):
+        self.status_label = QLabel("Ready")
+        self.statusBar().addPermanentWidget(self.status_label)
 
-            module = importlib.import_module(
-                f"{self.package_name}.{module_name}"
+        toolbar = QToolBar("Main")
+        self.addToolBar(toolbar)
+
+        self.run_button = QPushButton("Run Cycle")
+        self.run_button.clicked.connect(self.run_cycle)
+        toolbar.addWidget(self.run_button)
+
+        self.settings_button = QPushButton("Settings")
+        self.settings_button.clicked.connect(self.open_settings)
+        toolbar.addWidget(self.settings_button)
+
+        self.about_button = QPushButton("About")
+        self.about_button.clicked.connect(self.open_about)
+        toolbar.addWidget(self.about_button)
+
+        self.settings_window = None
+        self.about_dialog = None
+
+    def open_settings(self):
+
+        self.settings_window = SettingsWindow()
+        self.settings_window.show()
+
+    def open_about(self):
+
+        self.about_dialog = AboutDialog()
+        self.about_dialog.show()
+
+    def run_cycle(self):
+
+        try:
+            ranked = self.controller.run_once()
+
+            if ranked is None:
+                self.dashboard.set_text("No results returned.")
+                self.status_label.setText("Completed")
+                return
+
+            if getattr(ranked, "empty", False):
+                self.dashboard.set_text("No value bets found.")
+                self.status_label.setText("Completed")
+                return
+
+            self.dashboard.set_text(ranked.to_string(index=False))
+            self.status_label.setText("Completed")
+
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Run Error",
+                str(exc),
             )
-
-            if hasattr(module, "ModelPlugin"):
-                plugins.append(module.ModelPlugin())
-
-        return plugins
+            self.status_label.setText("Error")
 EOF
 
-CREA_FILE engine/prediction_pipeline.py
-from engine.plugin_loader import PluginLoader
-from simulation.monte_carlo import MonteCarloSimulator
-from strategies.edge_detector import EdgeDetector
-from strategies.value_bet_strategy import ValueBetStrategy
+CREA_FILE app/controller.py
+from engine.job_runner import JobRunner
 
 
-class PredictionPipeline:
+class AppController:
 
     def __init__(self):
 
-        self.loader = PluginLoader()
-        self.simulator = MonteCarloSimulator()
-        self.edge_detector = EdgeDetector()
-        self.strategy = ValueBetStrategy()
+        self.runner = JobRunner()
 
-    def run(self, features_df, odds_data):
+    def run_once(self):
 
-        plugins = self.loader.load_plugins()
-
-        predictions = {}
-
-        for _, row in features_df.iterrows():
-
-            match_id = f"{row['home']}_vs_{row['away']}"
-
-            plugin_outputs = []
-
-            for plugin in plugins:
-                plugin_outputs.append(plugin.predict(row))
-
-            if not plugin_outputs:
-                continue
-
-            home_prob = sum(p["home_win"] for p in plugin_outputs) / len(plugin_outputs)
-            draw_prob = sum(p["draw"] for p in plugin_outputs) / len(plugin_outputs)
-            away_prob = sum(p["away_win"] for p in plugin_outputs) / len(plugin_outputs)
-
-            lambda_home = row["home_attack"] * row["away_defense"]
-            lambda_away = row["away_attack"] * row["home_defense"]
-
-            simulation_probs = self.simulator.simulate(
-                lambda_home,
-                lambda_away,
-            )
-
-            predictions[match_id] = {
-                "home_win": (home_prob + simulation_probs["home_win"]) / 2,
-                "draw": (draw_prob + simulation_probs["draw"]) / 2,
-                "away_win": (away_prob + simulation_probs["away_win"]) / 2,
-            }
-
-        value_bets = self.strategy.find_value_bets(
-            predictions,
-            odds_data,
-            self.edge_detector,
-        )
-
-        return value_bets
+        return self.runner.run_cycle()
 EOF
 
-CREA_FILE tests/test_plugin_loader.py
-from engine.plugin_loader import PluginLoader
+CREA_FILE app/main.py
+import sys
+
+from PySide6.QtWidgets import QApplication
+
+from app.controller import AppController
+from ui.main_window import MainWindow
 
 
-def test_plugin_loader_loads_plugins():
+def main():
 
-    loader = PluginLoader()
+    app = QApplication(sys.argv)
 
-    plugins = loader.load_plugins()
+    controller = AppController()
+    window = MainWindow(controller)
+    window.show()
 
-    assert isinstance(plugins, list)
-    assert len(plugins) >= 1
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()
+EOF
+
+CREA_FILE tests/test_ui_imports.py
+import pytest
+
+pytest.importorskip("PySide6")
+
+from app.controller import AppController
+from ui.dashboard_view import DashboardView
+from ui.main_window import MainWindow
+
+
+def test_ui_classes_import():
+
+    assert AppController is not None
+    assert DashboardView is not None
+    assert MainWindow is not None
 EOF
 
 FIX_WHITESPACE

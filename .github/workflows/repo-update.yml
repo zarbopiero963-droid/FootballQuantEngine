@@ -16,7 +16,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+
   update:
+
     runs-on: ubuntu-latest
 
     env:
@@ -27,16 +29,16 @@ jobs:
       # -------------------------
       # CHECKOUT
       # -------------------------
-      - name: Checkout repository with PAT
+
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: false
-          token: ${{ secrets.REPO_PUSH_TOKEN }}
 
       # -------------------------
       # PYTHON
       # -------------------------
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -45,6 +47,7 @@ jobs:
       # -------------------------
       # INSTALL DEPENDENCIES
       # -------------------------
+
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
@@ -52,6 +55,7 @@ jobs:
       # -------------------------
       # SHOW TRIGGER COMMIT
       # -------------------------
+
       - name: Show trigger commit
         run: |
           echo "=============================="
@@ -62,6 +66,7 @@ jobs:
       # -------------------------
       # SHOW DEVOPS COMMANDS
       # -------------------------
+
       - name: Show DevOps instructions
         run: |
           echo "=============================="
@@ -71,39 +76,34 @@ jobs:
           echo "=============================="
 
       # -------------------------
-      # RUN ENGINE
+      # RUN DEVOPS ENGINE
       # -------------------------
+
       - name: Run DevOps Engine
-        id: engine
-        continue-on-error: true
         run: |
           python repo_update_engine.py
 
       # -------------------------
-      # SHOW CHANGED FILES
+      # SHOW FILE CHANGES
       # -------------------------
+
       - name: Show changed files
         run: |
           echo "=============================="
           echo "FILES CHANGED"
           echo "=============================="
           git status
+          echo "------------------------------"
           git diff --stat || true
-
-      # -------------------------
-      # CONFIGURE REMOTE
-      # -------------------------
-      - name: Configure git remote with PAT
-        run: |
-          git remote set-url origin https://x-access-token:${{ secrets.REPO_PUSH_TOKEN }}@github.com/${{ github.repository }}.git
+          echo "=============================="
 
       # -------------------------
       # COMMIT CHANGES
       # -------------------------
+
       - name: Commit changes
         shell: bash
         run: |
-          set -e
 
           git config user.name "repo-bot"
           git config user.email "bot@github.com"
@@ -111,26 +111,13 @@ jobs:
           git add .
 
           if [[ -z "$(git status --porcelain)" ]]; then
-            echo "No changes"
+            echo "No changes to commit"
             exit 0
           fi
 
-          if [[ "${{ steps.engine.outcome }}" == "failure" ]]; then
-            git commit -m "[skip ci] DevOps Engine Rollback"
-          else
-            git commit -m "[skip ci] Automated DevOps Engine Update"
-          fi
+          git commit -m "[skip ci] Automated DevOps Engine Update"
 
-          git fetch origin main
-          git rebase origin/main
-          git push --force-with-lease origin HEAD:main
+          # sincronizza con remoto
+          git pull --rebase origin main
 
-      # -------------------------
-      # FAIL IF ENGINE FAILED
-      # -------------------------
-      - name: Fail job if engine failed
-        if: steps.engine.outcome == 'failure'
-        run: |
-          echo "Engine failed. Rollback committed."
-          exit 1
-
+          git push

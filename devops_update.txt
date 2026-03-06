@@ -1,8 +1,222 @@
-CREA_FILE engine/cli_runner.py
+CREA_CARTELLA ui
+
+APPEND requirements.txt
+PySide6
+EOF
+
+CREA_FILE ui/__init__.py
+# ui package
+EOF
+
+CREA_FILE ui/settings_window.py
+from PySide6.QtWidgets import (
+    QFormLayout,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
+
+from config.settings_manager import Settings, load_settings, save_settings
+
+
+class SettingsWindow(QWidget):
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.setWindowTitle("Settings")
+
+        self.api_football_input = QLineEdit()
+        self.odds_api_input = QLineEdit()
+        self.telegram_token_input = QLineEdit()
+        self.telegram_chat_id_input = QLineEdit()
+
+        self.save_button = QPushButton("Save")
+        self.save_button.clicked.connect(self.save)
+
+        form = QFormLayout()
+        form.addRow("API-Football Key", self.api_football_input)
+        form.addRow("Odds API Key", self.odds_api_input)
+        form.addRow("Telegram Token", self.telegram_token_input)
+        form.addRow("Telegram Chat ID", self.telegram_chat_id_input)
+
+        layout = QVBoxLayout()
+        layout.addLayout(form)
+        layout.addWidget(self.save_button)
+
+        self.setLayout(layout)
+
+        self.load_values()
+
+    def load_values(self):
+
+        settings = load_settings()
+
+        self.api_football_input.setText(settings.api_football_key)
+        self.odds_api_input.setText(settings.odds_api_key)
+        self.telegram_token_input.setText(settings.telegram_token)
+        self.telegram_chat_id_input.setText(settings.telegram_chat_id)
+
+    def save(self):
+
+        settings = Settings()
+        settings.api_football_key = self.api_football_input.text().strip()
+        settings.odds_api_key = self.odds_api_input.text().strip()
+        settings.telegram_token = self.telegram_token_input.text().strip()
+        settings.telegram_chat_id = self.telegram_chat_id_input.text().strip()
+
+        save_settings(settings)
+
+        QMessageBox.information(
+            self,
+            "Settings",
+            "Settings saved successfully.",
+        )
+EOF
+
+CREA_FILE ui/dashboard_view.py
+from PySide6.QtWidgets import QLabel, QTextEdit, QVBoxLayout, QWidget
+
+
+class DashboardView(QWidget):
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.title = QLabel("Football Quant Engine Dashboard")
+        self.output = QTextEdit()
+        self.output.setReadOnly(True)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.title)
+        layout.addWidget(self.output)
+
+        self.setLayout(layout)
+
+    def set_text(self, text):
+
+        self.output.setPlainText(text)
+EOF
+
+CREA_FILE ui/about_dialog.py
+from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+
+
+class AboutDialog(QWidget):
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.setWindowTitle("About")
+
+        label = QLabel(
+            "Football Quant Engine\n"
+            "Quantitative football analysis engine\n"
+            "Poisson + Monte Carlo + Value Betting"
+        )
+
+        layout = QVBoxLayout()
+        layout.addWidget(label)
+
+        self.setLayout(layout)
+EOF
+
+CREA_FILE ui/main_window.py
+from PySide6.QtWidgets import (
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QToolBar,
+)
+
+from ui.about_dialog import AboutDialog
+from ui.dashboard_view import DashboardView
+from ui.settings_window import SettingsWindow
+
+
+class MainWindow(QMainWindow):
+
+    def __init__(self, controller):
+
+        super().__init__()
+
+        self.controller = controller
+
+        self.setWindowTitle("Football Quant Engine")
+        self.resize(1000, 700)
+
+        self.dashboard = DashboardView()
+        self.setCentralWidget(self.dashboard)
+
+        self.status_label = QLabel("Ready")
+        self.statusBar().addPermanentWidget(self.status_label)
+
+        toolbar = QToolBar("Main")
+        self.addToolBar(toolbar)
+
+        self.run_button = QPushButton("Run Cycle")
+        self.run_button.clicked.connect(self.run_cycle)
+        toolbar.addWidget(self.run_button)
+
+        self.settings_button = QPushButton("Settings")
+        self.settings_button.clicked.connect(self.open_settings)
+        toolbar.addWidget(self.settings_button)
+
+        self.about_button = QPushButton("About")
+        self.about_button.clicked.connect(self.open_about)
+        toolbar.addWidget(self.about_button)
+
+        self.settings_window = None
+        self.about_dialog = None
+
+    def open_settings(self):
+
+        self.settings_window = SettingsWindow()
+        self.settings_window.show()
+
+    def open_about(self):
+
+        self.about_dialog = AboutDialog()
+        self.about_dialog.show()
+
+    def run_cycle(self):
+
+        try:
+            ranked = self.controller.run_once()
+
+            if ranked is None:
+                self.dashboard.set_text("No results returned.")
+                self.status_label.setText("Completed")
+                return
+
+            if getattr(ranked, "empty", False):
+                self.dashboard.set_text("No value bets found.")
+                self.status_label.setText("Completed")
+                return
+
+            self.dashboard.set_text(ranked.to_string(index=False))
+            self.status_label.setText("Completed")
+
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Run Error",
+                str(exc),
+            )
+            self.status_label.setText("Error")
+EOF
+
+CREA_FILE app/controller.py
 from engine.job_runner import JobRunner
 
 
-class CliRunner:
+class AppController:
 
     def __init__(self):
 
@@ -13,20 +227,41 @@ class CliRunner:
         return self.runner.run_cycle()
 EOF
 
-CREA_FILE tests/test_cli_runner.py
-from unittest.mock import patch
+CREA_FILE app/main.py
+import sys
 
-from engine.cli_runner import CliRunner
+from PySide6.QtWidgets import QApplication
+
+from app.controller import AppController
+from ui.main_window import MainWindow
 
 
-@patch("engine.cli_runner.JobRunner")
-def test_cli_runner_class_exists(mock_job_runner):
+def main():
 
-    runner = CliRunner()
+    app = QApplication(sys.argv)
 
-    assert isinstance(runner, CliRunner)
-    mock_job_runner.assert_called_once()
+    controller = AppController()
+    window = MainWindow(controller)
+    window.show()
+
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()
+EOF
+
+CREA_FILE tests/test_ui_imports.py
+from app.controller import AppController
+from ui.dashboard_view import DashboardView
+from ui.main_window import MainWindow
+
+
+def test_ui_classes_import():
+
+    assert AppController is not None
+    assert DashboardView is not None
+    assert MainWindow is not None
 EOF
 
 FIX_WHITESPACE
-

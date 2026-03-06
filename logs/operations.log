@@ -218,3 +218,18 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-06_17-04-19.zip
+Backup created backups/backup_2026-03-06_17-04-19.zip
+[CREATE] file analysis/match_ranking.py
+[CREATE] file engine/export_manager.py
+[CREATE] file engine/value_bet_notifier.py
+[CREATE] file engine/match_ranker.py
+[CREATE] file tests/test_match_ranking.py
+[CREATE] file engine/job_runner.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

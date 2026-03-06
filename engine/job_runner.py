@@ -4,12 +4,13 @@ from config.settings_manager import load_settings
 from data.api_football_collector import ApiFootballCollector
 from data.odds_collector import OddsCollector
 from database.db_manager import init_db
-from engine.export_manager import ExportManager
 from engine.fixture_mapper import map_api_football_response_to_fixtures
 from engine.match_ranker import MatchRanker
 from engine.odds_mapper import map_odds_events_to_match_id
+from engine.output_manager import OutputManager
 from engine.prediction_pipeline import PredictionPipeline
 from engine.repository_saver import RepositorySaver
+from engine.training_manager import TrainingManager
 from engine.value_bet_notifier import ValueBetNotifier
 from features.feature_engine import FeatureEngine
 
@@ -22,9 +23,10 @@ class JobRunner:
         self.odds = OddsCollector()
         self.pipeline = PredictionPipeline()
         self.saver = RepositorySaver()
-        self.exporter = ExportManager()
         self.notifier = ValueBetNotifier()
         self.ranker = MatchRanker()
+        self.output_manager = OutputManager()
+        self.training_manager = TrainingManager()
 
         init_db()
 
@@ -61,9 +63,31 @@ class JobRunner:
         value_bets = self.pipeline.run(features_df, odds_data)
 
         self.saver.save_all(fixtures, odds_data, value_bets)
-        self.exporter.export(value_bets)
         self.notifier.notify(value_bets)
 
         ranked = self.ranker.rank(value_bets)
+        self.output_manager.export_value_bets(value_bets)
+
+        if not ranked.empty:
+            self.output_manager.export_dataframe(
+                ranked,
+                "ranked_value_bets",
+            )
+
+        dataset_df = self.training_manager.build_dataset()
+
+        if not dataset_df.empty:
+            self.output_manager.export_dataframe(
+                dataset_df,
+                "training_dataset",
+            )
+
+        backtest_df = self.training_manager.run_backtest()
+
+        if not backtest_df.empty:
+            self.output_manager.export_dataframe(
+                backtest_df,
+                "backtest_results",
+            )
 
         return ranked

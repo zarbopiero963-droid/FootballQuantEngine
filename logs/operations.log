@@ -248,3 +248,18 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-06_17-11-52.zip
+Backup created backups/backup_2026-03-06_17-11-52.zip
+[CREATE] folder outputs
+[CREATE] file engine/training_manager.py
+[CREATE] file engine/output_manager.py
+[CREATE] file engine/job_runner.py
+[CREATE] file tests/test_training_manager.py
+[CREATE] file tests/test_output_manager.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

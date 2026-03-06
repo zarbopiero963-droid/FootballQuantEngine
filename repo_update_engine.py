@@ -11,6 +11,9 @@ LOG_DIR = "logs"
 
 LOG_FILE = os.path.join(LOG_DIR, "operations.log")
 
+AUTO_BACKUP_ALWAYS = True
+KEEP_LAST_BACKUPS = 3
+
 
 # ------------------------
 # UTIL
@@ -40,6 +43,35 @@ def log(msg):
 # ------------------------
 
 
+def list_backups():
+    ensure_dir(BACKUP_DIR)
+
+    files = [
+        os.path.join(BACKUP_DIR, f)
+        for f in os.listdir(BACKUP_DIR)
+        if f.startswith("backup_") and f.endswith(".zip")
+    ]
+
+    files.sort()
+    return files
+
+
+def cleanup_old_backups():
+    backups = list_backups()
+
+    if len(backups) <= KEEP_LAST_BACKUPS:
+        return
+
+    old = backups[:-KEEP_LAST_BACKUPS]
+
+    for f in old:
+        try:
+            os.remove(f)
+            log(f"Deleted old backup {f}")
+        except Exception as e:
+            log(f"Cannot delete {f}: {e}")
+
+
 def backup_repository():
     ensure_dir(BACKUP_DIR)
 
@@ -59,6 +91,8 @@ def backup_repository():
         "venv",
         "env",
         "ENV",
+        ".pytest_cache",
+        ".mypy_cache",
     }
 
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
@@ -76,28 +110,42 @@ def backup_repository():
 
     log(f"Backup created {zip_path}")
 
+    cleanup_old_backups()
 
-def rollback():
-    if not os.path.exists(BACKUP_DIR):
-        log("No backup directory")
-        return
+    return zip_path
 
-    backups = sorted(
-        [f for f in os.listdir(BACKUP_DIR) if f.endswith(".zip")]
-    )
+
+def latest_backup():
+    backups = list_backups()
 
     if not backups:
-        log("No backups found")
-        return
+        return None
 
-    latest = backups[-1]
-    archive = os.path.join(BACKUP_DIR, latest)
+    return backups[-1]
 
-    log(f"Rollback using {archive}")
 
-    shutil.unpack_archive(archive, ".")
+def restore_backup(zip_path):
+    if not zip_path or not os.path.exists(zip_path):
+        log("Backup zip not found")
+        return False
 
-    log("Rollback completed")
+    log(f"RESTORE from {zip_path}")
+
+    with zipfile.ZipFile(zip_path, "r") as z:
+        z.extractall(".")
+
+    log("RESTORE completed")
+    return True
+
+
+def restore_last_backup():
+    z = latest_backup()
+
+    if not z:
+        log("No backup available")
+        return False
+
+    return restore_backup(z)
 
 
 # ------------------------
@@ -106,26 +154,50 @@ def rollback():
 
 
 def create_folder(path):
+    if os.path.exists(path):
+        log(f"[SKIP] folder exists {path}")
+        return
+
     os.makedirs(path, exist_ok=True)
-    log(f"Folder created {path}")
+    log(f"[CREATE] folder {path}")
 
 
 def create_file(path, content):
     ensure_dir(os.path.dirname(path))
 
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            existing = f.read()
+
+        if existing == content:
+            log(f"[SKIP] file identical {path}")
+            return
+
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
 
-    log(f"File created {path}")
+    log(f"[CREATE] file {path}")
 
 
 def append_file(path, content):
     ensure_dir(os.path.dirname(path))
 
-    with open(path, "a", encoding="utf-8") as f:
-        f.write("\n" + content)
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            existing = f.read()
 
-    log(f"Append {path}")
+        normalized = content.strip()
+
+        if normalized and normalized in existing:
+            log(f"[SKIP] content already present in {path}")
+            return
+
+    with open(path, "a", encoding="utf-8") as f:
+        if content and not content.startswith("\n"):
+            f.write("\n")
+        f.write(content)
+
+    log(f"[MODIFY] append {path}")
 
 
 # ------------------------
@@ -145,7 +217,7 @@ def fix_whitespace():
             continue
 
         for file in files:
-            if not file.endswith((".py", ".txt", ".md", ".yml", ".yaml", ".json")):
+            if not file.endswith((".py", ".txt", ".md", ".yml", ".yaml", ".json", ".ini")):
                 continue
 
             path = os.path.join(root, file)
@@ -194,94 +266,32 @@ def run_ruff():
 def run_pytest():
     log("Running pytest")
 
-    result = subprocess.run(["pytest", "-v"], capture_output=True, text=True)
+    result = subprocess.run(
+        ["pytest", "-v"],
+        capture_output=True,
+        text=True
+    )
 
     print(result.stdout, flush=True)
     print(result.stderr, flush=True)
 
     if result.returncode != 0:
         log("Tests FAILED")
-        rollback()
-        raise Exception("Tests failed")
+        return False
 
     log("Tests PASSED")
+    return True
 
 
 # ------------------------
-# PROCESS
+# PARSER HELPERS
 # ------------------------
 
 
-def process():
-    if not os.path.exists(INSTRUCTIONS_FILE):
-        log("No instruction file")
-        return
+def read_block(lines, start_index):
+    content = []
+    i = start_index
 
-    with open(INSTRUCTIONS_FILE, encoding="utf-8") as f:
-        lines = f.readlines()
-
-    i = 0
-
-    while i < len(lines):
-        line = lines[i].strip()
-
-        if not line:
-            i += 1
-            continue
-
-        parts = line.split()
-        cmd = parts[0]
-
-        # AUTO BACKUP
-        if cmd == "AUTO_BACKUP_BEFORE_RUN":
-            backup_repository()
-
-        # CREATE FOLDER
-        elif cmd in ["CREA_CARTELLA", "CREATE_FOLDER"]:
-            create_folder(parts[1])
-
-        # CREATE FILE MULTILINE
-        elif cmd in ["CREA_FILE", "CREATE_FILE"]:
-            path = parts[1]
-
-            i += 1
-            content = []
-
-            while i < len(lines) and lines[i].strip() != "EOF":
-                content.append(lines[i])
-                i += 1
-
-            create_file(path, "".join(content))
-
-        # APPEND
-        elif cmd == "APPEND":
-            path = parts[1]
-
-            i += 1
-            content = []
-
-            while i < len(lines) and lines[i].strip() != "EOF":
-                content.append(lines[i])
-                i += 1
-
-            append_file(path, "".join(content))
-
-        # FIX WHITESPACE
-        elif cmd == "FIX_WHITESPACE":
-            fix_whitespace()
-
-        i += 1
-
-    # ------------------------
-    # CI PIPELINE
-    # ------------------------
-
-    fix_whitespace()
-    run_black()
-    run_isort()
-    run_ruff()
-    run_pytest()
-
-
-if __name__ == "__main__":
-    process()
+    while i < len(lines) and lines[i].strip() != "EOF":
+        content.append(lines[i])
+        i

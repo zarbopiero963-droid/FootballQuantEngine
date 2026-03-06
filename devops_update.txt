@@ -1,212 +1,202 @@
-CREA_CARTELLA analysis
-CREA_CARTELLA training
-
-CREA_FILE analysis/__init__.py
-# analysis package
-EOF
-
-CREA_FILE analysis/betfair_leagues.py
-BETFAIR_EXCHANGE_ITALIA_LEAGUES = {
-    "Serie A",
-    "Serie B",
-    "Premier League",
-    "Championship",
-    "League One",
-    "League Two",
-    "La Liga",
-    "Segunda Division",
-    "Bundesliga",
-    "2. Bundesliga",
-    "Ligue 1",
-    "Ligue 2",
-    "Eredivisie",
-    "Primeira Liga",
-    "Super Lig",
-    "Belgian Pro League",
-    "Serie A Brazil",
-    "Primera Division",
-}
-
-
-def is_betfair_league(league_name):
-
-    if not league_name:
-        return False
-
-    return league_name in BETFAIR_EXCHANGE_ITALIA_LEAGUES
-EOF
-
-CREA_FILE analysis/league_predictability.py
+CREA_FILE analysis/match_ranking.py
 import pandas as pd
 
 
-class LeaguePredictability:
+class MatchRanking:
 
-    def score(self, fixtures_df):
+    def rank(self, value_bets):
 
-        if fixtures_df.empty:
-            return pd.DataFrame(
-                columns=["league", "predictability_score"]
+        if not value_bets:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(value_bets)
+
+        if "probability" not in df.columns or "odds" not in df.columns:
+            return df
+
+        df["edge"] = df["probability"] - (1 / df["odds"])
+
+        return df.sort_values(by="edge", ascending=False)
+EOF
+
+CREA_FILE engine/export_manager.py
+from export.csv_exporter import CsvExporter
+from export.excel_exporter import ExcelExporter
+
+
+class ExportManager:
+
+    def __init__(self):
+
+        self.csv_exporter = CsvExporter()
+        self.excel_exporter = ExcelExporter()
+
+    def export(self, value_bets):
+
+        if not value_bets:
+            return
+
+        self.csv_exporter.export_value_bets(
+            "value_bets.csv",
+            value_bets,
+        )
+
+        self.excel_exporter.export_value_bets(
+            "value_bets.xlsx",
+            value_bets,
+        )
+EOF
+
+CREA_FILE engine/value_bet_notifier.py
+from config.settings_manager import load_settings
+from notifications.telegram_notifier import TelegramNotifier
+
+
+class ValueBetNotifier:
+
+    def __init__(self):
+
+        settings = load_settings()
+
+        self.notifier = TelegramNotifier(
+            settings.telegram_token,
+            settings.telegram_chat_id,
+        )
+
+    def notify(self, value_bets):
+
+        if not value_bets:
+            return False
+
+        lines = []
+
+        for vb in value_bets[:10]:
+            lines.append(
+                f"{vb.get('match_id')} | "
+                f"{vb.get('market')} | "
+                f"prob={vb.get('probability'):.3f} | "
+                f"odds={vb.get('odds')}"
             )
+
+        message = "Value Bets Found:\n" + "\n".join(lines)
+
+        return self.notifier.send_message(message)
+EOF
+
+CREA_FILE engine/match_ranker.py
+from analysis.match_ranking import MatchRanking
+
+
+class MatchRanker:
+
+    def __init__(self):
+
+        self.ranking = MatchRanking()
+
+    def rank(self, value_bets):
+
+        return self.ranking.rank(value_bets)
+EOF
+
+CREA_FILE tests/test_match_ranking.py
+import pandas as pd
+
+from analysis.match_ranking import MatchRanking
+
+
+def test_match_ranking_runs():
+
+    value_bets = [
+        {
+            "match_id": "A_vs_B",
+            "market": "home",
+            "probability": 0.60,
+            "odds": 2.0,
+        },
+        {
+            "match_id": "C_vs_D",
+            "market": "away",
+            "probability": 0.55,
+            "odds": 2.5,
+        },
+    ]
+
+    ranking = MatchRanking().rank(value_bets)
+
+    assert isinstance(ranking, pd.DataFrame)
+    assert "edge" in ranking.columns
+EOF
+
+CREA_FILE engine/job_runner.py
+import pandas as pd
+
+from config.settings_manager import load_settings
+from database.db_manager import init_db
+from data.api_football_collector import ApiFootballCollector
+from data.odds_collector import OddsCollector
+from engine.export_manager import ExportManager
+from engine.fixture_mapper import map_api_football_response_to_fixtures
+from engine.match_ranker import MatchRanker
+from engine.odds_mapper import map_odds_events_to_match_id
+from engine.prediction_pipeline import PredictionPipeline
+from engine.repository_saver import RepositorySaver
+from engine.value_bet_notifier import ValueBetNotifier
+from features.feature_engine import FeatureEngine
+
+
+class JobRunner:
+
+    def __init__(self):
+
+        self.api = ApiFootballCollector()
+        self.odds = OddsCollector()
+        self.pipeline = PredictionPipeline()
+        self.saver = RepositorySaver()
+        self.exporter = ExportManager()
+        self.notifier = ValueBetNotifier()
+        self.ranker = MatchRanker()
+
+        init_db()
+
+    def run_cycle(self):
+
+        settings = load_settings()
+
+        if not settings.api_football_key or not settings.odds_api_key:
+            raise Exception("Missing API keys in settings.json")
+
+        fixtures_response = self.api.get_next_matches()
+        fixtures = map_api_football_response_to_fixtures(fixtures_response)
 
         rows = []
 
-        for league in fixtures_df["league"].dropna().unique():
-
-            league_df = fixtures_df[
-                fixtures_df["league"] == league
-            ].copy()
-
-            if league_df.empty:
-                continue
-
-            home_wins = (
-                league_df["home_goals"] > league_df["away_goals"]
-            ).mean()
-
-            draws = (
-                league_df["home_goals"] == league_df["away_goals"]
-            ).mean()
-
-            away_wins = (
-                league_df["home_goals"] < league_df["away_goals"]
-            ).mean()
-
-            score = max(home_wins, draws, away_wins)
-
+        for fixture in fixtures:
             rows.append(
                 {
-                    "league": league,
-                    "predictability_score": score,
+                    "home": fixture["home"],
+                    "away": fixture["away"],
+                    "home_goals": fixture.get("home_goals") or 0,
+                    "away_goals": fixture.get("away_goals") or 0,
                 }
             )
 
-        result = pd.DataFrame(rows)
+        fixtures_df = pd.DataFrame(rows)
 
-        if result.empty:
-            return result
+        feature_engine = FeatureEngine()
+        features_df = feature_engine.build_features(fixtures_df)
 
-        return result.sort_values(
-            by="predictability_score",
-            ascending=False,
-        )
-EOF
+        odds_events = self.odds.get_odds()
+        odds_data = map_odds_events_to_match_id(odds_events)
 
-CREA_FILE training/__init__.py
-# training package
-EOF
+        value_bets = self.pipeline.run(features_df, odds_data)
 
-CREA_FILE training/dataset_builder.py
-import pandas as pd
+        self.saver.save_all(fixtures, odds_data, value_bets)
+        self.exporter.export(value_bets)
+        self.notifier.notify(value_bets)
 
-from analysis.betfair_leagues import is_betfair_league
-from database.db_manager import connect
+        ranked = self.ranker.rank(value_bets)
 
-
-class DatasetBuilder:
-
-    def load_fixtures(self):
-
-        conn = connect()
-
-        fixtures_df = pd.read_sql_query(
-            """
-            SELECT
-                fixture_id,
-                league,
-                season,
-                home,
-                away,
-                match_date,
-                home_goals,
-                away_goals,
-                status
-            FROM fixtures
-            WHERE status = 'FT'
-            """,
-            conn,
-        )
-
-        conn.close()
-
-        return fixtures_df
-
-    def build_training_dataset(self):
-
-        fixtures_df = self.load_fixtures()
-
-        if fixtures_df.empty:
-            return pd.DataFrame()
-
-        fixtures_df = fixtures_df[
-            fixtures_df["league"].apply(is_betfair_league)
-        ].copy()
-
-        if fixtures_df.empty:
-            return pd.DataFrame()
-
-        fixtures_df["target_home_win"] = (
-            fixtures_df["home_goals"] > fixtures_df["away_goals"]
-        ).astype(int)
-
-        fixtures_df["target_draw"] = (
-            fixtures_df["home_goals"] == fixtures_df["away_goals"]
-        ).astype(int)
-
-        fixtures_df["target_away_win"] = (
-            fixtures_df["home_goals"] < fixtures_df["away_goals"]
-        ).astype(int)
-
-        return fixtures_df
-EOF
-
-CREA_FILE tests/test_league_predictability.py
-import pandas as pd
-
-from analysis.league_predictability import LeaguePredictability
-
-
-def test_league_predictability_runs():
-
-    df = pd.DataFrame(
-        [
-            {
-                "league": "Serie A",
-                "home_goals": 2,
-                "away_goals": 1,
-            },
-            {
-                "league": "Serie A",
-                "home_goals": 1,
-                "away_goals": 1,
-            },
-            {
-                "league": "Premier League",
-                "home_goals": 0,
-                "away_goals": 2,
-            },
-        ]
-    )
-
-    analyzer = LeaguePredictability()
-
-    result = analyzer.score(df)
-
-    assert isinstance(result, pd.DataFrame)
-    assert "league" in result.columns
-    assert "predictability_score" in result.columns
-EOF
-
-CREA_FILE tests/test_dataset_builder.py
-from training.dataset_builder import DatasetBuilder
-
-
-def test_dataset_builder_class_exists():
-
-    builder = DatasetBuilder()
-
-    assert isinstance(builder, DatasetBuilder)
+        return ranked
 EOF
 
 FIX_WHITESPACE
-

@@ -1,29 +1,16 @@
-CREA_FILE database/db_manager.py
-from pathlib import Path
-import sqlite3
+CREA_FILE tests/test_cli_runner.py
+from unittest.mock import patch
 
-from config.constants import DATABASE_NAME
-
-
-BASE_DIR = Path(__file__).resolve().parent
-SCHEMA_PATH = BASE_DIR / "schema.sql"
+from engine.cli_runner import CliRunner
 
 
-def connect():
+@patch("engine.cli_runner.JobRunner")
+def test_cli_runner_class_exists(mock_job_runner):
 
-    return sqlite3.connect(DATABASE_NAME)
+    runner = CliRunner()
 
-
-def init_db():
-
-    conn = connect()
-
-    with open(SCHEMA_PATH, encoding="utf-8") as f:
-        conn.executescript(f.read())
-
-    conn.commit()
-    conn.close()
+    assert isinstance(runner, CliRunner)
+    mock_job_runner.assert_called_once()
 EOF
 
 FIX_WHITESPACE
-

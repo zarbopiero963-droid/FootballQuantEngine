@@ -1,240 +1,198 @@
-CREA_FILE analysis/market_pressure.py
-import pandas as pd
+CREA_CARTELLA outputs
 
-
-class MarketPressureAnalyzer:
-
-    def calculate(self, odds_history_df):
-
-        if odds_history_df.empty:
-            return pd.DataFrame()
-
-        grouped = (
-            odds_history_df.sort_values("timestamp")
-            .groupby("fixture_id")
-            .agg(
-                opening_home_odds=("home_odds", "first"),
-                closing_home_odds=("home_odds", "last"),
-                opening_draw_odds=("draw_odds", "first"),
-                closing_draw_odds=("draw_odds", "last"),
-                opening_away_odds=("away_odds", "first"),
-                closing_away_odds=("away_odds", "last"),
-            )
-            .reset_index()
-        )
-
-        grouped["home_pressure"] = (
-            grouped["opening_home_odds"] - grouped["closing_home_odds"]
-        )
-
-        grouped["draw_pressure"] = (
-            grouped["opening_draw_odds"] - grouped["closing_draw_odds"]
-        )
-
-        grouped["away_pressure"] = (
-            grouped["opening_away_odds"] - grouped["closing_away_odds"]
-        )
-
-        return grouped
-EOF
-
-CREA_FILE training/odds_history_builder.py
-import pandas as pd
-
-from database.db_manager import connect
-
-
-class OddsHistoryBuilder:
-
-    def load_odds_history(self):
-
-        conn = connect()
-
-        df = pd.read_sql_query(
-            """
-            SELECT
-                fixture_id,
-                timestamp,
-                home_odds,
-                draw_odds,
-                away_odds
-            FROM odds_history
-            ORDER BY timestamp ASC
-            """,
-            conn,
-        )
-
-        conn.close()
-
-        return df
-EOF
-
-CREA_FILE training/closing_line_builder.py
-import pandas as pd
-
-from database.db_manager import connect
-
-
-class ClosingLineBuilder:
-
-    def load_closing_lines(self):
-
-        conn = connect()
-
-        df = pd.read_sql_query(
-            """
-            SELECT
-                fixture_id,
-                home_odds,
-                draw_odds,
-                away_odds,
-                timestamp
-            FROM odds_history
-            ORDER BY timestamp ASC
-            """,
-            conn,
-        )
-
-        conn.close()
-
-        if df.empty:
-            return pd.DataFrame()
-
-        closing = (
-            df.sort_values("timestamp")
-            .groupby("fixture_id")
-            .agg(
-                closing_home_odds=("home_odds", "last"),
-                closing_draw_odds=("draw_odds", "last"),
-                closing_away_odds=("away_odds", "last"),
-            )
-            .reset_index()
-        )
-
-        return closing
-EOF
-
-CREA_FILE training/backtest_engine.py
-import pandas as pd
-
-from database.db_manager import connect
-
-
-class BacktestEngine:
-
-    def load_predictions(self):
-
-        conn = connect()
-
-        df = pd.read_sql_query(
-            """
-            SELECT
-                fixture_id,
-                model,
-                home_prob,
-                draw_prob,
-                away_prob,
-                edge,
-                created_at
-            FROM predictions
-            """,
-            conn,
-        )
-
-        conn.close()
-
-        return df
-
-    def load_results(self):
-
-        conn = connect()
-
-        df = pd.read_sql_query(
-            """
-            SELECT
-                fixture_id,
-                home_goals,
-                away_goals
-            FROM fixtures
-            WHERE status = 'FT'
-            """,
-            conn,
-        )
-
-        conn.close()
-
-        return df
-
-    def run(self):
-
-        predictions = self.load_predictions()
-        results = self.load_results()
-
-        if predictions.empty or results.empty:
-            return pd.DataFrame()
-
-        merged = predictions.merge(results, on="fixture_id", how="inner")
-
-        merged["actual_home_win"] = (
-            merged["home_goals"] > merged["away_goals"]
-        ).astype(int)
-
-        merged["actual_draw"] = (
-            merged["home_goals"] == merged["away_goals"]
-        ).astype(int)
-
-        merged["actual_away_win"] = (
-            merged["home_goals"] < merged["away_goals"]
-        ).astype(int)
-
-        return merged
-EOF
-
-CREA_FILE tests/test_market_pressure.py
-import pandas as pd
-
-from analysis.market_pressure import MarketPressureAnalyzer
-
-
-def test_market_pressure_runs():
-
-    df = pd.DataFrame(
-        [
-            {
-                "fixture_id": 1,
-                "timestamp": "2026-03-06T10:00:00",
-                "home_odds": 2.1,
-                "draw_odds": 3.2,
-                "away_odds": 3.5,
-            },
-            {
-                "fixture_id": 1,
-                "timestamp": "2026-03-06T12:00:00",
-                "home_odds": 2.0,
-                "draw_odds": 3.3,
-                "away_odds": 3.6,
-            },
-        ]
-    )
-
-    analyzer = MarketPressureAnalyzer()
-
-    result = analyzer.calculate(df)
-
-    assert isinstance(result, pd.DataFrame)
-    assert "home_pressure" in result.columns
-EOF
-
-CREA_FILE tests/test_backtest_engine.py
+CREA_FILE engine/training_manager.py
+from training.dataset_builder import DatasetBuilder
 from training.backtest_engine import BacktestEngine
 
 
-def test_backtest_engine_class_exists():
+class TrainingManager:
 
-    engine = BacktestEngine()
+    def __init__(self):
 
-    assert isinstance(engine, BacktestEngine)
+        self.dataset_builder = DatasetBuilder()
+        self.backtest_engine = BacktestEngine()
+
+    def build_dataset(self):
+
+        return self.dataset_builder.build_training_dataset()
+
+    def run_backtest(self):
+
+        return self.backtest_engine.run()
+EOF
+
+CREA_FILE engine/output_manager.py
+import os
+
+from export.csv_exporter import CsvExporter
+from export.excel_exporter import ExcelExporter
+
+
+class OutputManager:
+
+    def __init__(self):
+
+        self.csv_exporter = CsvExporter()
+        self.excel_exporter = ExcelExporter()
+
+        os.makedirs("outputs", exist_ok=True)
+
+    def export_value_bets(self, value_bets):
+
+        if not value_bets:
+            return
+
+        self.csv_exporter.export_value_bets(
+            "outputs/value_bets.csv",
+            value_bets,
+        )
+
+        self.excel_exporter.export_value_bets(
+            "outputs/value_bets.xlsx",
+            value_bets,
+        )
+
+    def export_dataframe(self, dataframe, name):
+
+        if dataframe.empty:
+            return
+
+        csv_path = f"outputs/{name}.csv"
+        xlsx_path = f"outputs/{name}.xlsx"
+
+        dataframe.to_csv(csv_path, index=False)
+        dataframe.to_excel(xlsx_path, index=False)
+EOF
+
+CREA_FILE engine/job_runner.py
+import pandas as pd
+
+from config.settings_manager import load_settings
+from database.db_manager import init_db
+from data.api_football_collector import ApiFootballCollector
+from data.odds_collector import OddsCollector
+from engine.fixture_mapper import map_api_football_response_to_fixtures
+from engine.match_ranker import MatchRanker
+from engine.odds_mapper import map_odds_events_to_match_id
+from engine.output_manager import OutputManager
+from engine.prediction_pipeline import PredictionPipeline
+from engine.repository_saver import RepositorySaver
+from engine.training_manager import TrainingManager
+from engine.value_bet_notifier import ValueBetNotifier
+from features.feature_engine import FeatureEngine
+
+
+class JobRunner:
+
+    def __init__(self):
+
+        self.api = ApiFootballCollector()
+        self.odds = OddsCollector()
+        self.pipeline = PredictionPipeline()
+        self.saver = RepositorySaver()
+        self.notifier = ValueBetNotifier()
+        self.ranker = MatchRanker()
+        self.output_manager = OutputManager()
+        self.training_manager = TrainingManager()
+
+        init_db()
+
+    def run_cycle(self):
+
+        settings = load_settings()
+
+        if not settings.api_football_key or not settings.odds_api_key:
+            raise Exception("Missing API keys in settings.json")
+
+        fixtures_response = self.api.get_next_matches()
+        fixtures = map_api_football_response_to_fixtures(fixtures_response)
+
+        rows = []
+
+        for fixture in fixtures:
+            rows.append(
+                {
+                    "home": fixture["home"],
+                    "away": fixture["away"],
+                    "home_goals": fixture.get("home_goals") or 0,
+                    "away_goals": fixture.get("away_goals") or 0,
+                }
+            )
+
+        fixtures_df = pd.DataFrame(rows)
+
+        feature_engine = FeatureEngine()
+        features_df = feature_engine.build_features(fixtures_df)
+
+        odds_events = self.odds.get_odds()
+        odds_data = map_odds_events_to_match_id(odds_events)
+
+        value_bets = self.pipeline.run(features_df, odds_data)
+
+        self.saver.save_all(fixtures, odds_data, value_bets)
+        self.notifier.notify(value_bets)
+
+        ranked = self.ranker.rank(value_bets)
+        self.output_manager.export_value_bets(value_bets)
+
+        if not ranked.empty:
+            self.output_manager.export_dataframe(
+                ranked,
+                "ranked_value_bets",
+            )
+
+        dataset_df = self.training_manager.build_dataset()
+
+        if not dataset_df.empty:
+            self.output_manager.export_dataframe(
+                dataset_df,
+                "training_dataset",
+            )
+
+        backtest_df = self.training_manager.run_backtest()
+
+        if not backtest_df.empty:
+            self.output_manager.export_dataframe(
+                backtest_df,
+                "backtest_results",
+            )
+
+        return ranked
+EOF
+
+CREA_FILE tests/test_training_manager.py
+from engine.training_manager import TrainingManager
+
+
+def test_training_manager_class_exists():
+
+    manager = TrainingManager()
+
+    assert isinstance(manager, TrainingManager)
+EOF
+
+CREA_FILE tests/test_output_manager.py
+import pandas as pd
+
+from engine.output_manager import OutputManager
+
+
+def test_output_manager_class_exists():
+
+    manager = OutputManager()
+
+    assert isinstance(manager, OutputManager)
+
+
+def test_output_manager_export_dataframe_empty():
+
+    manager = OutputManager()
+
+    df = pd.DataFrame()
+
+    manager.export_dataframe(df, "empty_test")
+
+    assert isinstance(df, pd.DataFrame)
 EOF
 
 FIX_WHITESPACE
-

@@ -263,3 +263,13 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-06_17-56-00.zip
+Backup created backups/backup_2026-03-06_17-56-00.zip
+[CREATE] file database/db_manager.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

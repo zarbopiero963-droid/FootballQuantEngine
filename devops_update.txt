@@ -1,20 +1,208 @@
-CREA_FILE tests/test_ui_imports.py
-import pytest
+CREA_CARTELLA plugins
+CREA_CARTELLA plugins/models
+
+CREA_FILE plugins/__init__.py
+# plugins package
+EOF
+
+CREA_FILE plugins/models/__init__.py
+# plugins.models package
+EOF
+
+CREA_FILE plugins/models/poisson_plugin.py
+from models.poisson_model import PoissonModel
 
 
-def test_ui_classes_import():
+class ModelPlugin:
 
-    try:
-        from app.controller import AppController
-        from ui.dashboard_view import DashboardView
-        from ui.main_window import MainWindow
-    except (ModuleNotFoundError, ImportError) as exc:
-        pytest.skip(f"UI dependencies not available in CI: {exc}")
+    name = "poisson"
 
-    assert AppController is not None
-    assert DashboardView is not None
-    assert MainWindow is not None
+    def __init__(self):
+
+        self.model = PoissonModel()
+
+    def predict(self, row):
+
+        return self.model.predict(
+            home_attack=row["home_attack"],
+            home_defense=row["home_defense"],
+            away_attack=row["away_attack"],
+            away_defense=row["away_defense"],
+        )
+EOF
+
+CREA_FILE plugins/models/elo_plugin.py
+from models.elo_model import EloModel
+
+
+class ModelPlugin:
+
+    name = "elo"
+
+    def __init__(self):
+
+        self.model = EloModel()
+
+    def predict(self, row):
+
+        probability = self.model.probability(row["elo_diff"])
+
+        draw_probability = 0.20
+        away_probability = 1 - probability - draw_probability
+
+        if away_probability < 0:
+            away_probability = 0.0
+
+        total = probability + draw_probability + away_probability
+
+        if total <= 0:
+            return {
+                "home_win": 0.0,
+                "draw": 0.0,
+                "away_win": 0.0,
+            }
+
+        return {
+            "home_win": probability / total,
+            "draw": draw_probability / total,
+            "away_win": away_probability / total,
+        }
+EOF
+
+CREA_FILE plugins/models/bivariate_plugin.py
+from models.bivariate_poisson import BivariatePoisson
+
+
+class ModelPlugin:
+
+    name = "bivariate_poisson"
+
+    def __init__(self):
+
+        self.model = BivariatePoisson()
+
+    def predict(self, row):
+
+        lambda_home = row["home_attack"] * row["away_defense"]
+        lambda_away = row["away_attack"] * row["home_defense"]
+
+        return self.model.predict(
+            lambda_home=lambda_home,
+            lambda_away=lambda_away,
+            rho=0.05,
+        )
+EOF
+
+CREA_FILE engine/plugin_loader.py
+import importlib
+import pkgutil
+
+
+class PluginLoader:
+
+    def __init__(self, package_name="plugins.models"):
+
+        self.package_name = package_name
+
+    def load_plugins(self):
+
+        package = importlib.import_module(self.package_name)
+
+        plugins = []
+
+        for _, module_name, _ in pkgutil.iter_modules(package.__path__):
+
+            module = importlib.import_module(
+                f"{self.package_name}.{module_name}"
+            )
+
+            if hasattr(module, "ModelPlugin"):
+                plugins.append(module.ModelPlugin())
+
+        return plugins
+EOF
+
+CREA_FILE engine/prediction_pipeline.py
+from engine.plugin_loader import PluginLoader
+from simulation.monte_carlo import MonteCarloSimulator
+from strategies.edge_detector import EdgeDetector
+from strategies.value_bet_strategy import ValueBetStrategy
+
+
+class PredictionPipeline:
+
+    def __init__(self):
+
+        self.loader = PluginLoader()
+        self.simulator = MonteCarloSimulator()
+        self.edge_detector = EdgeDetector()
+        self.strategy = ValueBetStrategy()
+
+    def run(self, features_df, odds_data):
+
+        plugins = self.loader.load_plugins()
+
+        predictions = {}
+
+        for _, row in features_df.iterrows():
+
+            match_id = f"{row['home']}_vs_{row['away']}"
+
+            plugin_outputs = []
+
+            for plugin in plugins:
+                plugin_outputs.append(plugin.predict(row))
+
+            if not plugin_outputs:
+                continue
+
+            home_prob = sum(
+                output["home_win"] for output in plugin_outputs
+            ) / len(plugin_outputs)
+
+            draw_prob = sum(
+                output["draw"] for output in plugin_outputs
+            ) / len(plugin_outputs)
+
+            away_prob = sum(
+                output["away_win"] for output in plugin_outputs
+            ) / len(plugin_outputs)
+
+            lambda_home = row["home_attack"] * row["away_defense"]
+            lambda_away = row["away_attack"] * row["home_defense"]
+
+            simulation_probs = self.simulator.simulate(
+                lambda_home,
+                lambda_away,
+            )
+
+            predictions[match_id] = {
+                "home_win": (home_prob + simulation_probs["home_win"]) / 2,
+                "draw": (draw_prob + simulation_probs["draw"]) / 2,
+                "away_win": (away_prob + simulation_probs["away_win"]) / 2,
+            }
+
+        value_bets = self.strategy.find_value_bets(
+            predictions,
+            odds_data,
+            self.edge_detector,
+        )
+
+        return value_bets
+EOF
+
+CREA_FILE tests/test_plugin_loader.py
+from engine.plugin_loader import PluginLoader
+
+
+def test_plugin_loader_loads_plugins():
+
+    loader = PluginLoader()
+
+    plugins = loader.load_plugins()
+
+    assert isinstance(plugins, list)
+    assert len(plugins) >= 1
 EOF
 
 FIX_WHITESPACE
-

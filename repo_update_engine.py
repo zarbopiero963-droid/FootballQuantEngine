@@ -294,4 +294,99 @@ def read_block(lines, start_index):
 
     while i < len(lines) and lines[i].strip() != "EOF":
         content.append(lines[i])
-        i
+        i += 1
+
+    return "".join(content), i
+
+
+# ------------------------
+# PROCESS
+# ------------------------
+
+
+def process():
+    if not os.path.exists(INSTRUCTIONS_FILE):
+        log("No instruction file")
+        return
+
+    # backup automatico sempre ON
+    if AUTO_BACKUP_ALWAYS:
+        backup_repository()
+
+    with open(INSTRUCTIONS_FILE, "r", encoding="utf-8", errors="ignore") as f:
+        lines = f.readlines()
+
+    i = 0
+
+    while i < len(lines):
+        line = lines[i].strip()
+
+        if not line or line.startswith("#"):
+            i += 1
+            continue
+
+        parts = line.split()
+        cmd = parts[0]
+
+        if cmd == "AUTO_BACKUP_BEFORE_RUN":
+            backup_repository()
+            i += 1
+            continue
+
+        if cmd in ["CREA_CARTELLA", "CREATE_FOLDER"]:
+            create_folder(parts[1])
+            i += 1
+            continue
+
+        if cmd in ["CREA_FILE", "CREATE_FILE"]:
+            path = parts[1]
+
+            i += 1
+            content, i = read_block(lines, i)
+
+            create_file(path, content)
+
+            if i < len(lines) and lines[i].strip() == "EOF":
+                i += 1
+
+            continue
+
+        if cmd in ["APPEND", "AGGIUNGI"]:
+            path = parts[1]
+
+            i += 1
+            content, i = read_block(lines, i)
+
+            append_file(path, content)
+
+            if i < len(lines) and lines[i].strip() == "EOF":
+                i += 1
+
+            continue
+
+        if cmd == "FIX_WHITESPACE":
+            fix_whitespace()
+            i += 1
+            continue
+
+        log(f"[WARN] Unknown command: {line}")
+        i += 1
+
+    try:
+        fix_whitespace()
+        run_black()
+        run_isort()
+        run_ruff()
+
+        ok = run_pytest()
+        if not ok:
+            raise RuntimeError("Tests failed")
+
+    except Exception as e:
+        log(f"CI FAILED: {e}")
+        restore_last_backup()
+        raise
+
+
+if __name__ == "__main__":
+    process()

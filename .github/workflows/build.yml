@@ -29,9 +29,13 @@ jobs:
           pip install -r requirements.txt
           python -m pip install pyinstaller
 
-      - name: Verify PySide6
+      - name: Verify libraries
         run: |
-          python -c "import PySide6; print('PySide6 OK')"
+          python -c "import PySide6"
+          python -c "import numpy"
+          python -c "import pandas"
+          python -c "import sklearn"
+          python -c "import matplotlib"
 
       - name: Lint
         run: |

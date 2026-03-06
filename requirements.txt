@@ -1,18 +1,15 @@
-pytest
-black
-isort
-ruff
 requests
 pandas
 numpy
 scipy
-sqlalchemy
-openpyxl
-pyinstaller
-PySide6
-matplotlib
 scikit-learn
-
-
-Pillow
+matplotlib
+PySide6
+openpyxl
+sqlalchemy
+pytest
+black
+isort
+ruff
+pyinstaller
 

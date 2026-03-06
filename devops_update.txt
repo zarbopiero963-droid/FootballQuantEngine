@@ -16,3 +16,4 @@ pyinstaller
 EOF
 
 FIX_WHITESPACE
+

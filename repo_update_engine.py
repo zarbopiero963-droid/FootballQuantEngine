@@ -2,6 +2,7 @@ import datetime
 import os
 import shutil
 import subprocess
+import zipfile
 
 INSTRUCTIONS_FILE = "devops_update.txt"
 
@@ -31,7 +32,7 @@ def log(msg):
     with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(msg + "\n")
 
-    print(msg)
+    print(msg, flush=True)
 
 
 # ------------------------
@@ -43,12 +44,37 @@ def backup_repository():
     ensure_dir(BACKUP_DIR)
 
     ts = timestamp()
+    zip_path = os.path.join(BACKUP_DIR, f"backup_{ts}.zip")
 
-    dst = os.path.join(BACKUP_DIR, f"backup_{ts}")
+    log(f"Starting backup {zip_path}")
 
-    shutil.make_archive(dst, "zip", ".")
+    excluded_dirs = {
+        ".git",
+        BACKUP_DIR,
+        LOG_DIR,
+        "__pycache__",
+        "build",
+        "dist",
+        ".venv",
+        "venv",
+        "env",
+        "ENV",
+    }
 
-    log(f"Backup created {dst}.zip")
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+        for root, dirs, files in os.walk("."):
+            dirs[:] = [d for d in dirs if d not in excluded_dirs]
+
+            for file in files:
+                if file.endswith((".pyc", ".pyo", ".pyd")):
+                    continue
+
+                src = os.path.join(root, file)
+                rel = os.path.relpath(src, ".")
+
+                z.write(src, rel)
+
+    log(f"Backup created {zip_path}")
 
 
 def rollback():
@@ -56,14 +82,15 @@ def rollback():
         log("No backup directory")
         return
 
-    backups = sorted(os.listdir(BACKUP_DIR))
+    backups = sorted(
+        [f for f in os.listdir(BACKUP_DIR) if f.endswith(".zip")]
+    )
 
     if not backups:
         log("No backups found")
         return
 
     latest = backups[-1]
-
     archive = os.path.join(BACKUP_DIR, latest)
 
     log(f"Rollback using {archive}")
@@ -80,7 +107,6 @@ def rollback():
 
 def create_folder(path):
     os.makedirs(path, exist_ok=True)
-
     log(f"Folder created {path}")
 
 
@@ -94,6 +120,8 @@ def create_file(path, content):
 
 
 def append_file(path, content):
+    ensure_dir(os.path.dirname(path))
+
     with open(path, "a", encoding="utf-8") as f:
         f.write("\n" + content)
 
@@ -107,13 +135,17 @@ def append_file(path, content):
 
 def fix_whitespace():
     for root, dirs, files in os.walk("."):
-
         if ".git" in root:
             continue
 
-        for file in files:
+        if root.startswith(f".{os.sep}{BACKUP_DIR}") or root == BACKUP_DIR:
+            continue
 
-            if not file.endswith((".py", ".txt", ".md", ".yml", ".json")):
+        if root.startswith(f".{os.sep}{LOG_DIR}") or root == LOG_DIR:
+            continue
+
+        for file in files:
+            if not file.endswith((".py", ".txt", ".md", ".yml", ".yaml", ".json")):
                 continue
 
             path = os.path.join(root, file)
@@ -125,9 +157,7 @@ def fix_whitespace():
 
             for line in lines:
                 line = line.rstrip()
-
                 line = line.replace("\t", "    ")
-
                 new_lines.append(line + "\n")
 
             while new_lines and new_lines[-1].strip() == "":
@@ -148,19 +178,16 @@ def fix_whitespace():
 
 def run_black():
     log("Running Black")
-
     subprocess.run(["black", "."], check=False)
 
 
 def run_isort():
     log("Running isort")
-
     subprocess.run(["isort", "."], check=False)
 
 
 def run_ruff():
     log("Running ruff")
-
     subprocess.run(["ruff", "check", ".", "--fix"], check=False)
 
 
@@ -169,13 +196,12 @@ def run_pytest():
 
     result = subprocess.run(["pytest", "-v"], capture_output=True, text=True)
 
-    print(result.stdout)
+    print(result.stdout, flush=True)
+    print(result.stderr, flush=True)
 
     if result.returncode != 0:
         log("Tests FAILED")
-
         rollback()
-
         raise Exception("Tests failed")
 
     log("Tests PASSED")
@@ -191,13 +217,12 @@ def process():
         log("No instruction file")
         return
 
-    with open(INSTRUCTIONS_FILE) as f:
+    with open(INSTRUCTIONS_FILE, encoding="utf-8") as f:
         lines = f.readlines()
 
     i = 0
 
     while i < len(lines):
-
         line = lines[i].strip()
 
         if not line:
@@ -205,47 +230,43 @@ def process():
             continue
 
         parts = line.split()
-
         cmd = parts[0]
 
+        # AUTO BACKUP
         if cmd == "AUTO_BACKUP_BEFORE_RUN":
             backup_repository()
 
+        # CREATE FOLDER
         elif cmd in ["CREA_CARTELLA", "CREATE_FOLDER"]:
             create_folder(parts[1])
 
+        # CREATE FILE MULTILINE
         elif cmd in ["CREA_FILE", "CREATE_FILE"]:
-
             path = parts[1]
 
             i += 1
-
             content = []
 
             while i < len(lines) and lines[i].strip() != "EOF":
-
                 content.append(lines[i])
-
                 i += 1
 
             create_file(path, "".join(content))
 
+        # APPEND
         elif cmd == "APPEND":
-
             path = parts[1]
 
             i += 1
-
             content = []
 
             while i < len(lines) and lines[i].strip() != "EOF":
-
                 content.append(lines[i])
-
                 i += 1
 
             append_file(path, "".join(content))
 
+        # FIX WHITESPACE
         elif cmd == "FIX_WHITESPACE":
             fix_whitespace()
 
@@ -256,13 +277,9 @@ def process():
     # ------------------------
 
     fix_whitespace()
-
     run_black()
-
     run_isort()
-
     run_ruff()
-
     run_pytest()
 
 

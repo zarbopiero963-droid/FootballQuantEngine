@@ -1,25 +1,16 @@
-# Python
 __pycache__/
 *.py[cod]
-*$py.class
+*.pyo
+*.pyd
 
-# Build
 dist/
 build/
 *.egg-info/
 
-# Virtual env
-venv/
-env/
-.venv/
-
-# DevOps runtime
-logs/
-
-# IDE
 .idea/
 .vscode/
 
-# OS
 .DS_Store
 Thumbs.db
+
+logs/

@@ -269,7 +269,7 @@ def run_pytest():
     result = subprocess.run(
         ["pytest", "-v"],
         capture_output=True,
-        text=True
+        text=True,
     )
 
     print(result.stdout, flush=True)
@@ -309,7 +309,6 @@ def process():
         log("No instruction file")
         return
 
-    # backup automatico sempre ON
     if AUTO_BACKUP_ALWAYS:
         backup_repository()
 

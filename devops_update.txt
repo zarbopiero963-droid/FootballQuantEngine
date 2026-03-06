@@ -1,456 +1,168 @@
-CREA_FILE analysis/report_viewer_helper.py
-import os
-import webbrowser
-
-
-class ReportViewerHelper:
-
-    def open_file(self, filepath):
-
-        if not os.path.exists(filepath):
-            return False
-
-        return webbrowser.open(f"file://{os.path.abspath(filepath)}")
-
-    def open_dashboard(self):
-
-        return self.open_file("outputs/dashboard.html")
-
-    def open_advanced_report(self):
-
-        return self.open_file("outputs/advanced_report.html")
+APPEND requirements.txt
+Pillow
 EOF
 
-CREA_FILE engine/offline_controller.py
-from engine.offline_engine import OfflineEngine
-
-
-class OfflineController:
-
-    def __init__(self):
-
-        self.engine = OfflineEngine()
-
-    def import_csv_data(self, matches_csv=None, odds_csv=None):
-
-        self.engine.import_csv_data(
-            matches_csv=matches_csv,
-            odds_csv=odds_csv,
-        )
-
-    def run_reports(self, ranked_df=None):
-
-        return self.engine.run_reports(ranked_df=ranked_df)
+CREA_FILE app/app_metadata.py
+APP_NAME = "FootballQuantEngine"
+APP_VERSION = "1.0.0"
+APP_AUTHOR = "OpenAI + User Project"
+APP_DESCRIPTION = "Quantitative football analysis engine"
 EOF
 
-CREA_FILE ui/offline_import_window.py
-from PySide6.QtWidgets import (
-    QFileDialog,
-    QGridLayout,
-    QLabel,
-    QLineEdit,
-    QMessageBox,
-    QPushButton,
-    QWidget,
-)
-
-from engine.offline_controller import OfflineController
-
-
-class OfflineImportWindow(QWidget):
-
-    def __init__(self):
-
-        super().__init__()
-
-        self.setWindowTitle("Offline CSV Import")
-
-        self.controller = OfflineController()
-
-        self.matches_path = QLineEdit()
-        self.odds_path = QLineEdit()
-
-        self.matches_browse = QPushButton("Browse Matches CSV")
-        self.odds_browse = QPushButton("Browse Odds CSV")
-        self.import_button = QPushButton("Import Data")
-
-        self.matches_browse.clicked.connect(self.browse_matches)
-        self.odds_browse.clicked.connect(self.browse_odds)
-        self.import_button.clicked.connect(self.import_data)
-
-        layout = QGridLayout()
-        layout.addWidget(QLabel("Matches CSV"), 0, 0)
-        layout.addWidget(self.matches_path, 0, 1)
-        layout.addWidget(self.matches_browse, 0, 2)
-
-        layout.addWidget(QLabel("Odds CSV"), 1, 0)
-        layout.addWidget(self.odds_path, 1, 1)
-        layout.addWidget(self.odds_browse, 1, 2)
-
-        layout.addWidget(self.import_button, 2, 0, 1, 3)
-
-        self.setLayout(layout)
-
-    def browse_matches(self):
-
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select Matches CSV",
-            "",
-            "CSV Files (*.csv)",
-        )
-
-        if path:
-            self.matches_path.setText(path)
-
-    def browse_odds(self):
-
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select Odds CSV",
-            "",
-            "CSV Files (*.csv)",
-        )
-
-        if path:
-            self.odds_path.setText(path)
-
-    def import_data(self):
-
-        try:
-            matches_csv = self.matches_path.text().strip() or None
-            odds_csv = self.odds_path.text().strip() or None
-
-            self.controller.import_csv_data(
-                matches_csv=matches_csv,
-                odds_csv=odds_csv,
-            )
-
-            QMessageBox.information(
-                self,
-                "Import",
-                "CSV import completed successfully.",
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                "Import Error",
-                str(exc),
-            )
-EOF
-
-CREA_FILE ui/manual_context_window.py
-import json
-import os
-
-from PySide6.QtWidgets import (
-    QLabel,
-    QMessageBox,
-    QPushButton,
-    QTextEdit,
-    QVBoxLayout,
-    QWidget,
+CREA_FILE app/version_info.py
+from app.app_metadata import (
+    APP_AUTHOR,
+    APP_DESCRIPTION,
+    APP_NAME,
+    APP_VERSION,
 )
 
 
-class ManualContextWindow(QWidget):
+def get_version_info():
 
-    def __init__(self):
-
-        super().__init__()
-
-        self.setWindowTitle("Manual Context")
-
-        self.info_label = QLabel(
-            "Edit manual context JSON for lineups, injuries and weather."
-        )
-        self.editor = QTextEdit()
-        self.save_button = QPushButton("Save Context")
-        self.save_button.clicked.connect(self.save_context)
-
-        layout = QVBoxLayout()
-        layout.addWidget(self.info_label)
-        layout.addWidget(self.editor)
-        layout.addWidget(self.save_button)
-
-        self.setLayout(layout)
-
-        self.load_context()
-
-    def load_context(self):
-
-        path = "manual_context.json"
-
-        if not os.path.exists(path):
-            default_data = {
-                "lineups": {},
-                "injuries": {},
-                "weather": {},
-            }
-            self.editor.setPlainText(json.dumps(default_data, indent=2))
-            return
-
-        with open(path, encoding="utf-8") as f:
-            self.editor.setPlainText(f.read())
-
-    def save_context(self):
-
-        try:
-            content = self.editor.toPlainText()
-            parsed = json.loads(content)
-
-            with open("manual_context.json", "w", encoding="utf-8") as f:
-                json.dump(parsed, f, indent=2)
-
-            QMessageBox.information(
-                self,
-                "Manual Context",
-                "manual_context.json saved successfully.",
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                "Save Error",
-                str(exc),
-            )
+    return {
+        "name": APP_NAME,
+        "version": APP_VERSION,
+        "author": APP_AUTHOR,
+        "description": APP_DESCRIPTION,
+    }
 EOF
 
-CREA_FILE ui/outputs_view.py
-from PySide6.QtWidgets import (
-    QMessageBox,
-    QPushButton,
-    QVBoxLayout,
-    QWidget,
+CREA_FILE app/desktop_launcher.py
+import sys
+
+from PySide6.QtWidgets import QApplication
+
+from app.controller import AppController
+from app.version_info import get_version_info
+from ui.main_window import MainWindow
+
+
+def main():
+
+    app = QApplication(sys.argv)
+
+    info = get_version_info()
+
+    app.setApplicationName(info["name"])
+    app.setApplicationVersion(info["version"])
+
+    controller = AppController()
+    window = MainWindow(controller)
+    window.setWindowTitle(f"{info['name']} {info['version']}")
+    window.show()
+
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()
+EOF
+
+CREA_FILE football_quant_engine.spec
+# -*- mode: python ; coding: utf-8 -*-
+
+from PyInstaller.utils.hooks import collect_all
+
+block_cipher = None
+
+datas = []
+binaries = []
+hiddenimports = []
+
+for pkg in ("numpy", "pandas", "scipy", "PySide6"):
+    pkg_datas, pkg_binaries, pkg_hidden = collect_all(pkg)
+    datas += pkg_datas
+    binaries += pkg_binaries
+    hiddenimports += pkg_hidden
+
+a = Analysis(
+    ["app/desktop_launcher.py"],
+    pathex=["."],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
+    hookspath=[],
+    runtime_hooks=[],
+    excludes=[],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
 )
 
-from analysis.report_viewer_helper import ReportViewerHelper
-from engine.offline_controller import OfflineController
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-
-class OutputsView(QWidget):
-
-    def __init__(self):
-
-        super().__init__()
-
-        self.setWindowTitle("Outputs & Reports")
-
-        self.viewer = ReportViewerHelper()
-        self.offline_controller = OfflineController()
-
-        self.run_reports_button = QPushButton("Generate Offline Reports")
-        self.open_dashboard_button = QPushButton("Open Dashboard HTML")
-        self.open_report_button = QPushButton("Open Advanced Report HTML")
-
-        self.run_reports_button.clicked.connect(self.run_reports)
-        self.open_dashboard_button.clicked.connect(self.open_dashboard)
-        self.open_report_button.clicked.connect(self.open_report)
-
-        layout = QVBoxLayout()
-        layout.addWidget(self.run_reports_button)
-        layout.addWidget(self.open_dashboard_button)
-        layout.addWidget(self.open_report_button)
-
-        self.setLayout(layout)
-
-    def run_reports(self):
-
-        try:
-            self.offline_controller.run_reports()
-
-            QMessageBox.information(
-                self,
-                "Reports",
-                "Offline reports generated successfully.",
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                "Reports Error",
-                str(exc),
-            )
-
-    def open_dashboard(self):
-
-        ok = self.viewer.open_dashboard()
-
-        if not ok:
-            QMessageBox.warning(
-                self,
-                "Dashboard",
-                "outputs/dashboard.html not found.",
-            )
-
-    def open_report(self):
-
-        ok = self.viewer.open_advanced_report()
-
-        if not ok:
-            QMessageBox.warning(
-                self,
-                "Advanced Report",
-                "outputs/advanced_report.html not found.",
-            )
-EOF
-
-CREA_FILE ui/main_window.py
-from PySide6.QtWidgets import (
-    QLabel,
-    QMainWindow,
-    QMessageBox,
-    QPushButton,
-    QToolBar,
+exe = EXE(
+    pyz,
+    a.scripts,
+    [],
+    exclude_binaries=True,
+    name="FootballQuantEngine",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    console=True,
 )
 
-from ui.about_dialog import AboutDialog
-from ui.dashboard_view import DashboardView
-from ui.manual_context_window import ManualContextWindow
-from ui.offline_import_window import OfflineImportWindow
-from ui.outputs_view import OutputsView
-from ui.settings_window import SettingsWindow
-
-
-class MainWindow(QMainWindow):
-
-    def __init__(self, controller):
-
-        super().__init__()
-
-        self.controller = controller
-
-        self.setWindowTitle("Football Quant Engine")
-        self.resize(1000, 700)
-
-        self.dashboard = DashboardView()
-        self.setCentralWidget(self.dashboard)
-
-        self.status_label = QLabel("Ready")
-        self.statusBar().addPermanentWidget(self.status_label)
-
-        toolbar = QToolBar("Main")
-        self.addToolBar(toolbar)
-
-        self.run_button = QPushButton("Run Cycle")
-        self.run_button.clicked.connect(self.run_cycle)
-        toolbar.addWidget(self.run_button)
-
-        self.settings_button = QPushButton("Settings")
-        self.settings_button.clicked.connect(self.open_settings)
-        toolbar.addWidget(self.settings_button)
-
-        self.offline_import_button = QPushButton("Import CSV")
-        self.offline_import_button.clicked.connect(self.open_offline_import)
-        toolbar.addWidget(self.offline_import_button)
-
-        self.manual_context_button = QPushButton("Manual Context")
-        self.manual_context_button.clicked.connect(self.open_manual_context)
-        toolbar.addWidget(self.manual_context_button)
-
-        self.outputs_button = QPushButton("Outputs")
-        self.outputs_button.clicked.connect(self.open_outputs)
-        toolbar.addWidget(self.outputs_button)
-
-        self.about_button = QPushButton("About")
-        self.about_button.clicked.connect(self.open_about)
-        toolbar.addWidget(self.about_button)
-
-        self.settings_window = None
-        self.about_dialog = None
-        self.offline_import_window = None
-        self.manual_context_window = None
-        self.outputs_view = None
-
-    def open_settings(self):
-
-        self.settings_window = SettingsWindow()
-        self.settings_window.show()
-
-    def open_about(self):
-
-        self.about_dialog = AboutDialog()
-        self.about_dialog.show()
-
-    def open_offline_import(self):
-
-        self.offline_import_window = OfflineImportWindow()
-        self.offline_import_window.show()
-
-    def open_manual_context(self):
-
-        self.manual_context_window = ManualContextWindow()
-        self.manual_context_window.show()
-
-    def open_outputs(self):
-
-        self.outputs_view = OutputsView()
-        self.outputs_view.show()
-
-    def run_cycle(self):
-
-        try:
-            ranked = self.controller.run_once()
-
-            if ranked is None:
-                self.dashboard.set_text("No results returned.")
-                self.status_label.setText("Completed")
-                return
-
-            if getattr(ranked, "empty", False):
-                self.dashboard.set_text("No value bets found.")
-                self.status_label.setText("Completed")
-                return
-
-            self.dashboard.set_text(ranked.to_string(index=False))
-            self.status_label.setText("Completed")
-
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                "Run Error",
-                str(exc),
-            )
-            self.status_label.setText("Error")
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
+    name="FootballQuantEngine",
+)
 EOF
 
-CREA_FILE tests/test_report_viewer_helper.py
-from analysis.report_viewer_helper import ReportViewerHelper
+CREA_FILE tests/test_app_metadata.py
+from app.app_metadata import APP_NAME, APP_VERSION
+from app.version_info import get_version_info
 
 
-def test_report_viewer_helper_class_exists():
+def test_app_metadata_exists():
 
-    helper = ReportViewerHelper()
+    assert isinstance(APP_NAME, str)
+    assert isinstance(APP_VERSION, str)
 
-    assert isinstance(helper, ReportViewerHelper)
+
+def test_version_info_runs():
+
+    info = get_version_info()
+
+    assert "name" in info
+    assert "version" in info
 EOF
 
-CREA_FILE tests/test_offline_controller.py
-from engine.offline_controller import OfflineController
-
-
-def test_offline_controller_class_exists():
-
-    controller = OfflineController()
-
-    assert isinstance(controller, OfflineController)
-EOF
-
-CREA_FILE tests/test_ui_windows.py
+CREA_FILE tests/test_desktop_launcher_import.py
 import pytest
 
 
-def test_ui_windows_import():
+def test_desktop_launcher_import():
 
     try:
-        from ui.manual_context_window import ManualContextWindow
-        from ui.offline_import_window import OfflineImportWindow
-        from ui.outputs_view import OutputsView
+        from app.desktop_launcher import main
     except (ModuleNotFoundError, ImportError) as exc:
-        pytest.skip(f"UI dependencies not available in CI: {exc}")
+        pytest.skip(f"Desktop launcher dependencies not available in CI: {exc}")
 
-    assert ManualContextWindow is not None
-    assert OfflineImportWindow is not None
-    assert OutputsView is not None
+    assert main is not None
+EOF
+
+CREA_FILE tests/test_outputs_viewer_imports.py
+import pytest
+
+
+def test_outputs_related_imports():
+
+    try:
+        from analysis.report_viewer_helper import ReportViewerHelper
+        from engine.offline_controller import OfflineController
+    except (ModuleNotFoundError, ImportError) as exc:
+        pytest.skip(f"Optional dependencies not available in CI: {exc}")
+
+    assert ReportViewerHelper is not None
+    assert OfflineController is not None
 EOF
 
 FIX_WHITESPACE
-

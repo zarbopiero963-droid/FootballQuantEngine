@@ -12,3 +12,4 @@ pyinstaller
 PySide6
 matplotlib
 scikit-learn
+

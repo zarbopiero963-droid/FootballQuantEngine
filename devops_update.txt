@@ -17,3 +17,4 @@ def test_ui_classes_import():
 EOF
 
 FIX_WHITESPACE
+

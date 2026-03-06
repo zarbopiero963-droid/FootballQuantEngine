@@ -304,3 +304,22 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-06_22-25-39.zip
+Backup created backups/backup_2026-03-06_22-25-39.zip
+[CREATE] folder plugins
+[CREATE] folder plugins/models
+[CREATE] file plugins/__init__.py
+[CREATE] file plugins/models/__init__.py
+[CREATE] file plugins/models/poisson_plugin.py
+[CREATE] file plugins/models/elo_plugin.py
+[CREATE] file plugins/models/bivariate_plugin.py
+[CREATE] file engine/plugin_loader.py
+[CREATE] file engine/prediction_pipeline.py
+[CREATE] file tests/test_plugin_loader.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

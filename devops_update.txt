@@ -1,129 +1,7 @@
 AUTO_BACKUP_BEFORE_RUN
 
-CREA_CARTELLA .github
-CREA_CARTELLA .github/workflows
-
 APPEND requirements.txt
 pyinstaller
-EOF
-
-CREA_FILE .gitignore
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.log
-*.sqlite
-*.db
-*.zip
-
-.cache/
-.pytest_cache/
-.ruff_cache/
-
-.venv/
-venv/
-env/
-
-build/
-dist/
-
-settings.json
-quant_engine.db
-EOF
-
-CREA_FILE README.md
-# Football Quant Engine
-
-Football Quant Engine è un motore quantitativo per analisi delle partite di calcio basato su modelli matematici.
-
-Funzioni principali:
-
-- Raccolta dati API-Football
-- Raccolta quote The Odds API
-- Rating ClubElo
-- xG Understat
-- Feature engineering
-- Modelli Poisson
-- Bivariate Poisson
-- Monte Carlo simulation
-- Edge detection
-- Value betting detection
-- Database SQLite
-- Scheduler automatico
-- Export CSV / Excel
-- Notifiche Telegram
-
-Installazione:
-
-pip install -r requirements.txt
-
-Avvio:
-
-python app/main.py
-
-Build EXE locale:
-
-pyinstaller football_quant_engine.spec
-
-L'EXE viene generato anche automaticamente su GitHub Actions.
-EOF
-
-CREA_FILE football_quant_engine.spec
-# -*- mode: python ; coding: utf-8 -*-
-
-from PyInstaller.utils.hooks import collect_all
-
-block_cipher = None
-
-datas = []
-binaries = []
-hiddenimports = []
-
-for pkg in ("numpy", "pandas", "scipy"):
-    pkg_datas, pkg_binaries, pkg_hidden = collect_all(pkg)
-    datas += pkg_datas
-    binaries += pkg_binaries
-    hiddenimports += pkg_hidden
-
-a = Analysis(
-    ["app/main.py"],
-    pathex=["."],
-    binaries=binaries,
-    datas=datas,
-    hiddenimports=hiddenimports,
-    hookspath=[],
-    runtime_hooks=[],
-    excludes=[],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
-)
-
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
-
-exe = EXE(
-    pyz,
-    a.scripts,
-    [],
-    exclude_binaries=True,
-    name="FootballQuantEngine",
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=False,
-    console=True,
-)
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=False,
-    name="FootballQuantEngine",
-)
 EOF
 
 CREA_FILE .github/workflows/build.yml
@@ -134,7 +12,6 @@ on:
     branches: ["**"]
 
 jobs:
-
   build-windows:
 
     runs-on: windows-latest
@@ -153,6 +30,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install pyinstaller
 
       - name: Lint
         run: |
@@ -166,7 +44,7 @@ jobs:
 
       - name: Build EXE
         run: |
-          pyinstaller football_quant_engine.spec
+          python -m PyInstaller football_quant_engine.spec
 
       - name: Zip EXE
         shell: pwsh
@@ -181,4 +59,3 @@ jobs:
 EOF
 
 FIX_WHITESPACE
-

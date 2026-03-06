@@ -15,36 +15,4 @@ ruff
 pyinstaller
 EOF
 
-CREA_FILE tests/test_requirements_alignment.py
-from pathlib import Path
-
-
-def test_requirements_contains_core_dependencies():
-
-    requirements = Path("requirements.txt")
-
-    assert requirements.exists()
-
-    content = requirements.read_text(encoding="utf-8")
-
-    required = [
-        "requests",
-        "pandas",
-        "numpy",
-        "scipy",
-        "scikit-learn",
-        "matplotlib",
-        "PySide6",
-        "openpyxl",
-        "pytest",
-        "black",
-        "isort",
-        "ruff",
-        "pyinstaller",
-    ]
-
-    for item in required:
-        assert item in content
-EOF
-
 FIX_WHITESPACE

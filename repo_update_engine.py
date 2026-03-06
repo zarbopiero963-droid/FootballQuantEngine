@@ -48,6 +48,10 @@ def log_file_deleted(path):
     log(f"[DELETE] {path}")
 
 
+def log_already_done(msg):
+    log(f"[SKIP] {msg} -> già fatto")
+
+
 # -------------------------
 # BACKUP
 # -------------------------
@@ -180,36 +184,83 @@ def restore_file_latest(file_path):
 # -------------------------
 
 def create_folder(path):
+    if os.path.exists(path):
+        log_already_done(f"Folder exists {path}")
+        return
+
     os.makedirs(path, exist_ok=True)
     log(f"Folder created {path}")
 
 
 def create_file(path, content):
     ensure_dir(os.path.dirname(path))
+
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            current = f.read()
+
+        if current == content:
+            log_already_done(f"File already identical {path}")
+            return
+
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
-    log_file_created(path)
+
+    if os.path.exists(path):
+        log_file_created(path)
 
 
 def append_file(path, content):
     ensure_dir(os.path.dirname(path))
+
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            current = f.read()
+
+        normalized_content = content.strip()
+        if normalized_content and normalized_content in current:
+            log_already_done(f"Content already present in {path}")
+            return
+
     with open(path, "a", encoding="utf-8") as f:
         if content and not content.startswith("\n"):
             f.write("\n")
         f.write(content)
+
     log_file_modified(path)
 
 
 def overwrite_file(path, content):
     ensure_dir(os.path.dirname(path))
+
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            current = f.read()
+
+        if current == content:
+            log_already_done(f"File already identical {path}")
+            return
+
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
+
     log_file_modified(path)
 
 
 def replace_text(path, old, new):
+    if not os.path.exists(path):
+        log(f"[WARN] File not found for replace: {path}")
+        return
+
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
         data = f.read()
+
+    if old not in data:
+        if new in data:
+            log_already_done(f"Replace already applied in {path}")
+        else:
+            log(f"[WARN] Pattern not found in {path}: {old}")
+        return
 
     data2 = data.replace(old, new)
 
@@ -220,10 +271,19 @@ def replace_text(path, old, new):
 
 
 def insert_line(path, line_number, text):
+    if not os.path.exists(path):
+        log(f"[WARN] File not found for insert line: {path}")
+        return
+
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
         lines = f.readlines()
 
     idx = max(0, min(line_number - 1, len(lines)))
+
+    if idx < len(lines) and lines[idx].rstrip("\n") == text:
+        log_already_done(f"Line already present in {path}:{line_number}")
+        return
+
     lines.insert(idx, text + "\n")
 
     with open(path, "w", encoding="utf-8") as f:
@@ -233,18 +293,33 @@ def insert_line(path, line_number, text):
 
 
 def delete_file(path):
-    if os.path.exists(path):
-        os.remove(path)
-        log_file_deleted(path)
+    if not os.path.exists(path):
+        log_already_done(f"File already deleted {path}")
+        return
+
+    os.remove(path)
+    log_file_deleted(path)
 
 
 def move_file(src, dst):
+    if not os.path.exists(src):
+        if os.path.exists(dst):
+            log_already_done(f"Move already applied {src} -> {dst}")
+            return
+        raise FileNotFoundError(src)
+
     ensure_dir(os.path.dirname(dst))
     shutil.move(src, dst)
     log(f"[MOVE] {src} -> {dst}")
 
 
 def rename_file(src, dst):
+    if not os.path.exists(src):
+        if os.path.exists(dst):
+            log_already_done(f"Rename already applied {src} -> {dst}")
+            return
+        raise FileNotFoundError(src)
+
     ensure_dir(os.path.dirname(dst))
     os.rename(src, dst)
     log(f"[RENAME] {src} -> {dst}")
@@ -258,6 +333,9 @@ def replace_line_block(path, old_block, new_block):
         data = f.read()
 
     if old_block not in data:
+        if new_block in data:
+            log_already_done(f"Block already replaced in {path}")
+            return
         log(f"[WARN] old block not found in {path}")
         return
 
@@ -294,24 +372,39 @@ def patch_function(path, func_name, patch_code):
     tree = ast.parse(source)
 
     patch_nodes = ast.parse(patch_code).body
+    patch_text = ast.unparse(ast.Module(body=patch_nodes, type_ignores=[])).strip()
+
     patched = False
+    already_done = False
 
     class FunctionPatcher(ast.NodeTransformer):
         def visit_FunctionDef(self, node):
-            nonlocal patched
+            nonlocal patched, already_done
             if node.name == func_name:
+                current_body = "\n".join(ast.unparse(stmt) for stmt in node.body)
+                if patch_text in current_body:
+                    already_done = True
+                    return node
                 node.body.extend(patch_nodes)
                 patched = True
             return self.generic_visit(node)
 
         def visit_AsyncFunctionDef(self, node):
-            nonlocal patched
+            nonlocal patched, already_done
             if node.name == func_name:
+                current_body = "\n".join(ast.unparse(stmt) for stmt in node.body)
+                if patch_text in current_body:
+                    already_done = True
+                    return node
                 node.body.extend(patch_nodes)
                 patched = True
             return self.generic_visit(node)
 
     tree = FunctionPatcher().visit(tree)
+
+    if already_done:
+        log_already_done(f"Patch already present in {path}:{func_name}")
+        return
 
     if not patched:
         raise Exception(f"Function not found: {func_name} in {path}")
@@ -324,7 +417,6 @@ def safe_patch_function(path, func_name, patch_code):
     if not os.path.exists(path):
         raise FileNotFoundError(path)
 
-    # valida prima la patch
     try:
         ast.parse(patch_code)
     except Exception as e:
@@ -334,29 +426,43 @@ def safe_patch_function(path, func_name, patch_code):
     original_tree = ast.parse(source)
 
     patch_nodes = ast.parse(patch_code).body
+    patch_text = ast.unparse(ast.Module(body=patch_nodes, type_ignores=[])).strip()
+
     patched = False
+    already_done = False
 
     class SafeFunctionPatcher(ast.NodeTransformer):
         def visit_FunctionDef(self, node):
-            nonlocal patched
+            nonlocal patched, already_done
             if node.name == func_name:
+                current_body = "\n".join(ast.unparse(stmt) for stmt in node.body)
+                if patch_text in current_body:
+                    already_done = True
+                    return node
                 node.body.extend(patch_nodes)
                 patched = True
             return self.generic_visit(node)
 
         def visit_AsyncFunctionDef(self, node):
-            nonlocal patched
+            nonlocal patched, already_done
             if node.name == func_name:
+                current_body = "\n".join(ast.unparse(stmt) for stmt in node.body)
+                if patch_text in current_body:
+                    already_done = True
+                    return node
                 node.body.extend(patch_nodes)
                 patched = True
             return self.generic_visit(node)
 
     new_tree = SafeFunctionPatcher().visit(original_tree)
 
+    if already_done:
+        log_already_done(f"Safe patch already present in {path}:{func_name}")
+        return
+
     if not patched:
         raise Exception(f"Function not found: {func_name} in {path}")
 
-    # seconda validazione AST/unparse
     ast.fix_missing_locations(new_tree)
     generated = ast.unparse(new_tree)
     ast.parse(generated)
@@ -422,6 +528,10 @@ def refactor_repo(action, old_name, new_name):
                     f.write(ast.unparse(tree) + "\n")
                 log_file_modified(path)
                 changed_files += 1
+
+    if changed_files == 0:
+        log_already_done(f"Refactor already applied or nothing to change ({old_name} -> {new_name})")
+        return
 
     log(f"[REFACTOR_REPO] action={action} old={old_name} new={new_name} changed_files={changed_files}")
 

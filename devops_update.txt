@@ -1,61 +1,211 @@
-AUTO_BACKUP_BEFORE_RUN
+CREA_CARTELLA analysis
+CREA_CARTELLA training
 
-APPEND requirements.txt
-pyinstaller
+CREA_FILE analysis/__init__.py
+# analysis package
 EOF
 
-CREA_FILE .github/workflows/build.yml
-name: Build Portable EXE
+CREA_FILE analysis/betfair_leagues.py
+BETFAIR_EXCHANGE_ITALIA_LEAGUES = {
+    "Serie A",
+    "Serie B",
+    "Premier League",
+    "Championship",
+    "League One",
+    "League Two",
+    "La Liga",
+    "Segunda Division",
+    "Bundesliga",
+    "2. Bundesliga",
+    "Ligue 1",
+    "Ligue 2",
+    "Eredivisie",
+    "Primeira Liga",
+    "Super Lig",
+    "Belgian Pro League",
+    "Serie A Brazil",
+    "Primera Division",
+}
 
-on:
-  push:
-    branches: ["**"]
 
-jobs:
-  build-windows:
+def is_betfair_league(league_name):
 
-    runs-on: windows-latest
+    if not league_name:
+        return False
 
-    steps:
+    return league_name in BETFAIR_EXCHANGE_ITALIA_LEAGUES
+EOF
 
-      - name: Checkout
-        uses: actions/checkout@v4
+CREA_FILE analysis/league_predictability.py
+import pandas as pd
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
+class LeaguePredictability:
 
-      - name: Lint
-        run: |
-          ruff check .
-          black --check .
-          isort --check-only .
+    def score(self, fixtures_df):
 
-      - name: Run tests
-        run: |
-          pytest -q
+        if fixtures_df.empty:
+            return pd.DataFrame(
+                columns=["league", "predictability_score"]
+            )
 
-      - name: Build EXE
-        run: |
-          python -m PyInstaller football_quant_engine.spec
+        rows = []
 
-      - name: Zip EXE
-        shell: pwsh
-        run: |
-          Compress-Archive -Path dist\FootballQuantEngine\* -DestinationPath FootballQuantEngine-Portable.zip -Force
+        for league in fixtures_df["league"].dropna().unique():
 
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: FootballQuantEngine-Windows
-          path: FootballQuantEngine-Portable.zip
+            league_df = fixtures_df[
+                fixtures_df["league"] == league
+            ].copy()
+
+            if league_df.empty:
+                continue
+
+            home_wins = (
+                league_df["home_goals"] > league_df["away_goals"]
+            ).mean()
+
+            draws = (
+                league_df["home_goals"] == league_df["away_goals"]
+            ).mean()
+
+            away_wins = (
+                league_df["home_goals"] < league_df["away_goals"]
+            ).mean()
+
+            score = max(home_wins, draws, away_wins)
+
+            rows.append(
+                {
+                    "league": league,
+                    "predictability_score": score,
+                }
+            )
+
+        result = pd.DataFrame(rows)
+
+        if result.empty:
+            return result
+
+        return result.sort_values(
+            by="predictability_score",
+            ascending=False,
+        )
+EOF
+
+CREA_FILE training/__init__.py
+# training package
+EOF
+
+CREA_FILE training/dataset_builder.py
+import pandas as pd
+
+from analysis.betfair_leagues import is_betfair_league
+from database.db_manager import connect
+
+
+class DatasetBuilder:
+
+    def load_fixtures(self):
+
+        conn = connect()
+
+        fixtures_df = pd.read_sql_query(
+            """
+            SELECT
+                fixture_id,
+                league,
+                season,
+                home,
+                away,
+                match_date,
+                home_goals,
+                away_goals,
+                status
+            FROM fixtures
+            WHERE status = 'FT'
+            """,
+            conn,
+        )
+
+        conn.close()
+
+        return fixtures_df
+
+    def build_training_dataset(self):
+
+        fixtures_df = self.load_fixtures()
+
+        if fixtures_df.empty:
+            return pd.DataFrame()
+
+        fixtures_df = fixtures_df[
+            fixtures_df["league"].apply(is_betfair_league)
+        ].copy()
+
+        if fixtures_df.empty:
+            return pd.DataFrame()
+
+        fixtures_df["target_home_win"] = (
+            fixtures_df["home_goals"] > fixtures_df["away_goals"]
+        ).astype(int)
+
+        fixtures_df["target_draw"] = (
+            fixtures_df["home_goals"] == fixtures_df["away_goals"]
+        ).astype(int)
+
+        fixtures_df["target_away_win"] = (
+            fixtures_df["home_goals"] < fixtures_df["away_goals"]
+        ).astype(int)
+
+        return fixtures_df
+EOF
+
+CREA_FILE tests/test_league_predictability.py
+import pandas as pd
+
+from analysis.league_predictability import LeaguePredictability
+
+
+def test_league_predictability_runs():
+
+    df = pd.DataFrame(
+        [
+            {
+                "league": "Serie A",
+                "home_goals": 2,
+                "away_goals": 1,
+            },
+            {
+                "league": "Serie A",
+                "home_goals": 1,
+                "away_goals": 1,
+            },
+            {
+                "league": "Premier League",
+                "home_goals": 0,
+                "away_goals": 2,
+            },
+        ]
+    )
+
+    analyzer = LeaguePredictability()
+
+    result = analyzer.score(df)
+
+    assert isinstance(result, pd.DataFrame)
+    assert "league" in result.columns
+    assert "predictability_score" in result.columns
+EOF
+
+CREA_FILE tests/test_dataset_builder.py
+from training.dataset_builder import DatasetBuilder
+
+
+def test_dataset_builder_class_exists():
+
+    builder = DatasetBuilder()
+
+    assert isinstance(builder, DatasetBuilder)
 EOF
 
 FIX_WHITESPACE

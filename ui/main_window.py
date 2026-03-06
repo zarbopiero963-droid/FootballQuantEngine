@@ -8,6 +8,9 @@ from PySide6.QtWidgets import (
 
 from ui.about_dialog import AboutDialog
 from ui.dashboard_view import DashboardView
+from ui.manual_context_window import ManualContextWindow
+from ui.offline_import_window import OfflineImportWindow
+from ui.outputs_view import OutputsView
 from ui.settings_window import SettingsWindow
 
 
@@ -39,12 +42,27 @@ class MainWindow(QMainWindow):
         self.settings_button.clicked.connect(self.open_settings)
         toolbar.addWidget(self.settings_button)
 
+        self.offline_import_button = QPushButton("Import CSV")
+        self.offline_import_button.clicked.connect(self.open_offline_import)
+        toolbar.addWidget(self.offline_import_button)
+
+        self.manual_context_button = QPushButton("Manual Context")
+        self.manual_context_button.clicked.connect(self.open_manual_context)
+        toolbar.addWidget(self.manual_context_button)
+
+        self.outputs_button = QPushButton("Outputs")
+        self.outputs_button.clicked.connect(self.open_outputs)
+        toolbar.addWidget(self.outputs_button)
+
         self.about_button = QPushButton("About")
         self.about_button.clicked.connect(self.open_about)
         toolbar.addWidget(self.about_button)
 
         self.settings_window = None
         self.about_dialog = None
+        self.offline_import_window = None
+        self.manual_context_window = None
+        self.outputs_view = None
 
     def open_settings(self):
 
@@ -55,6 +73,21 @@ class MainWindow(QMainWindow):
 
         self.about_dialog = AboutDialog()
         self.about_dialog.show()
+
+    def open_offline_import(self):
+
+        self.offline_import_window = OfflineImportWindow()
+        self.offline_import_window.show()
+
+    def open_manual_context(self):
+
+        self.manual_context_window = ManualContextWindow()
+        self.manual_context_window.show()
+
+    def open_outputs(self):
+
+        self.outputs_view = OutputsView()
+        self.outputs_view.show()
 
     def run_cycle(self):
 

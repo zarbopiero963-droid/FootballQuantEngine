@@ -1,26 +1,169 @@
-CREA_FILE LICENSE
-MIT License
+CREA_FILE engine/repo_healthcheck.py
+from pathlib import Path
 
-Copyright (c) 2026
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+class RepoHealthCheck:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+    def required_files(self):
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+        return [
+            "README.md",
+            "requirements.txt",
+            "football_quant_engine.spec",
+            ".github/workflows/build.yml",
+            "database/schema.sql",
+            "app/main.py",
+            "app/controller.py",
+            "engine/job_runner.py",
+            "engine/prediction_pipeline.py",
+            "engine/plugin_loader.py",
+            "engine/offline_engine.py",
+            "models/poisson_model.py",
+            "models/bivariate_poisson.py",
+            "models/elo_model.py",
+            "models/bayesian_model.py",
+            "analysis/probability_markets.py",
+            "analysis/report_generator.py",
+            "features/feature_engine.py",
+            "features/offline_features.py",
+            "training/dataset_builder.py",
+            "training/backtest_engine.py",
+            "training/backtest_metrics.py",
+            "plugins/models/poisson_plugin.py",
+            "plugins/models/elo_plugin.py",
+            "plugins/models/bivariate_plugin.py",
+        ]
+
+    def missing_files(self):
+
+        missing = []
+
+        for filepath in self.required_files():
+            if not Path(filepath).exists():
+                missing.append(filepath)
+
+        return missing
+
+    def outputs_dir_exists(self):
+
+        return Path("outputs").exists()
+
+    def check(self):
+
+        missing = self.missing_files()
+
+        return {
+            "ok": len(missing) == 0,
+            "missing_files": missing,
+            "outputs_dir_exists": self.outputs_dir_exists(),
+        }
 EOF
 
-FIX_WHITESPACE
+CREA_FILE app/healthcheck.py
+from engine.repo_healthcheck import RepoHealthCheck
 
+
+def run_healthcheck():
+
+    checker = RepoHealthCheck()
+
+    return checker.check()
+EOF
+
+CREA_FILE tests/test_repo_healthcheck.py
+from engine.repo_healthcheck import RepoHealthCheck
+
+
+def test_repo_healthcheck_runs():
+
+    checker = RepoHealthCheck()
+
+    result = checker.check()
+
+    assert isinstance(result, dict)
+    assert "ok" in result
+    assert "missing_files" in result
+EOF
+
+CREA_FILE tests/test_healthcheck.py
+from app.healthcheck import run_healthcheck
+
+
+def test_app_healthcheck_runs():
+
+    result = run_healthcheck()
+
+    assert isinstance(result, dict)
+    assert "ok" in result
+EOF
+
+CREA_FILE tests/test_readme_alignment.py
+from pathlib import Path
+
+
+def test_readme_exists_and_not_empty():
+
+    readme = Path("README.md")
+
+    assert readme.exists()
+
+    content = readme.read_text(encoding="utf-8")
+
+    assert len(content.strip()) > 0
+    assert "Football Quant Engine" in content
+EOF
+
+CREA_FILE tests/test_spec_file.py
+from pathlib import Path
+
+
+def test_spec_file_exists():
+
+    spec = Path("football_quant_engine.spec")
+
+    assert spec.exists()
+EOF
+
+CREA_FILE tests/test_workflow_file.py
+from pathlib import Path
+
+
+def test_workflow_file_exists():
+
+    workflow = Path(".github/workflows/build.yml")
+
+    assert workflow.exists()
+EOF
+
+CREA_FILE outputs/.gitkeep
+
+EOF
+
+CREA_FILE database/db_manager.py
+from pathlib import Path
+import sqlite3
+
+from config.constants import DATABASE_NAME
+
+
+BASE_DIR = Path(__file__).resolve().parent
+SCHEMA_PATH = BASE_DIR / "schema.sql"
+
+
+def connect():
+
+    return sqlite3.connect(DATABASE_NAME)
+
+
+def init_db():
+
+    conn = connect()
+
+    with open(SCHEMA_PATH, encoding="utf-8") as f:
+        conn.executescript(f.read())
+
+    conn.commit()
+    conn.close()
+EOF
+
+FIX_WHITESPACE 

@@ -1,22 +1,24 @@
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.pyd
-*.log
-*.sqlite
-*.db
-*.zip
 
-.cache/
+dist/
+build/
+*.egg-info/
+
+.idea/
+.vscode/
+
+.DS_Store
+Thumbs.db
+
+logs/
+backups/
 .pytest_cache/
-.ruff_cache/
+.mypy_cache/
 
 .venv/
 venv/
 env/
-
-build/
-dist/
-
-settings.json
-quant_engine.db
+ENV/

@@ -1,67 +1,114 @@
-CREA_CARTELLA outputs
-
-CREA_FILE engine/training_manager.py
-from training.dataset_builder import DatasetBuilder
-from training.backtest_engine import BacktestEngine
+CREA_FILE engine/cli_runner.py
+from engine.job_runner import JobRunner
 
 
-class TrainingManager:
+class CliRunner:
 
     def __init__(self):
 
-        self.dataset_builder = DatasetBuilder()
-        self.backtest_engine = BacktestEngine()
+        self.runner = JobRunner()
 
-    def build_dataset(self):
+    def run_once(self):
 
-        return self.dataset_builder.build_training_dataset()
-
-    def run_backtest(self):
-
-        return self.backtest_engine.run()
+        return self.runner.run_cycle()
 EOF
 
-CREA_FILE engine/output_manager.py
+CREA_FILE analysis/dashboard_renderer.py
 import os
 
-from export.csv_exporter import CsvExporter
-from export.excel_exporter import ExcelExporter
 
-
-class OutputManager:
+class DashboardRenderer:
 
     def __init__(self):
-
-        self.csv_exporter = CsvExporter()
-        self.excel_exporter = ExcelExporter()
 
         os.makedirs("outputs", exist_ok=True)
 
-    def export_value_bets(self, value_bets):
+    def render(self, ranked_df):
 
-        if not value_bets:
-            return
+        html = []
+        html.append("<html>")
+        html.append("<head><title>Football Quant Engine Dashboard</title></head>")
+        html.append("<body>")
+        html.append("<h1>Football Quant Engine Dashboard</h1>")
 
-        self.csv_exporter.export_value_bets(
-            "outputs/value_bets.csv",
-            value_bets,
-        )
+        if ranked_df.empty:
+            html.append("<p>No ranked value bets available.</p>")
+        else:
+            html.append("<table border='1' cellpadding='6' cellspacing='0'>")
+            html.append("<tr>")
 
-        self.excel_exporter.export_value_bets(
-            "outputs/value_bets.xlsx",
-            value_bets,
-        )
+            for col in ranked_df.columns:
+                html.append(f"<th>{col}</th>")
 
-    def export_dataframe(self, dataframe, name):
+            html.append("</tr>")
 
-        if dataframe.empty:
-            return
+            for _, row in ranked_df.iterrows():
+                html.append("<tr>")
+                for col in ranked_df.columns:
+                    html.append(f"<td>{row[col]}</td>")
+                html.append("</tr>")
 
-        csv_path = f"outputs/{name}.csv"
-        xlsx_path = f"outputs/{name}.xlsx"
+            html.append("</table>")
 
-        dataframe.to_csv(csv_path, index=False)
-        dataframe.to_excel(xlsx_path, index=False)
+        html.append("</body>")
+        html.append("</html>")
+
+        with open("outputs/dashboard.html", "w", encoding="utf-8") as f:
+            f.write("\n".join(html))
+EOF
+
+CREA_FILE engine/dashboard_manager.py
+from analysis.dashboard_renderer import DashboardRenderer
+
+
+class DashboardManager:
+
+    def __init__(self):
+
+        self.renderer = DashboardRenderer()
+
+    def build(self, ranked_df):
+
+        self.renderer.render(ranked_df)
+EOF
+
+CREA_FILE engine/scheduler.py
+import time
+from datetime import datetime
+
+
+class Scheduler:
+
+    def __init__(self, interval_minutes=10):
+        self.interval = interval_minutes * 60
+        self.jobs = []
+
+    def add_job(self, func):
+        self.jobs.append(func)
+
+    def run_once(self):
+
+        results = []
+
+        for job in self.jobs:
+            results.append(job())
+
+        return results
+
+    def run(self):
+
+        while True:
+
+            start = datetime.utcnow()
+
+            self.run_once()
+
+            elapsed = (datetime.utcnow() - start).total_seconds()
+
+            sleep_time = self.interval - elapsed
+
+            if sleep_time > 0:
+                time.sleep(sleep_time)
 EOF
 
 CREA_FILE engine/job_runner.py
@@ -71,6 +118,7 @@ from config.settings_manager import load_settings
 from database.db_manager import init_db
 from data.api_football_collector import ApiFootballCollector
 from data.odds_collector import OddsCollector
+from engine.dashboard_manager import DashboardManager
 from engine.fixture_mapper import map_api_football_response_to_fixtures
 from engine.match_ranker import MatchRanker
 from engine.odds_mapper import map_odds_events_to_match_id
@@ -94,6 +142,7 @@ class JobRunner:
         self.ranker = MatchRanker()
         self.output_manager = OutputManager()
         self.training_manager = TrainingManager()
+        self.dashboard_manager = DashboardManager()
 
         init_db()
 
@@ -157,43 +206,61 @@ class JobRunner:
                 "backtest_results",
             )
 
+        self.dashboard_manager.build(ranked)
+
         return ranked
 EOF
 
-CREA_FILE tests/test_training_manager.py
-from engine.training_manager import TrainingManager
+CREA_FILE app/cli.py
+from engine.cli_runner import CliRunner
 
 
-def test_training_manager_class_exists():
+def main():
 
-    manager = TrainingManager()
+    runner = CliRunner()
 
-    assert isinstance(manager, TrainingManager)
+    result = runner.run_once()
+
+    print(result)
+
+
+if __name__ == "__main__":
+    main()
 EOF
 
-CREA_FILE tests/test_output_manager.py
+CREA_FILE tests/test_dashboard_manager.py
 import pandas as pd
 
-from engine.output_manager import OutputManager
+from engine.dashboard_manager import DashboardManager
 
 
-def test_output_manager_class_exists():
+def test_dashboard_manager_class_exists():
 
-    manager = OutputManager()
+    manager = DashboardManager()
 
-    assert isinstance(manager, OutputManager)
+    assert isinstance(manager, DashboardManager)
 
 
-def test_output_manager_export_dataframe_empty():
+def test_dashboard_manager_build_empty():
 
-    manager = OutputManager()
+    manager = DashboardManager()
 
     df = pd.DataFrame()
 
-    manager.export_dataframe(df, "empty_test")
+    manager.build(df)
 
     assert isinstance(df, pd.DataFrame)
 EOF
 
-FIX_WHITESPACE
+CREA_FILE tests/test_cli_runner.py
+from engine.cli_runner import CliRunner
 
+
+def test_cli_runner_class_exists():
+
+    runner = CliRunner()
+
+    assert isinstance(runner, CliRunner)
+EOF
+
+FIX_WHITESPACE

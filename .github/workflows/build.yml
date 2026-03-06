@@ -5,10 +5,13 @@ on:
     branches: ["**"]
 
 jobs:
+
   build-windows:
+
     runs-on: windows-latest
 
     steps:
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -26,7 +29,7 @@ jobs:
           pip install -r requirements.txt
           python -m pip install pyinstaller
 
-      - name: Verify PySide6 installation
+      - name: Verify PySide6
         run: |
           python -c "import PySide6; print('PySide6 OK')"
 

@@ -16,20 +16,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-
   update:
-
     runs-on: ubuntu-latest
 
     env:
       PYTHONPATH: ${{ github.workspace }}
 
     steps:
-
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: true
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -40,27 +38,39 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: Show commit
+      - name: Show trigger commit
         run: |
+          echo "=============================="
           echo "TRIGGER COMMIT"
+          echo "=============================="
           git log -1
 
       - name: Show DevOps instructions
         run: |
-          echo "DEVOPS UPDATE"
+          echo "=============================="
+          echo "DEVOPS UPDATE COMMANDS"
+          echo "=============================="
           cat devops_update.txt
+          echo "=============================="
 
       - name: Run DevOps Engine
+        id: engine
+        continue-on-error: true
         run: |
           python repo_update_engine.py
 
-      - name: Show changes
+      - name: Show changed files
         run: |
+          echo "=============================="
+          echo "FILES CHANGED"
+          echo "=============================="
           git status
           git diff --stat || true
 
-      - name: Commit changes
+      - name: Commit changes (update or rollback)
+        shell: bash
         run: |
+          set -e
 
           git config user.name "repo-bot"
           git config user.email "bot@github.com"
@@ -72,9 +82,18 @@ jobs:
             exit 0
           fi
 
-          git commit -m "[skip ci] Automated DevOps Engine Update"
+          if [[ "${{ steps.engine.outcome }}" == "failure" ]]; then
+            git commit -m "[skip ci] DevOps Engine Rollback"
+          else
+            git commit -m "[skip ci] Automated DevOps Engine Update"
+          fi
 
           git fetch origin main
           git rebase origin/main
-
           git push --force-with-lease origin HEAD:main
+
+      - name: Fail job if engine failed
+        if: steps.engine.outcome == 'failure'
+        run: |
+          echo "Engine failed. Rollback was committed."
+          exit 1

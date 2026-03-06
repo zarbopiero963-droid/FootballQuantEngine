@@ -28,3 +28,4 @@ def test_offline_engine_analysis_runs():
 
     assert "features" in result
     assert "predictions" in result
+    assert "market_inefficiency" in result

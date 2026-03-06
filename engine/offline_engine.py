@@ -1,6 +1,8 @@
 import pandas as pd
 
+from analysis.ai_feature_generation import AIFeatureGenerator
 from analysis.manual_context import ManualContextManager
+from analysis.market_inefficiency import MarketInefficiencyScanner
 from analysis.probability_markets import ProbabilityMarkets
 from analysis.report_generator import ReportGenerator
 from features.offline_features import OfflineFeatureBuilder
@@ -19,9 +21,11 @@ class OfflineEngine:
 
         self.csv_importer = CsvImporter()
         self.feature_builder = OfflineFeatureBuilder()
+        self.ai_feature_generator = AIFeatureGenerator()
         self.bayesian = BayesianModel()
         self.markets = ProbabilityMarkets()
         self.manual_context = ManualContextManager()
+        self.market_scanner = MarketInefficiencyScanner()
         self.dataset_builder = DatasetBuilder()
         self.backtest_engine = BacktestEngine()
         self.backtest_metrics = BacktestMetrics()
@@ -43,9 +47,11 @@ class OfflineEngine:
             return {
                 "features": pd.DataFrame(),
                 "predictions": pd.DataFrame(),
+                "market_inefficiency": pd.DataFrame(),
             }
 
         features_df = self.feature_builder.build_team_offline_features(fixtures_df)
+        features_df = self.ai_feature_generator.generate(features_df)
 
         rows = []
 
@@ -87,12 +93,18 @@ class OfflineEngine:
                     "rolling_goals_for_avg": row["rolling_goals_for_avg"],
                     "rolling_goals_against_avg": row["rolling_goals_against_avg"],
                     "weighted_form_score": row["weighted_form_score"],
+                    "ai_confidence_score": row["ai_confidence_score"],
+                    "ai_defensive_index": row["ai_defensive_index"],
                 }
             )
 
+        predictions_df = pd.DataFrame(rows)
+        market_inefficiency_df = self.market_scanner.scan(predictions_df)
+
         return {
             "features": features_df,
-            "predictions": pd.DataFrame(rows),
+            "predictions": predictions_df,
+            "market_inefficiency": market_inefficiency_df,
         }
 
     def run_reports(self, ranked_df=None):

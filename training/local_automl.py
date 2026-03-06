@@ -1,7 +1,6 @@
 import importlib.util
 
 
-
 class LocalAutoML:
 
     def _has_lib(self, name):

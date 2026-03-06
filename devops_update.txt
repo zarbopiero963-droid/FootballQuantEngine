@@ -1,6 +1,3 @@
-CREA_CARTELLA .github
-CREA_CARTELLA .github/workflows
-
 CREA_FILE README.md
 # ⚽ Football Quant Engine
 
@@ -112,59 +109,6 @@ coll = COLLECT(
     upx=False,
     name="FootballQuantEngine",
 )
-EOF
-
-CREA_FILE .github/workflows/build.yml
-name: Build Portable EXE
-
-on:
-  push:
-    branches: ["**"]
-  workflow_dispatch:
-
-jobs:
-  build-windows:
-    runs-on: windows-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
-
-      - name: Lint
-        run: |
-          ruff check .
-          black --check .
-          isort --check-only .
-
-      - name: Run tests
-        run: |
-          pytest -q
-
-      - name: Build EXE
-        run: |
-          python -m PyInstaller football_quant_engine.spec
-
-      - name: Zip EXE
-        shell: pwsh
-        run: |
-          Compress-Archive -Path dist\FootballQuantEngine\* -DestinationPath FootballQuantEngine-Portable.zip -Force
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: FootballQuantEngine-Windows
-          path: FootballQuantEngine-Portable.zip
 EOF
 
 FIX_WHITESPACE

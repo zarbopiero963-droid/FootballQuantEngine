@@ -273,3 +273,14 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-06_18-06-21.zip
+Backup created backups/backup_2026-03-06_18-06-21.zip
+[CREATE] file engine/cli_runner.py
+[CREATE] file tests/test_cli_runner.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

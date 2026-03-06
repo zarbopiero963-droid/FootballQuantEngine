@@ -9,4 +9,6 @@ scipy
 sqlalchemy
 openpyxl
 pyinstaller
-PySide6 
+PySide6
+matplotlib
+scikit-learn

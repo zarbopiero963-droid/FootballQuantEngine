@@ -6,4 +6,4 @@ profile = "black"
 
 [tool.ruff]
 line-length = 88
-fix = true
+fix = true 

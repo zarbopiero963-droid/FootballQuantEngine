@@ -1,203 +1,239 @@
-CREA_FILE analysis/match_ranking.py
+CREA_FILE analysis/market_pressure.py
 import pandas as pd
 
 
-class MatchRanking:
+class MarketPressureAnalyzer:
 
-    def rank(self, value_bets):
+    def calculate(self, odds_history_df):
 
-        if not value_bets:
+        if odds_history_df.empty:
             return pd.DataFrame()
 
-        df = pd.DataFrame(value_bets)
-
-        if "probability" not in df.columns or "odds" not in df.columns:
-            return df
-
-        df["edge"] = df["probability"] - (1 / df["odds"])
-
-        return df.sort_values(by="edge", ascending=False)
-EOF
-
-CREA_FILE engine/export_manager.py
-from export.csv_exporter import CsvExporter
-from export.excel_exporter import ExcelExporter
-
-
-class ExportManager:
-
-    def __init__(self):
-
-        self.csv_exporter = CsvExporter()
-        self.excel_exporter = ExcelExporter()
-
-    def export(self, value_bets):
-
-        if not value_bets:
-            return
-
-        self.csv_exporter.export_value_bets(
-            "value_bets.csv",
-            value_bets,
-        )
-
-        self.excel_exporter.export_value_bets(
-            "value_bets.xlsx",
-            value_bets,
-        )
-EOF
-
-CREA_FILE engine/value_bet_notifier.py
-from config.settings_manager import load_settings
-from notifications.telegram_notifier import TelegramNotifier
-
-
-class ValueBetNotifier:
-
-    def __init__(self):
-
-        settings = load_settings()
-
-        self.notifier = TelegramNotifier(
-            settings.telegram_token,
-            settings.telegram_chat_id,
-        )
-
-    def notify(self, value_bets):
-
-        if not value_bets:
-            return False
-
-        lines = []
-
-        for vb in value_bets[:10]:
-            lines.append(
-                f"{vb.get('match_id')} | "
-                f"{vb.get('market')} | "
-                f"prob={vb.get('probability'):.3f} | "
-                f"odds={vb.get('odds')}"
+        grouped = (
+            odds_history_df.sort_values("timestamp")
+            .groupby("fixture_id")
+            .agg(
+                opening_home_odds=("home_odds", "first"),
+                closing_home_odds=("home_odds", "last"),
+                opening_draw_odds=("draw_odds", "first"),
+                closing_draw_odds=("draw_odds", "last"),
+                opening_away_odds=("away_odds", "first"),
+                closing_away_odds=("away_odds", "last"),
             )
+            .reset_index()
+        )
 
-        message = "Value Bets Found:\n" + "\n".join(lines)
+        grouped["home_pressure"] = (
+            grouped["opening_home_odds"] - grouped["closing_home_odds"]
+        )
 
-        return self.notifier.send_message(message)
+        grouped["draw_pressure"] = (
+            grouped["opening_draw_odds"] - grouped["closing_draw_odds"]
+        )
+
+        grouped["away_pressure"] = (
+            grouped["opening_away_odds"] - grouped["closing_away_odds"]
+        )
+
+        return grouped
 EOF
 
-CREA_FILE engine/match_ranker.py
-from analysis.match_ranking import MatchRanking
-
-
-class MatchRanker:
-
-    def __init__(self):
-
-        self.ranking = MatchRanking()
-
-    def rank(self, value_bets):
-
-        return self.ranking.rank(value_bets)
-EOF
-
-CREA_FILE tests/test_match_ranking.py
+CREA_FILE training/odds_history_builder.py
 import pandas as pd
 
-from analysis.match_ranking import MatchRanking
+from database.db_manager import connect
 
 
-def test_match_ranking_runs():
+class OddsHistoryBuilder:
 
-    value_bets = [
-        {
-            "match_id": "A_vs_B",
-            "market": "home",
-            "probability": 0.60,
-            "odds": 2.0,
-        },
-        {
-            "match_id": "C_vs_D",
-            "market": "away",
-            "probability": 0.55,
-            "odds": 2.5,
-        },
-    ]
+    def load_odds_history(self):
 
-    ranking = MatchRanking().rank(value_bets)
+        conn = connect()
 
-    assert isinstance(ranking, pd.DataFrame)
-    assert "edge" in ranking.columns
+        df = pd.read_sql_query(
+            """
+            SELECT
+                fixture_id,
+                timestamp,
+                home_odds,
+                draw_odds,
+                away_odds
+            FROM odds_history
+            ORDER BY timestamp ASC
+            """,
+            conn,
+        )
+
+        conn.close()
+
+        return df
 EOF
 
-CREA_FILE engine/job_runner.py
+CREA_FILE training/closing_line_builder.py
 import pandas as pd
 
-from config.settings_manager import load_settings
-from database.db_manager import init_db
-from data.api_football_collector import ApiFootballCollector
-from data.odds_collector import OddsCollector
-from engine.export_manager import ExportManager
-from engine.fixture_mapper import map_api_football_response_to_fixtures
-from engine.match_ranker import MatchRanker
-from engine.odds_mapper import map_odds_events_to_match_id
-from engine.prediction_pipeline import PredictionPipeline
-from engine.repository_saver import RepositorySaver
-from engine.value_bet_notifier import ValueBetNotifier
-from features.feature_engine import FeatureEngine
+from database.db_manager import connect
 
 
-class JobRunner:
+class ClosingLineBuilder:
 
-    def __init__(self):
+    def load_closing_lines(self):
 
-        self.api = ApiFootballCollector()
-        self.odds = OddsCollector()
-        self.pipeline = PredictionPipeline()
-        self.saver = RepositorySaver()
-        self.exporter = ExportManager()
-        self.notifier = ValueBetNotifier()
-        self.ranker = MatchRanker()
+        conn = connect()
 
-        init_db()
+        df = pd.read_sql_query(
+            """
+            SELECT
+                fixture_id,
+                home_odds,
+                draw_odds,
+                away_odds,
+                timestamp
+            FROM odds_history
+            ORDER BY timestamp ASC
+            """,
+            conn,
+        )
 
-    def run_cycle(self):
+        conn.close()
 
-        settings = load_settings()
+        if df.empty:
+            return pd.DataFrame()
 
-        if not settings.api_football_key or not settings.odds_api_key:
-            raise Exception("Missing API keys in settings.json")
-
-        fixtures_response = self.api.get_next_matches()
-        fixtures = map_api_football_response_to_fixtures(fixtures_response)
-
-        rows = []
-
-        for fixture in fixtures:
-            rows.append(
-                {
-                    "home": fixture["home"],
-                    "away": fixture["away"],
-                    "home_goals": fixture.get("home_goals") or 0,
-                    "away_goals": fixture.get("away_goals") or 0,
-                }
+        closing = (
+            df.sort_values("timestamp")
+            .groupby("fixture_id")
+            .agg(
+                closing_home_odds=("home_odds", "last"),
+                closing_draw_odds=("draw_odds", "last"),
+                closing_away_odds=("away_odds", "last"),
             )
+            .reset_index()
+        )
 
-        fixtures_df = pd.DataFrame(rows)
+        return closing
+EOF
 
-        feature_engine = FeatureEngine()
-        features_df = feature_engine.build_features(fixtures_df)
+CREA_FILE training/backtest_engine.py
+import pandas as pd
 
-        odds_events = self.odds.get_odds()
-        odds_data = map_odds_events_to_match_id(odds_events)
+from database.db_manager import connect
 
-        value_bets = self.pipeline.run(features_df, odds_data)
 
-        self.saver.save_all(fixtures, odds_data, value_bets)
-        self.exporter.export(value_bets)
-        self.notifier.notify(value_bets)
+class BacktestEngine:
 
-        ranked = self.ranker.rank(value_bets)
+    def load_predictions(self):
 
-        return ranked
+        conn = connect()
+
+        df = pd.read_sql_query(
+            """
+            SELECT
+                fixture_id,
+                model,
+                home_prob,
+                draw_prob,
+                away_prob,
+                edge,
+                created_at
+            FROM predictions
+            """,
+            conn,
+        )
+
+        conn.close()
+
+        return df
+
+    def load_results(self):
+
+        conn = connect()
+
+        df = pd.read_sql_query(
+            """
+            SELECT
+                fixture_id,
+                home_goals,
+                away_goals
+            FROM fixtures
+            WHERE status = 'FT'
+            """,
+            conn,
+        )
+
+        conn.close()
+
+        return df
+
+    def run(self):
+
+        predictions = self.load_predictions()
+        results = self.load_results()
+
+        if predictions.empty or results.empty:
+            return pd.DataFrame()
+
+        merged = predictions.merge(results, on="fixture_id", how="inner")
+
+        merged["actual_home_win"] = (
+            merged["home_goals"] > merged["away_goals"]
+        ).astype(int)
+
+        merged["actual_draw"] = (
+            merged["home_goals"] == merged["away_goals"]
+        ).astype(int)
+
+        merged["actual_away_win"] = (
+            merged["home_goals"] < merged["away_goals"]
+        ).astype(int)
+
+        return merged
+EOF
+
+CREA_FILE tests/test_market_pressure.py
+import pandas as pd
+
+from analysis.market_pressure import MarketPressureAnalyzer
+
+
+def test_market_pressure_runs():
+
+    df = pd.DataFrame(
+        [
+            {
+                "fixture_id": 1,
+                "timestamp": "2026-03-06T10:00:00",
+                "home_odds": 2.1,
+                "draw_odds": 3.2,
+                "away_odds": 3.5,
+            },
+            {
+                "fixture_id": 1,
+                "timestamp": "2026-03-06T12:00:00",
+                "home_odds": 2.0,
+                "draw_odds": 3.3,
+                "away_odds": 3.6,
+            },
+        ]
+    )
+
+    analyzer = MarketPressureAnalyzer()
+
+    result = analyzer.calculate(df)
+
+    assert isinstance(result, pd.DataFrame)
+    assert "home_pressure" in result.columns
+EOF
+
+CREA_FILE tests/test_backtest_engine.py
+from training.backtest_engine import BacktestEngine
+
+
+def test_backtest_engine_class_exists():
+
+    engine = BacktestEngine()
+
+    assert isinstance(engine, BacktestEngine)
 EOF
 
 FIX_WHITESPACE
-

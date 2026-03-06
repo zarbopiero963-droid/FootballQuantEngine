@@ -11,50 +11,27 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: repo-update-main
-  cancel-in-progress: false
-
 jobs:
-
   update:
-
     runs-on: ubuntu-latest
 
     env:
       PYTHONPATH: ${{ github.workspace }}
 
     steps:
-
-      # -------------------------
-      # CHECKOUT
-      # -------------------------
-
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      # -------------------------
-      # PYTHON
-      # -------------------------
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # -------------------------
-      # INSTALL DEPENDENCIES
-      # -------------------------
-
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-
-      # -------------------------
-      # SHOW TRIGGER COMMIT
-      # -------------------------
 
       - name: Show trigger commit
         run: |
@@ -62,10 +39,6 @@ jobs:
           echo "TRIGGER COMMIT"
           echo "=============================="
           git log -1
-
-      # -------------------------
-      # SHOW DEVOPS COMMANDS
-      # -------------------------
 
       - name: Show DevOps instructions
         run: |
@@ -75,17 +48,9 @@ jobs:
           cat devops_update.txt
           echo "=============================="
 
-      # -------------------------
-      # RUN DEVOPS ENGINE
-      # -------------------------
-
       - name: Run DevOps Engine
         run: |
           python repo_update_engine.py
-
-      # -------------------------
-      # SHOW FILE CHANGES
-      # -------------------------
 
       - name: Show changed files
         run: |
@@ -97,13 +62,10 @@ jobs:
           git diff --stat || true
           echo "=============================="
 
-      # -------------------------
-      # COMMIT CHANGES
-      # -------------------------
-
       - name: Commit changes
         shell: bash
         run: |
+          set -e
 
           git config user.name "repo-bot"
           git config user.email "bot@github.com"
@@ -117,7 +79,6 @@ jobs:
 
           git commit -m "[skip ci] Automated DevOps Engine Update"
 
-          # sincronizza con remoto
           git pull --rebase origin main
 
           git push

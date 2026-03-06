@@ -1,16 +1,20 @@
-from engine.job_runner import JobRunner
-from engine.scheduler import Scheduler
+import sys
+
+from PySide6.QtWidgets import QApplication
+
+from app.controller import AppController
+from ui.main_window import MainWindow
 
 
 def main():
 
-    scheduler = Scheduler(interval_minutes=10)
+    app = QApplication(sys.argv)
 
-    runner = JobRunner()
+    controller = AppController()
+    window = MainWindow(controller)
+    window.show()
 
-    scheduler.add_job(runner.run_cycle)
-
-    scheduler.run()
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

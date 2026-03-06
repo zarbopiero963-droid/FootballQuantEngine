@@ -323,3 +323,47 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-06_22-48-59.zip
+Backup created backups/backup_2026-03-06_22-48-59.zip
+[CREATE] folder ui
+[SKIP] folder exists plugins
+[SKIP] folder exists plugins/models
+[SKIP] content already present in requirements.txt
+[CREATE] file ui/__init__.py
+[CREATE] file ui/settings_window.py
+[CREATE] file ui/dashboard_view.py
+[CREATE] file ui/about_dialog.py
+[CREATE] file ui/main_window.py
+[CREATE] file app/controller.py
+[CREATE] file app/main.py
+[SKIP] file identical plugins/__init__.py
+[SKIP] file identical plugins/models/__init__.py
+[SKIP] file identical plugins/models/poisson_plugin.py
+[SKIP] file identical plugins/models/elo_plugin.py
+[SKIP] file identical plugins/models/bivariate_plugin.py
+[CREATE] file engine/plugin_loader.py
+[CREATE] file engine/prediction_pipeline.py
+[CREATE] file models/bayesian_model.py
+[CREATE] file analysis/probability_markets.py
+[CREATE] file features/offline_features.py
+[CREATE] file analysis/manual_context.py
+[CREATE] file training/csv_importer.py
+[CREATE] file training/backtest_metrics.py
+[CREATE] file analysis/report_generator.py
+[CREATE] file notifications/desktop_popup.py
+[CREATE] file training/local_automl.py
+[CREATE] file engine/offline_engine.py
+[CREATE] file tests/test_ui_imports.py
+[SKIP] file identical tests/test_plugin_loader.py
+[CREATE] file tests/test_probability_markets.py
+[CREATE] file tests/test_backtest_metrics.py
+[CREATE] file tests/test_manual_context.py
+[CREATE] file tests/test_local_automl.py
+[CREATE] file tests/test_offline_engine.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

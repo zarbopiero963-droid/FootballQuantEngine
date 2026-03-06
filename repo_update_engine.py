@@ -22,6 +22,7 @@ CURRENT_COMMAND = "SYSTEM"
 # UTIL
 # -------------------------
 
+
 def timestamp():
     return datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
@@ -66,6 +67,7 @@ def log_already_done(msg):
 # -------------------------
 # BACKUP
 # -------------------------
+
 
 def list_backups():
     ensure_dir(BACKUP_DIR)
@@ -193,6 +195,7 @@ def restore_file_latest(file_path):
 # -------------------------
 # FILE OPS
 # -------------------------
+
 
 def create_folder(path):
     if os.path.exists(path):
@@ -360,6 +363,7 @@ def replace_line_block(path, old_block, new_block):
 # -------------------------
 # AST OPS
 # -------------------------
+
 
 def _read_python_file(path):
     with open(path, "r", encoding="utf-8") as f:
@@ -540,15 +544,20 @@ def refactor_repo(action, old_name, new_name):
                 changed_files += 1
 
     if changed_files == 0:
-        log_already_done(f"Refactor already applied or nothing to change ({old_name} -> {new_name})")
+        log_already_done(
+            f"Refactor already applied or nothing to change ({old_name} -> {new_name})"
+        )
         return
 
-    log(f"{command_prefix()} [REFACTOR_REPO] action={action} old={old_name} new={new_name} changed_files={changed_files}")
+    log(
+        f"{command_prefix()} [REFACTOR_REPO] action={action} old={old_name} new={new_name} changed_files={changed_files}"
+    )
 
 
 # -------------------------
 # WHITESPACE
 # -------------------------
+
 
 def fix_whitespace():
     for root, dirs, files in os.walk("."):
@@ -558,7 +567,9 @@ def fix_whitespace():
             continue
 
         for file in files:
-            if not file.endswith((".py", ".txt", ".md", ".yml", ".yaml", ".json", ".ini")):
+            if not file.endswith(
+                (".py", ".txt", ".md", ".yml", ".yaml", ".json", ".ini")
+            ):
                 continue
 
             path = os.path.join(root, file)
@@ -587,6 +598,7 @@ def fix_whitespace():
 # FORMAT + LINT + TEST
 # -------------------------
 
+
 def run_black():
     log(f"{command_prefix()} Running Black")
     subprocess.run(["black", "."], check=False)
@@ -605,11 +617,7 @@ def run_ruff():
 def run_pytest():
     log(f"{command_prefix()} Running pytest")
 
-    result = subprocess.run(
-        ["pytest", "-v"],
-        capture_output=True,
-        text=True
-    )
+    result = subprocess.run(["pytest", "-v"], capture_output=True, text=True)
 
     print(result.stdout)
     print(result.stderr)
@@ -626,6 +634,7 @@ def run_pytest():
 # PARSER HELPERS
 # -------------------------
 
+
 def read_block(lines, start_index):
     content = []
     i = start_index
@@ -640,6 +649,7 @@ def read_block(lines, start_index):
 # -------------------------
 # PROCESS
 # -------------------------
+
 
 def process():
     set_current_command("AUTO_BACKUP_ALWAYS")

@@ -170,3 +170,16 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+[CMD: AUTO_BACKUP_ALWAYS] Backup created backups/backup_2026-03-06_13-19-08.zip
+[CMD: AUTO_BACKUP_BEFORE_RUN] Backup created backups/backup_2026-03-06_13-19-08.zip
+[CMD: CREA_FILE config/__init__.py] [SKIP] File already identical config/__init__.py -> già fatto
+[CMD: CREA_FILE data/__init__.py] [SKIP] File already identical data/__init__.py -> già fatto
+[CMD: CREA_FILE database/__init__.py] [SKIP] File already identical database/__init__.py -> già fatto
+[CMD: CREA_FILE pytest.ini] [CREATE] pytest.ini
+[CMD: FIX_WHITESPACE] Whitespace fixed
+[CMD: CI_PIPELINE] Whitespace fixed
+[CMD: CI_PIPELINE] Running Black
+[CMD: CI_PIPELINE] Running isort
+[CMD: CI_PIPELINE] Running ruff
+[CMD: CI_PIPELINE] Running pytest
+[CMD: CI_PIPELINE] Tests PASSED

@@ -183,3 +183,19 @@ Tests PASSED
 [CMD: CI_PIPELINE] Running ruff
 [CMD: CI_PIPELINE] Running pytest
 [CMD: CI_PIPELINE] Tests PASSED
+[CMD: AUTO_BACKUP_ALWAYS] Backup created backups/backup_2026-03-06_13-37-50.zip
+[CMD: AUTO_BACKUP_BEFORE_RUN] Backup created backups/backup_2026-03-06_13-37-50.zip
+[CMD: CREA_CARTELLA .github] [SKIP] Folder exists .github -> già fatto
+[CMD: CREA_CARTELLA .github/workflows] [SKIP] Folder exists .github/workflows -> già fatto
+[CMD: APPEND requirements.txt] [MODIFY] requirements.txt
+[CMD: CREA_FILE .gitignore] [CREATE] .gitignore
+[CMD: CREA_FILE README.md] [CREATE] README.md
+[CMD: CREA_FILE football_quant_engine.spec] [CREATE] football_quant_engine.spec
+[CMD: CREA_FILE .github/workflows/build.yml] [CREATE] .github/workflows/build.yml
+[CMD: FIX_WHITESPACE] Whitespace fixed
+[CMD: CI_PIPELINE] Whitespace fixed
+[CMD: CI_PIPELINE] Running Black
+[CMD: CI_PIPELINE] Running isort
+[CMD: CI_PIPELINE] Running ruff
+[CMD: CI_PIPELINE] Running pytest
+[CMD: CI_PIPELINE] Tests PASSED

@@ -9,3 +9,6 @@ isort
 ruff
 openpyxl
 
+
+pyinstaller
+

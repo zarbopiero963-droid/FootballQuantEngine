@@ -1,35 +1,84 @@
-# Football Quant Engine
+# ⚽ Football Quant Engine
 
-Football Quant Engine è un motore quantitativo per analisi delle partite di calcio basato su modelli matematici.
+Football Quant Engine è un motore quantitativo per analisi e predizione delle partite di calcio, costruito in Python con architettura modulare, modelli matematici, dataset locale e supporto a workflow desktop/offline-first.
 
-Funzioni principali:
+Il progetto è pensato per:
 
-- Raccolta dati API-Football
-- Raccolta quote The Odds API
-- Rating ClubElo
-- xG Understat
-- Feature engineering
-- Modelli Poisson
-- Bivariate Poisson
+- analisi pre-match
+- value betting
+- backtesting
+- importazione dati da CSV
+- gestione di dati locali e API
+- export risultati
+- build automatica EXE portabile per Windows
+
+---
+
+## 🚀 Caratteristiche principali
+
+- Motore di analisi modulare
+- Sistema plugin per modelli predittivi
+- Analisi probabilistica delle partite
 - Monte Carlo simulation
-- Edge detection
-- Value betting detection
-- Database SQLite
-- Scheduler automatico
+- Edge detection (value betting)
+- Ranking automatico partite
+- Tracking quote e mercato
+- Dataset builder automatico
+- Backtest engine
 - Export CSV / Excel
 - Notifiche Telegram
+- Report HTML avanzato
+- Dashboard HTML locale
+- UI desktop PySide6
+- Build automatica EXE portabile con GitHub Actions
+- Modalità offline-first con import CSV
 
-Installazione:
+---
 
-pip install -r requirements.txt
+## 🧠 Modelli matematici inclusi
 
-Avvio:
+Il motore include:
 
+- Poisson Model
+- Bivariate Poisson
+- Elo Rating Model
+- Bayesian Probability Model
+- Probability Markets (Over/Under 2.5, BTTS)
+- Monte Carlo Simulation
+
+---
+
+## 📊 Analisi avanzata
+
+Il sistema include anche:
+
+- Market inefficiency scanner
+- League predictability score
+- AI feature generation locale
+- Closing line builder
+- Odds history aggregation
+- Market pressure analysis
+- Backtest metrics:
+  - ROI
+  - Yield
+  - Hit rate
+  - Brier score
+  - Log loss
+
+---
+
+## 🖥️ Interfaccia e modalità di utilizzo
+
+Il progetto supporta più modalità:
+
+- **Desktop UI PySide6**
+- **CLI**
+- **HTML dashboard locale**
+- **Workflow offline-first**
+- **Workflow API-based**
+
+### Avvio UI desktop
+
+```bash
 python app/main.py
-
-Build EXE locale:
-
-pyinstaller football_quant_engine.spec
-
-L'EXE viene generato anche automaticamente su GitHub Actions.
 

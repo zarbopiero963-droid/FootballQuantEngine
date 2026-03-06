@@ -1,5 +1,257 @@
+CREA_CARTELLA ui
 CREA_CARTELLA plugins
 CREA_CARTELLA plugins/models
+
+APPEND requirements.txt
+PySide6
+EOF
+
+CREA_FILE ui/__init__.py
+# ui package
+EOF
+
+CREA_FILE ui/settings_window.py
+from PySide6.QtWidgets import (
+    QFormLayout,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
+
+from config.settings_manager import Settings, load_settings, save_settings
+
+
+class SettingsWindow(QWidget):
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.setWindowTitle("Settings")
+
+        self.api_football_input = QLineEdit()
+        self.odds_api_input = QLineEdit()
+        self.telegram_token_input = QLineEdit()
+        self.telegram_chat_id_input = QLineEdit()
+
+        self.save_button = QPushButton("Save")
+        self.save_button.clicked.connect(self.save)
+
+        form = QFormLayout()
+        form.addRow("API-Football Key", self.api_football_input)
+        form.addRow("Odds API Key", self.odds_api_input)
+        form.addRow("Telegram Token", self.telegram_token_input)
+        form.addRow("Telegram Chat ID", self.telegram_chat_id_input)
+
+        layout = QVBoxLayout()
+        layout.addLayout(form)
+        layout.addWidget(self.save_button)
+
+        self.setLayout(layout)
+
+        self.load_values()
+
+    def load_values(self):
+
+        settings = load_settings()
+
+        self.api_football_input.setText(settings.api_football_key)
+        self.odds_api_input.setText(settings.odds_api_key)
+        self.telegram_token_input.setText(settings.telegram_token)
+        self.telegram_chat_id_input.setText(settings.telegram_chat_id)
+
+    def save(self):
+
+        settings = Settings()
+        settings.api_football_key = self.api_football_input.text().strip()
+        settings.odds_api_key = self.odds_api_input.text().strip()
+        settings.telegram_token = self.telegram_token_input.text().strip()
+        settings.telegram_chat_id = self.telegram_chat_id_input.text().strip()
+
+        save_settings(settings)
+
+        QMessageBox.information(
+            self,
+            "Settings",
+            "Settings saved successfully.",
+        )
+EOF
+
+CREA_FILE ui/dashboard_view.py
+from PySide6.QtWidgets import QLabel, QTextEdit, QVBoxLayout, QWidget
+
+
+class DashboardView(QWidget):
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.title = QLabel("Football Quant Engine Dashboard")
+        self.output = QTextEdit()
+        self.output.setReadOnly(True)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.title)
+        layout.addWidget(self.output)
+
+        self.setLayout(layout)
+
+    def set_text(self, text):
+
+        self.output.setPlainText(text)
+EOF
+
+CREA_FILE ui/about_dialog.py
+from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+
+
+class AboutDialog(QWidget):
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.setWindowTitle("About")
+
+        label = QLabel(
+            "Football Quant Engine\n"
+            "Quantitative football analysis engine\n"
+            "Poisson + Monte Carlo + Value Betting"
+        )
+
+        layout = QVBoxLayout()
+        layout.addWidget(label)
+
+        self.setLayout(layout)
+EOF
+
+CREA_FILE ui/main_window.py
+from PySide6.QtWidgets import (
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QToolBar,
+)
+
+from ui.about_dialog import AboutDialog
+from ui.dashboard_view import DashboardView
+from ui.settings_window import SettingsWindow
+
+
+class MainWindow(QMainWindow):
+
+    def __init__(self, controller):
+
+        super().__init__()
+
+        self.controller = controller
+
+        self.setWindowTitle("Football Quant Engine")
+        self.resize(1000, 700)
+
+        self.dashboard = DashboardView()
+        self.setCentralWidget(self.dashboard)
+
+        self.status_label = QLabel("Ready")
+        self.statusBar().addPermanentWidget(self.status_label)
+
+        toolbar = QToolBar("Main")
+        self.addToolBar(toolbar)
+
+        self.run_button = QPushButton("Run Cycle")
+        self.run_button.clicked.connect(self.run_cycle)
+        toolbar.addWidget(self.run_button)
+
+        self.settings_button = QPushButton("Settings")
+        self.settings_button.clicked.connect(self.open_settings)
+        toolbar.addWidget(self.settings_button)
+
+        self.about_button = QPushButton("About")
+        self.about_button.clicked.connect(self.open_about)
+        toolbar.addWidget(self.about_button)
+
+        self.settings_window = None
+        self.about_dialog = None
+
+    def open_settings(self):
+
+        self.settings_window = SettingsWindow()
+        self.settings_window.show()
+
+    def open_about(self):
+
+        self.about_dialog = AboutDialog()
+        self.about_dialog.show()
+
+    def run_cycle(self):
+
+        try:
+            ranked = self.controller.run_once()
+
+            if ranked is None:
+                self.dashboard.set_text("No results returned.")
+                self.status_label.setText("Completed")
+                return
+
+            if getattr(ranked, "empty", False):
+                self.dashboard.set_text("No value bets found.")
+                self.status_label.setText("Completed")
+                return
+
+            self.dashboard.set_text(ranked.to_string(index=False))
+            self.status_label.setText("Completed")
+
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Run Error",
+                str(exc),
+            )
+            self.status_label.setText("Error")
+EOF
+
+CREA_FILE app/controller.py
+from engine.job_runner import JobRunner
+
+
+class AppController:
+
+    def __init__(self):
+
+        self.runner = JobRunner()
+
+    def run_once(self):
+
+        return self.runner.run_cycle()
+EOF
+
+CREA_FILE app/main.py
+import sys
+
+from PySide6.QtWidgets import QApplication
+
+from app.controller import AppController
+from ui.main_window import MainWindow
+
+
+def main():
+
+    app = QApplication(sys.argv)
+
+    controller = AppController()
+    window = MainWindow(controller)
+    window.show()
+
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()
+EOF
 
 CREA_FILE plugins/__init__.py
 # plugins package
@@ -191,6 +443,752 @@ class PredictionPipeline:
         return value_bets
 EOF
 
+CREA_FILE models/bayesian_model.py
+class BayesianModel:
+
+    def predict(self, home_attack, home_defense, away_attack, away_defense):
+
+        home_strength = home_attack / max(away_defense, 0.0001)
+        away_strength = away_attack / max(home_defense, 0.0001)
+        draw_strength = 1.0
+
+        total = home_strength + draw_strength + away_strength
+
+        if total <= 0:
+            return {
+                "home_win": 0.0,
+                "draw": 0.0,
+                "away_win": 0.0,
+            }
+
+        return {
+            "home_win": home_strength / total,
+            "draw": draw_strength / total,
+            "away_win": away_strength / total,
+        }
+EOF
+
+CREA_FILE analysis/probability_markets.py
+from math import exp, factorial
+
+
+def poisson_pmf(k, lam):
+
+    return exp(-lam) * (lam**k) / factorial(k)
+
+
+class ProbabilityMarkets:
+
+    def score_matrix(self, lambda_home, lambda_away, max_goals=10):
+
+        matrix = []
+
+        for i in range(max_goals + 1):
+            row = []
+            for j in range(max_goals + 1):
+                row.append(
+                    poisson_pmf(i, lambda_home) * poisson_pmf(j, lambda_away)
+                )
+            matrix.append(row)
+
+        return matrix
+
+    def over_under_25(self, lambda_home, lambda_away):
+
+        matrix = self.score_matrix(lambda_home, lambda_away)
+
+        under = 0.0
+        over = 0.0
+
+        for i, row in enumerate(matrix):
+            for j, value in enumerate(row):
+                if i + j <= 2:
+                    under += value
+                else:
+                    over += value
+
+        return {
+            "under_2_5": under,
+            "over_2_5": over,
+        }
+
+    def btts(self, lambda_home, lambda_away):
+
+        p_home_zero = poisson_pmf(0, lambda_home)
+        p_away_zero = poisson_pmf(0, lambda_away)
+        p_both_zero = p_home_zero * p_away_zero
+
+        yes = 1 - p_home_zero - p_away_zero + p_both_zero
+        no = 1 - yes
+
+        return {
+            "btts_yes": yes,
+            "btts_no": no,
+        }
+EOF
+
+CREA_FILE features/offline_features.py
+import pandas as pd
+
+
+class OfflineFeatureBuilder:
+
+    def build_team_offline_features(self, fixtures_df):
+
+        if fixtures_df.empty:
+            return pd.DataFrame()
+
+        rows = []
+
+        teams = set(fixtures_df["home"]).union(set(fixtures_df["away"]))
+
+        for team in teams:
+
+            home_df = fixtures_df[fixtures_df["home"] == team].copy()
+            away_df = fixtures_df[fixtures_df["away"] == team].copy()
+
+            home_played = len(home_df)
+            away_played = len(away_df)
+            total_played = home_played + away_played
+
+            if total_played == 0:
+                continue
+
+            goals_for = home_df["home_goals"].sum() + away_df["away_goals"].sum()
+            goals_against = home_df["away_goals"].sum() + away_df["home_goals"].sum()
+
+            clean_sheets = (
+                (home_df["away_goals"] == 0).sum() +
+                (away_df["home_goals"] == 0).sum()
+            )
+
+            over_25 = (
+                ((home_df["home_goals"] + home_df["away_goals"]) > 2).sum() +
+                ((away_df["home_goals"] + away_df["away_goals"]) > 2).sum()
+            )
+
+            btts = (
+                ((home_df["home_goals"] > 0) & (home_df["away_goals"] > 0)).sum() +
+                ((away_df["home_goals"] > 0) & (away_df["away_goals"] > 0)).sum()
+            )
+
+            recent_home = home_df.tail(5)
+            recent_away = away_df.tail(5)
+
+            recent_df = pd.concat([recent_home, recent_away]).tail(10)
+
+            rolling_goals_for = (
+                recent_home["home_goals"].tolist() +
+                recent_away["away_goals"].tolist()
+            )
+
+            rolling_goals_against = (
+                recent_home["away_goals"].tolist() +
+                recent_away["home_goals"].tolist()
+            )
+
+            weighted_form_score = 0.0
+
+            recent_matches = recent_df.to_dict("records")
+
+            weight = 1.0
+
+            for match in reversed(recent_matches):
+
+                if match["home"] == team:
+                    gf = match["home_goals"]
+                    ga = match["away_goals"]
+                else:
+                    gf = match["away_goals"]
+                    ga = match["home_goals"]
+
+                if gf > ga:
+                    result_points = 3
+                elif gf == ga:
+                    result_points = 1
+                else:
+                    result_points = 0
+
+                weighted_form_score += result_points * weight
+                weight *= 0.85
+
+            rows.append(
+                {
+                    "team": team,
+                    "matches_played": total_played,
+                    "goals_for_avg": goals_for / total_played,
+                    "goals_against_avg": goals_against / total_played,
+                    "clean_sheet_rate": clean_sheets / total_played,
+                    "over_2_5_rate": over_25 / total_played,
+                    "btts_rate": btts / total_played,
+                    "rolling_goals_for_avg": (
+                        sum(rolling_goals_for) / len(rolling_goals_for)
+                        if rolling_goals_for else 0.0
+                    ),
+                    "rolling_goals_against_avg": (
+                        sum(rolling_goals_against) / len(rolling_goals_against)
+                        if rolling_goals_against else 0.0
+                    ),
+                    "weighted_form_score": weighted_form_score,
+                }
+            )
+
+        return pd.DataFrame(rows)
+EOF
+
+CREA_FILE analysis/manual_context.py
+import json
+import os
+
+
+class ManualContextManager:
+
+    def __init__(self, filepath="manual_context.json"):
+
+        self.filepath = filepath
+
+    def load(self):
+
+        if not os.path.exists(self.filepath):
+            return {
+                "lineups": {},
+                "injuries": {},
+                "weather": {},
+            }
+
+        with open(self.filepath, encoding="utf-8") as f:
+            return json.load(f)
+
+    def save(self, data):
+
+        with open(self.filepath, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
+    def get_team_context(self, team_name):
+
+        data = self.load()
+
+        return {
+            "lineup": data.get("lineups", {}).get(team_name, []),
+            "injuries": data.get("injuries", {}).get(team_name, []),
+            "weather": data.get("weather", {}).get(team_name, {}),
+        }
+EOF
+
+CREA_FILE training/csv_importer.py
+import pandas as pd
+
+from database.fixtures_repository import FixturesRepository
+from database.odds_repository import OddsRepository
+
+
+class CsvImporter:
+
+    def __init__(self):
+
+        self.fixtures_repo = FixturesRepository()
+        self.odds_repo = OddsRepository()
+
+    def import_matches(self, filepath):
+
+        df = pd.read_csv(filepath)
+
+        required = [
+            "fixture_id",
+            "league",
+            "season",
+            "home",
+            "away",
+            "match_date",
+            "home_goals",
+            "away_goals",
+            "status",
+        ]
+
+        for col in required:
+            if col not in df.columns:
+                raise ValueError(f"Missing column: {col}")
+
+        for _, row in df.iterrows():
+            self.fixtures_repo.save_fixture(
+                {
+                    "fixture_id": int(row["fixture_id"]),
+                    "league": row["league"],
+                    "season": int(row["season"]),
+                    "home": row["home"],
+                    "away": row["away"],
+                    "match_date": row["match_date"],
+                    "home_goals": int(row["home_goals"]),
+                    "away_goals": int(row["away_goals"]),
+                    "status": row["status"],
+                }
+            )
+
+    def import_odds(self, filepath):
+
+        df = pd.read_csv(filepath)
+
+        required = [
+            "fixture_id",
+            "home_odds",
+            "draw_odds",
+            "away_odds",
+        ]
+
+        for col in required:
+            if col not in df.columns:
+                raise ValueError(f"Missing column: {col}")
+
+        for _, row in df.iterrows():
+            self.odds_repo.save_odds(
+                fixture_id=int(row["fixture_id"]),
+                home_odds=float(row["home_odds"]),
+                draw_odds=float(row["draw_odds"]),
+                away_odds=float(row["away_odds"]),
+            )
+EOF
+
+CREA_FILE training/backtest_metrics.py
+import math
+
+import pandas as pd
+
+
+class BacktestMetrics:
+
+    def calculate(self, backtest_df):
+
+        if backtest_df.empty:
+            return {}
+
+        df = backtest_df.copy()
+
+        df["selected_market"] = None
+
+        for index, row in df.iterrows():
+
+            probs = {
+                "home": row["home_prob"] if pd.notna(row["home_prob"]) else -1,
+                "draw": row["draw_prob"] if pd.notna(row["draw_prob"]) else -1,
+                "away": row["away_prob"] if pd.notna(row["away_prob"]) else -1,
+            }
+
+            selected_market = max(probs, key=probs.get)
+            df.at[index, "selected_market"] = selected_market
+
+        df["won"] = 0
+
+        df.loc[
+            (df["selected_market"] == "home") & (df["actual_home_win"] == 1),
+            "won",
+        ] = 1
+        df.loc[
+            (df["selected_market"] == "draw") & (df["actual_draw"] == 1),
+            "won",
+        ] = 1
+        df.loc[
+            (df["selected_market"] == "away") & (df["actual_away_win"] == 1),
+            "won",
+        ] = 1
+
+        stake = 1.0
+
+        df["profit"] = df["won"].apply(
+            lambda won: stake if won == 1 else -stake
+        )
+
+        total_bets = len(df)
+        total_profit = df["profit"].sum()
+        total_staked = total_bets * stake
+
+        roi = total_profit / total_staked if total_staked else 0.0
+        yield_value = roi
+        hit_rate = df["won"].mean() if total_bets else 0.0
+
+        brier_scores = []
+        log_losses = []
+
+        for _, row in df.iterrows():
+
+            probs = {
+                "home": row["home_prob"] if pd.notna(row["home_prob"]) else 0.0,
+                "draw": row["draw_prob"] if pd.notna(row["draw_prob"]) else 0.0,
+                "away": row["away_prob"] if pd.notna(row["away_prob"]) else 0.0,
+            }
+
+            actual = {
+                "home": row["actual_home_win"],
+                "draw": row["actual_draw"],
+                "away": row["actual_away_win"],
+            }
+
+            brier = 0.0
+
+            for key in ("home", "draw", "away"):
+                brier += (probs[key] - actual[key]) ** 2
+
+            brier_scores.append(brier)
+
+            selected_prob = max(
+                probs["home"],
+                probs["draw"],
+                probs["away"],
+            )
+
+            selected_prob = min(max(selected_prob, 1e-15), 1 - 1e-15)
+
+            actual_selected = int(row["won"])
+
+            if actual_selected == 1:
+                log_loss_value = -math.log(selected_prob)
+            else:
+                log_loss_value = -math.log(1 - selected_prob)
+
+            log_losses.append(log_loss_value)
+
+        bankroll_history = []
+        bankroll = 100.0
+
+        for profit in df["profit"]:
+            bankroll += profit
+            bankroll_history.append(bankroll)
+
+        accuracy_history = []
+        cumulative_correct = 0
+
+        for index, won in enumerate(df["won"], start=1):
+            cumulative_correct += won
+            accuracy_history.append(cumulative_correct / index)
+
+        return {
+            "roi": roi,
+            "yield": yield_value,
+            "hit_rate": hit_rate,
+            "brier_score": sum(brier_scores) / len(brier_scores),
+            "log_loss": sum(log_losses) / len(log_losses),
+            "bankroll_history": bankroll_history,
+            "accuracy_history": accuracy_history,
+        }
+EOF
+
+CREA_FILE analysis/report_generator.py
+import os
+
+
+class ReportGenerator:
+
+    def __init__(self):
+
+        os.makedirs("outputs", exist_ok=True)
+
+    def _line_svg(self, values, title):
+
+        if not values:
+            return f"<h3>{title}</h3><p>No data</p>"
+
+        width = 700
+        height = 220
+        padding = 25
+
+        min_v = min(values)
+        max_v = max(values)
+
+        if max_v == min_v:
+            max_v += 1
+
+        points = []
+
+        for index, value in enumerate(values):
+
+            x = padding + index * (width - 2 * padding) / max(len(values) - 1, 1)
+            y = height - padding - (
+                (value - min_v) / (max_v - min_v)
+            ) * (height - 2 * padding)
+
+            points.append(f"{x},{y}")
+
+        polyline = " ".join(points)
+
+        return (
+            f"<h3>{title}</h3>"
+            f"<svg width='{width}' height='{height}' "
+            f"style='background:#fff;border:1px solid #ccc'>"
+            f"<polyline fill='none' stroke='#2c7be5' stroke-width='2' "
+            f"points='{polyline}' />"
+            f"</svg>"
+        )
+
+    def generate(self, metrics, ranked_df=None):
+
+        html = []
+        html.append("<html><head><title>Football Quant Report</title></head><body>")
+        html.append("<h1>Football Quant Engine Report</h1>")
+
+        if metrics:
+            html.append("<h2>Metrics</h2>")
+            html.append("<ul>")
+            html.append(f"<li>ROI: {metrics.get('roi', 0):.4f}</li>")
+            html.append(f"<li>Yield: {metrics.get('yield', 0):.4f}</li>")
+            html.append(f"<li>Hit Rate: {metrics.get('hit_rate', 0):.4f}</li>")
+            html.append(f"<li>Brier Score: {metrics.get('brier_score', 0):.4f}</li>")
+            html.append(f"<li>Log Loss: {metrics.get('log_loss', 0):.4f}</li>")
+            html.append("</ul>")
+
+            html.append(
+                self._line_svg(
+                    metrics.get("bankroll_history", []),
+                    "Bankroll Chart",
+                )
+            )
+            html.append(
+                self._line_svg(
+                    metrics.get("accuracy_history", []),
+                    "Accuracy Chart",
+                )
+            )
+
+        if ranked_df is not None and not ranked_df.empty:
+            html.append("<h2>Ranked Value Bets</h2>")
+            html.append("<table border='1' cellpadding='6' cellspacing='0'>")
+            html.append("<tr>")
+            for col in ranked_df.columns:
+                html.append(f"<th>{col}</th>")
+            html.append("</tr>")
+
+            for _, row in ranked_df.iterrows():
+                html.append("<tr>")
+                for col in ranked_df.columns:
+                    html.append(f"<td>{row[col]}</td>")
+                html.append("</tr>")
+
+            html.append("</table>")
+
+        html.append("</body></html>")
+
+        with open("outputs/advanced_report.html", "w", encoding="utf-8") as f:
+            f.write("\n".join(html))
+EOF
+
+CREA_FILE notifications/desktop_popup.py
+class DesktopPopup:
+
+    def notify(self, title, message):
+
+        try:
+            from PySide6.QtWidgets import QApplication, QMessageBox
+
+            app = QApplication.instance()
+
+            if app is None:
+                return False
+
+            QMessageBox.information(None, title, message)
+
+            return True
+
+        except Exception:
+            return False
+EOF
+
+CREA_FILE training/local_automl.py
+import importlib.util
+
+import pandas as pd
+
+
+class LocalAutoML:
+
+    def _has_lib(self, name):
+
+        return importlib.util.find_spec(name) is not None
+
+    def available_models(self):
+
+        models = []
+
+        if self._has_lib("sklearn"):
+            models.append("sklearn_random_forest")
+
+        if self._has_lib("xgboost"):
+            models.append("xgboost")
+
+        if self._has_lib("lightgbm"):
+            models.append("lightgbm")
+
+        if self._has_lib("catboost"):
+            models.append("catboost")
+
+        if self._has_lib("optuna"):
+            models.append("optuna")
+
+        return models
+
+    def run(self, dataset_df):
+
+        if dataset_df.empty:
+            return {
+                "available_models": self.available_models(),
+                "best_model": None,
+                "status": "empty_dataset",
+            }
+
+        if "target_home_win" not in dataset_df.columns:
+            return {
+                "available_models": self.available_models(),
+                "best_model": None,
+                "status": "missing_target",
+            }
+
+        available_models = self.available_models()
+
+        return {
+            "available_models": available_models,
+            "best_model": available_models[0] if available_models else None,
+            "rows": len(dataset_df),
+            "status": "ready",
+        }
+EOF
+
+CREA_FILE engine/offline_engine.py
+import pandas as pd
+
+from analysis.manual_context import ManualContextManager
+from analysis.probability_markets import ProbabilityMarkets
+from analysis.report_generator import ReportGenerator
+from features.offline_features import OfflineFeatureBuilder
+from models.bayesian_model import BayesianModel
+from notifications.desktop_popup import DesktopPopup
+from training.backtest_engine import BacktestEngine
+from training.backtest_metrics import BacktestMetrics
+from training.csv_importer import CsvImporter
+from training.dataset_builder import DatasetBuilder
+from training.local_automl import LocalAutoML
+
+
+class OfflineEngine:
+
+    def __init__(self):
+
+        self.csv_importer = CsvImporter()
+        self.feature_builder = OfflineFeatureBuilder()
+        self.bayesian = BayesianModel()
+        self.markets = ProbabilityMarkets()
+        self.manual_context = ManualContextManager()
+        self.dataset_builder = DatasetBuilder()
+        self.backtest_engine = BacktestEngine()
+        self.backtest_metrics = BacktestMetrics()
+        self.report_generator = ReportGenerator()
+        self.desktop_popup = DesktopPopup()
+        self.local_automl = LocalAutoML()
+
+    def import_csv_data(self, matches_csv=None, odds_csv=None):
+
+        if matches_csv:
+            self.csv_importer.import_matches(matches_csv)
+
+        if odds_csv:
+            self.csv_importer.import_odds(odds_csv)
+
+    def run_offline_analysis(self, fixtures_df):
+
+        if fixtures_df.empty:
+            return {
+                "features": pd.DataFrame(),
+                "predictions": pd.DataFrame(),
+            }
+
+        features_df = self.feature_builder.build_team_offline_features(fixtures_df)
+
+        rows = []
+
+        for _, row in features_df.iterrows():
+
+            bayes = self.bayesian.predict(
+                home_attack=row["goals_for_avg"],
+                home_defense=row["goals_against_avg"],
+                away_attack=row["goals_for_avg"],
+                away_defense=row["goals_against_avg"],
+            )
+
+            goal_rate = max(row["goals_for_avg"], 0.1)
+            concede_rate = max(row["goals_against_avg"], 0.1)
+
+            over_under = self.markets.over_under_25(
+                lambda_home=goal_rate,
+                lambda_away=concede_rate,
+            )
+
+            btts = self.markets.btts(
+                lambda_home=goal_rate,
+                lambda_away=concede_rate,
+            )
+
+            rows.append(
+                {
+                    "team": row["team"],
+                    "home_win": bayes["home_win"],
+                    "draw": bayes["draw"],
+                    "away_win": bayes["away_win"],
+                    "over_2_5": over_under["over_2_5"],
+                    "under_2_5": over_under["under_2_5"],
+                    "btts_yes": btts["btts_yes"],
+                    "btts_no": btts["btts_no"],
+                    "clean_sheet_rate": row["clean_sheet_rate"],
+                    "over_2_5_rate": row["over_2_5_rate"],
+                    "btts_rate": row["btts_rate"],
+                    "rolling_goals_for_avg": row["rolling_goals_for_avg"],
+                    "rolling_goals_against_avg": row["rolling_goals_against_avg"],
+                    "weighted_form_score": row["weighted_form_score"],
+                }
+            )
+
+        return {
+            "features": features_df,
+            "predictions": pd.DataFrame(rows),
+        }
+
+    def run_reports(self, ranked_df=None):
+
+        backtest_df = self.backtest_engine.run()
+        metrics = self.backtest_metrics.calculate(backtest_df)
+
+        self.report_generator.generate(
+            metrics=metrics,
+            ranked_df=ranked_df,
+        )
+
+        self.desktop_popup.notify(
+            "Football Quant Engine",
+            "Advanced report generated in outputs/advanced_report.html",
+        )
+
+        dataset_df = self.dataset_builder.build_training_dataset()
+        automl_status = self.local_automl.run(dataset_df)
+
+        return {
+            "metrics": metrics,
+            "automl": automl_status,
+        }
+EOF
+
+CREA_FILE tests/test_ui_imports.py
+import pytest
+
+
+def test_ui_classes_import():
+
+    try:
+        from app.controller import AppController
+        from ui.dashboard_view import DashboardView
+        from ui.main_window import MainWindow
+    except (ModuleNotFoundError, ImportError) as exc:
+        pytest.skip(f"UI dependencies not available in CI: {exc}")
+
+    assert AppController is not None
+    assert DashboardView is not None
+    assert MainWindow is not None
+EOF
+
 CREA_FILE tests/test_plugin_loader.py
 from engine.plugin_loader import PluginLoader
 
@@ -205,5 +1203,118 @@ def test_plugin_loader_loads_plugins():
     assert len(plugins) >= 1
 EOF
 
-FIX_WHITESPACE
+CREA_FILE tests/test_probability_markets.py
+from analysis.probability_markets import ProbabilityMarkets
 
+
+def test_probability_markets_runs():
+
+    markets = ProbabilityMarkets()
+
+    over_under = markets.over_under_25(1.4, 1.2)
+    btts = markets.btts(1.4, 1.2)
+
+    assert "over_2_5" in over_under
+    assert "under_2_5" in over_under
+    assert "btts_yes" in btts
+    assert "btts_no" in btts
+EOF
+
+CREA_FILE tests/test_backtest_metrics.py
+import pandas as pd
+
+from training.backtest_metrics import BacktestMetrics
+
+
+def test_backtest_metrics_runs():
+
+    df = pd.DataFrame(
+        [
+            {
+                "home_prob": 0.60,
+                "draw_prob": None,
+                "away_prob": None,
+                "home_goals": 2,
+                "away_goals": 1,
+                "actual_home_win": 1,
+                "actual_draw": 0,
+                "actual_away_win": 0,
+            }
+        ]
+    )
+
+    metrics = BacktestMetrics().calculate(df)
+
+    assert "roi" in metrics
+    assert "yield" in metrics
+    assert "hit_rate" in metrics
+    assert "brier_score" in metrics
+    assert "log_loss" in metrics
+EOF
+
+CREA_FILE tests/test_manual_context.py
+from analysis.manual_context import ManualContextManager
+
+
+def test_manual_context_manager_class_exists():
+
+    manager = ManualContextManager()
+
+    assert isinstance(manager, ManualContextManager)
+EOF
+
+CREA_FILE tests/test_local_automl.py
+import pandas as pd
+
+from training.local_automl import LocalAutoML
+
+
+def test_local_automl_runs():
+
+    df = pd.DataFrame(
+        [
+            {"target_home_win": 1},
+            {"target_home_win": 0},
+        ]
+    )
+
+    result = LocalAutoML().run(df)
+
+    assert "status" in result
+    assert "available_models" in result
+EOF
+
+CREA_FILE tests/test_offline_engine.py
+import pandas as pd
+
+from engine.offline_engine import OfflineEngine
+
+
+def test_offline_engine_analysis_runs():
+
+    fixtures_df = pd.DataFrame(
+        [
+            {
+                "home": "TeamA",
+                "away": "TeamB",
+                "home_goals": 2,
+                "away_goals": 1,
+            },
+            {
+                "home": "TeamB",
+                "away": "TeamA",
+                "home_goals": 0,
+                "away_goals": 1,
+            },
+        ]
+    )
+
+    engine = OfflineEngine()
+
+    result = engine.run_offline_analysis(fixtures_df)
+
+    assert "features" in result
+    assert "predictions" in result
+EOF
+
+FIX_WHITESPACE

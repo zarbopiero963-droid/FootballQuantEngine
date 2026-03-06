@@ -1,169 +1,170 @@
-CREA_FILE engine/repo_healthcheck.py
-from pathlib import Path
+CREA_CARTELLA .github
+CREA_CARTELLA .github/workflows
 
+CREA_FILE README.md
+# ⚽ Football Quant Engine
 
-class RepoHealthCheck:
+Football Quant Engine è un motore quantitativo per analisi e predizione delle partite di calcio, costruito in Python con architettura modulare, modelli matematici, dataset locale e supporto a workflow desktop/offline-first.
 
-    def required_files(self):
+## Caratteristiche principali
 
-        return [
-            "README.md",
-            "requirements.txt",
-            "football_quant_engine.spec",
-            ".github/workflows/build.yml",
-            "database/schema.sql",
-            "app/main.py",
-            "app/controller.py",
-            "engine/job_runner.py",
-            "engine/prediction_pipeline.py",
-            "engine/plugin_loader.py",
-            "engine/offline_engine.py",
-            "models/poisson_model.py",
-            "models/bivariate_poisson.py",
-            "models/elo_model.py",
-            "models/bayesian_model.py",
-            "analysis/probability_markets.py",
-            "analysis/report_generator.py",
-            "features/feature_engine.py",
-            "features/offline_features.py",
-            "training/dataset_builder.py",
-            "training/backtest_engine.py",
-            "training/backtest_metrics.py",
-            "plugins/models/poisson_plugin.py",
-            "plugins/models/elo_plugin.py",
-            "plugins/models/bivariate_plugin.py",
-        ]
+- Motore di analisi modulare
+- Sistema plugin per modelli predittivi
+- Analisi probabilistica delle partite
+- Monte Carlo simulation
+- Edge detection
+- Ranking automatico
+- Dataset builder
+- Backtest engine
+- Export CSV / Excel
+- Report HTML
+- Dashboard HTML locale
+- UI desktop PySide6
+- Modalità offline-first con import CSV
+- Build automatica EXE con GitHub Actions
 
-    def missing_files(self):
+## Modelli inclusi
 
-        missing = []
+- Poisson Model
+- Bivariate Poisson
+- Elo Model
+- Bayesian Model
+- Probability Markets (Over/Under 2.5, BTTS)
+- Monte Carlo
 
-        for filepath in self.required_files():
-            if not Path(filepath).exists():
-                missing.append(filepath)
+## Avvio
 
-        return missing
+UI desktop:
 
-    def outputs_dir_exists(self):
+python app/main.py
 
-        return Path("outputs").exists()
+CLI:
 
-    def check(self):
+python app/cli.py
 
-        missing = self.missing_files()
+## Build locale
 
-        return {
-            "ok": len(missing) == 0,
-            "missing_files": missing,
-            "outputs_dir_exists": self.outputs_dir_exists(),
-        }
+python -m PyInstaller football_quant_engine.spec
+
+## Build GitHub
+
+Workflow:
+
+.github/workflows/build.yml
+
+Artifact atteso:
+
+FootballQuantEngine-Windows.zip
 EOF
 
-CREA_FILE app/healthcheck.py
-from engine.repo_healthcheck import RepoHealthCheck
+CREA_FILE football_quant_engine.spec
+# -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import collect_all
 
-def run_healthcheck():
+block_cipher = None
 
-    checker = RepoHealthCheck()
+datas = []
+binaries = []
+hiddenimports = []
 
-    return checker.check()
+for pkg in ("numpy", "pandas", "scipy", "PySide6"):
+    pkg_datas, pkg_binaries, pkg_hidden = collect_all(pkg)
+    datas += pkg_datas
+    binaries += pkg_binaries
+    hiddenimports += pkg_hidden
+
+a = Analysis(
+    ["app/desktop_launcher.py"],
+    pathex=["."],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
+    hookspath=[],
+    runtime_hooks=[],
+    excludes=[],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+)
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    [],
+    exclude_binaries=True,
+    name="FootballQuantEngine",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    console=True,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
+    name="FootballQuantEngine",
+)
 EOF
 
-CREA_FILE tests/test_repo_healthcheck.py
-from engine.repo_healthcheck import RepoHealthCheck
+CREA_FILE .github/workflows/build.yml
+name: Build Portable EXE
 
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
 
-def test_repo_healthcheck_runs():
+jobs:
+  build-windows:
+    runs-on: windows-latest
 
-    checker = RepoHealthCheck()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    result = checker.check()
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-    assert isinstance(result, dict)
-    assert "ok" in result
-    assert "missing_files" in result
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Lint
+        run: |
+          ruff check .
+          black --check .
+          isort --check-only .
+
+      - name: Run tests
+        run: |
+          pytest -q
+
+      - name: Build EXE
+        run: |
+          python -m PyInstaller football_quant_engine.spec
+
+      - name: Zip EXE
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist\FootballQuantEngine\* -DestinationPath FootballQuantEngine-Portable.zip -Force
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FootballQuantEngine-Windows
+          path: FootballQuantEngine-Portable.zip
 EOF
 
-CREA_FILE tests/test_healthcheck.py
-from app.healthcheck import run_healthcheck
-
-
-def test_app_healthcheck_runs():
-
-    result = run_healthcheck()
-
-    assert isinstance(result, dict)
-    assert "ok" in result
-EOF
-
-CREA_FILE tests/test_readme_alignment.py
-from pathlib import Path
-
-
-def test_readme_exists_and_not_empty():
-
-    readme = Path("README.md")
-
-    assert readme.exists()
-
-    content = readme.read_text(encoding="utf-8")
-
-    assert len(content.strip()) > 0
-    assert "Football Quant Engine" in content
-EOF
-
-CREA_FILE tests/test_spec_file.py
-from pathlib import Path
-
-
-def test_spec_file_exists():
-
-    spec = Path("football_quant_engine.spec")
-
-    assert spec.exists()
-EOF
-
-CREA_FILE tests/test_workflow_file.py
-from pathlib import Path
-
-
-def test_workflow_file_exists():
-
-    workflow = Path(".github/workflows/build.yml")
-
-    assert workflow.exists()
-EOF
-
-CREA_FILE outputs/.gitkeep
-
-EOF
-
-CREA_FILE database/db_manager.py
-from pathlib import Path
-import sqlite3
-
-from config.constants import DATABASE_NAME
-
-
-BASE_DIR = Path(__file__).resolve().parent
-SCHEMA_PATH = BASE_DIR / "schema.sql"
-
-
-def connect():
-
-    return sqlite3.connect(DATABASE_NAME)
-
-
-def init_db():
-
-    conn = connect()
-
-    with open(SCHEMA_PATH, encoding="utf-8") as f:
-        conn.executescript(f.read())
-
-    conn.commit()
-    conn.close()
-EOF
-
-FIX_WHITESPACE 
+FIX_WHITESPACE

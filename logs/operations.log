@@ -1147,3 +1147,84 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-07_16-15-41.zip
+Backup created backups/backup_2026-03-07_16-15-41.zip
+[WARN] Unknown command: PRODUCT HARDENING 2
+[CREATE] file utils/run_history_manager.py
+[WARN] Unknown command: DASHBOARD METRICS LOADER
+[CREATE] file utils/dashboard_metrics_loader.py
+[WARN] Unknown command: REPORT OPENER
+[CREATE] file utils/report_opener.py
+[WARN] Unknown command: BACKTEST → DASHBOARD CONNECTOR
+[CREATE] file training/backtest_dashboard_connector.py
+[WARN] Unknown command: UPDATE DASHBOARD VIEW
+[WARN] Unknown command: MODIFICA_FILE ui/dashboard_view.py
+[WARN] Unknown command: AGGIUNGI_IMPORT
+[WARN] Unknown command: from utils.run_history_manager import RunHistoryManager
+[WARN] Unknown command: AGGIUNGI_IMPORT
+[WARN] Unknown command: from utils.dashboard_metrics_loader import compute_dashboard_metrics
+[WARN] Unknown command: AGGIUNGI_IMPORT
+[WARN] Unknown command: from utils.report_opener import open_report
+[WARN] Unknown command: AGGIUNGI_IMPORT
+[WARN] Unknown command: import pandas as pd
+[WARN] Unknown command: AGGIUNGI_METODO
+[WARN] Unknown command: def refresh_from_history(self):
+[WARN] Unknown command: history = RunHistoryManager().get_runs()
+[WARN] Unknown command: if not history:
+[WARN] Unknown command: return
+[WARN] Unknown command: last = history[-1]
+[WARN] Unknown command: self.label_bankroll.setText(str(last["bankroll"]))
+[WARN] Unknown command: self.label_roi.setText(str(last["roi"]) + "%")
+[WARN] Unknown command: self.label_yield.setText(str(last["yield"]) + "%")
+[WARN] Unknown command: self.label_hit_rate.setText(str(last["hit_rate"]) + "%")
+[WARN] Unknown command: AGGIUNGI_METODO
+[WARN] Unknown command: def open_last_report(self):
+[WARN] Unknown command: report_path = "outputs/last_report.html"
+[WARN] Unknown command: try:
+[WARN] Unknown command: open_report(report_path)
+[WARN] Unknown command: except Exception as e:
+[WARN] Unknown command: print("Report open error:", e)
+[WARN] Unknown command: EOF
+[WARN] Unknown command: BACKTEST RUNNER UPDATE
+[WARN] Unknown command: MODIFICA_FILE training/backtest_engine.py
+[WARN] Unknown command: AGGIUNGI_IMPORT
+[WARN] Unknown command: from training.backtest_dashboard_connector import BacktestDashboardConnector
+[WARN] Unknown command: NEL_METODO run_backtest AGGIUNGI
+[WARN] Unknown command: connector = BacktestDashboardConnector()
+[WARN] Unknown command: metrics = connector.process_backtest(df_results)
+[WARN] Unknown command: return df_results, metrics
+[WARN] Unknown command: EOF
+[WARN] Unknown command: OUTPUT MANAGER HARDENING
+[WARN] Unknown command: MODIFICA_FILE utils/output_manager.py
+[WARN] Unknown command: AGGIUNGI_METODO
+[WARN] Unknown command: def export_csv(self, df, path="outputs/results.csv"):
+[WARN] Unknown command: import os
+[WARN] Unknown command: os.makedirs("outputs", exist_ok=True)
+[WARN] Unknown command: df.to_csv(path, index=False)
+[WARN] Unknown command: return path
+[WARN] Unknown command: EOF
+[WARN] Unknown command: PROJECT SUMMARY WINDOW UPDATE
+[WARN] Unknown command: MODIFICA_FILE ui/project_summary_window.py
+[WARN] Unknown command: AGGIUNGI_IMPORT
+[WARN] Unknown command: from utils.run_history_manager import RunHistoryManager
+[WARN] Unknown command: AGGIUNGI_METODO
+[WARN] Unknown command: def load_run_history(self):
+[WARN] Unknown command: history = RunHistoryManager().get_runs()
+[WARN] Unknown command: for run in history[-20:]:
+[WARN] Unknown command: row = self.table.rowCount()
+[WARN] Unknown command: self.table.insertRow(row)
+[WARN] Unknown command: self.table.setItem(row, 0, self._item(run["timestamp"]))
+[WARN] Unknown command: self.table.setItem(row, 1, self._item(str(run["roi"])))
+[WARN] Unknown command: self.table.setItem(row, 2, self._item(str(run["hit_rate"])))
+[WARN] Unknown command: self.table.setItem(row, 3, self._item(str(run["yield"])))
+[WARN] Unknown command: EOF
+[WARN] Unknown command: TEST HARDENING
+[CREATE] file tests/test_run_history_manager.py
+[CREATE] file tests/test_dashboard_metrics_loader.py
+[WARN] Unknown command: END PRODUCT HARDENING 2
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

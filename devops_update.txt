@@ -1,415 +1,638 @@
-CREA_FILE engine/probability_calibrator.py
-class ProbabilityCalibrator:
+CREA_FILE ui/dashboard_view.py
+from pathlib import Path
 
-    def __init__(self, shrink=0.12):
+import pandas as pd
+from PySide6.QtWidgets import (
+    QComboBox,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QTextEdit,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
-        self.shrink = shrink
-
-    def calibrate(self, probs):
-
-        home = float(probs.get("home_win", 0.0))
-        draw = float(probs.get("draw", 0.0))
-        away = float(probs.get("away_win", 0.0))
-
-        total = home + draw + away
-        if total <= 0:
-            return {
-                "home_win": 1 / 3,
-                "draw": 1 / 3,
-                "away_win": 1 / 3,
-            }
-
-        home /= total
-        draw /= total
-        away /= total
-
-        uniform = 1 / 3
-
-        home = (1 - self.shrink) * home + self.shrink * uniform
-        draw = (1 - self.shrink) * draw + self.shrink * uniform
-        away = (1 - self.shrink) * away + self.shrink * uniform
-
-        total = home + draw + away
-
-        return {
-            "home_win": home / total,
-            "draw": draw / total,
-            "away_win": away / total,
-        }
-EOF
-
-CREA_FILE engine/model_agreement.py
-class ModelAgreement:
-
-    def calculate(self, plugin_outputs):
-
-        if not plugin_outputs:
-            return 0.0
-
-        def avg(values):
-            return sum(values) / len(values) if values else 0.0
-
-        home_values = [float(x.get("home_win", 0.0)) for x in plugin_outputs]
-        draw_values = [float(x.get("draw", 0.0)) for x in plugin_outputs]
-        away_values = [float(x.get("away_win", 0.0)) for x in plugin_outputs]
-
-        def dispersion(values):
-            if not values:
-                return 1.0
-            mean_value = avg(values)
-            variance = sum((v - mean_value) ** 2 for v in values) / len(values)
-            return variance ** 0.5
-
-        home_disp = dispersion(home_values)
-        draw_disp = dispersion(draw_values)
-        away_disp = dispersion(away_values)
-
-        mean_disp = (home_disp + draw_disp + away_disp) / 3
-
-        agreement = 1.0 - mean_disp * 3
-        agreement = max(0.0, min(1.0, agreement))
-
-        return agreement
-EOF
-
-CREA_FILE engine/market_comparison.py
-class MarketComparison:
-
-    def implied_probabilities(self, odds):
-
-        home_odds = float(odds.get("home", 0) or 0)
-        draw_odds = float(odds.get("draw", 0) or 0)
-        away_odds = float(odds.get("away", 0) or 0)
-
-        raw = {
-            "home_win": 1 / home_odds if home_odds > 0 else 0.0,
-            "draw": 1 / draw_odds if draw_odds > 0 else 0.0,
-            "away_win": 1 / away_odds if away_odds > 0 else 0.0,
-        }
-
-        total = raw["home_win"] + raw["draw"] + raw["away_win"]
-
-        if total <= 0:
-            return {
-                "home_win": 0.0,
-                "draw": 0.0,
-                "away_win": 0.0,
-            }
-
-        return {
-            "home_win": raw["home_win"] / total,
-            "draw": raw["draw"] / total,
-            "away_win": raw["away_win"] / total,
-        }
-
-    def edge_vs_market(self, model_probs, market_probs):
-
-        return {
-            "home_win": float(model_probs.get("home_win", 0.0)) - float(market_probs.get("home_win", 0.0)),
-            "draw": float(model_probs.get("draw", 0.0)) - float(market_probs.get("draw", 0.0)),
-            "away_win": float(model_probs.get("away_win", 0.0)) - float(market_probs.get("away_win", 0.0)),
-        }
-EOF
-
-CREA_FILE strategies/no_bet_filter.py
-class NoBetFilter:
-
-    def __init__(
-        self,
-        min_probability=0.54,
-        min_edge=0.05,
-        min_confidence=0.65,
-        min_agreement=0.60,
-    ):
-
-        self.min_probability = min_probability
-        self.min_edge = min_edge
-        self.min_confidence = min_confidence
-        self.min_agreement = min_agreement
-
-    def decide(self, probability, edge, confidence, agreement):
-
-        probability = float(probability)
-        edge = float(edge)
-        confidence = float(confidence)
-        agreement = float(agreement)
-
-        if (
-            probability >= self.min_probability
-            and edge >= self.min_edge
-            and confidence >= self.min_confidence
-            and agreement >= self.min_agreement
-        ):
-            return "BET"
-
-        if (
-            probability >= self.min_probability * 0.95
-            and edge >= self.min_edge * 0.6
-            and confidence >= self.min_confidence * 0.8
-            and agreement >= self.min_agreement * 0.8
-        ):
-            return "WATCHLIST"
-
-        return "NO_BET"
-EOF
-
-CREA_FILE engine/confidence_engine.py
-class ConfidenceEngine:
-
-    def score(self, probability, edge, agreement):
-
-        probability = max(0.0, min(1.0, float(probability)))
-        edge = max(0.0, float(edge))
-        agreement = max(0.0, min(1.0, float(agreement)))
-
-        edge_score = min(edge / 0.15, 1.0)
-
-        confidence = (
-            probability * 0.45
-            + edge_score * 0.30
-            + agreement * 0.25
-        )
-
-        confidence = max(0.0, min(1.0, confidence))
-
-        return confidence
-EOF
-
-CREA_FILE engine/prediction_pipeline.py
-from engine.confidence_engine import ConfidenceEngine
-from engine.market_comparison import MarketComparison
-from engine.model_agreement import ModelAgreement
-from engine.plugin_loader import PluginLoader
-from engine.probability_calibrator import ProbabilityCalibrator
-from simulation.monte_carlo import MonteCarloSimulator
-from strategies.edge_detector import EdgeDetector
-from strategies.no_bet_filter import NoBetFilter
+from analysis.svg_chart_builder import SvgChartBuilder
+from export.csv_exporter import CsvExporter
+from export.excel_exporter import ExcelExporter
 
 
-class PredictionPipeline:
+class DashboardCard(QFrame):
+
+    def __init__(self, title, value="-"):
+
+        super().__init__()
+
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+
+        self.title_label = QLabel(title)
+        self.value_label = QLabel(str(value))
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.title_label)
+        layout.addWidget(self.value_label)
+
+        self.setLayout(layout)
+
+    def set_value(self, value):
+
+        self.value_label.setText(str(value))
+
+
+class DashboardView(QWidget):
 
     def __init__(self):
 
-        self.loader = PluginLoader()
-        self.simulator = MonteCarloSimulator()
-        self.edge_detector = EdgeDetector()
-        self.calibrator = ProbabilityCalibrator()
-        self.agreement_engine = ModelAgreement()
-        self.market = MarketComparison()
-        self.confidence_engine = ConfidenceEngine()
-        self.no_bet_filter = NoBetFilter()
+        super().__init__()
 
-    def _combine_probabilities(self, plugin_outputs, simulation_probs):
+        self.current_df = pd.DataFrame()
+        self.filtered_df = pd.DataFrame()
+        self.sort_ascending = True
+        self.last_csv_path = "outputs/dashboard_export.csv"
+        self.last_excel_path = "outputs/dashboard_export.xlsx"
 
-        home_prob = sum(
-            output["home_win"] for output in plugin_outputs
-        ) / len(plugin_outputs)
+        self.title = QLabel("Football Quant Engine Dashboard")
 
-        draw_prob = sum(
-            output["draw"] for output in plugin_outputs
-        ) / len(plugin_outputs)
+        self.total_bets_card = DashboardCard("Rows", "0")
+        self.status_card = DashboardCard("Last Status", "Ready")
+        self.columns_card = DashboardCard("Columns", "0")
+        self.filter_card = DashboardCard("Filtered", "0")
 
-        away_prob = sum(
-            output["away_win"] for output in plugin_outputs
-        ) / len(plugin_outputs)
+        self.bet_card = DashboardCard("BET", "0")
+        self.watchlist_card = DashboardCard("WATCHLIST", "0")
+        self.no_bet_card = DashboardCard("NO_BET", "0")
 
-        combined = {
-            "home_win": (home_prob + simulation_probs["home_win"]) / 2,
-            "draw": (draw_prob + simulation_probs["draw"]) / 2,
-            "away_win": (away_prob + simulation_probs["away_win"]) / 2,
-        }
+        self.confidence_avg_card = DashboardCard("Avg Confidence", "0.00")
+        self.agreement_avg_card = DashboardCard("Avg Agreement", "0.00")
+        self.max_edge_card = DashboardCard("Max Market Edge", "0.00")
 
-        return self.calibrator.calibrate(combined)
+        cards_row_1 = QHBoxLayout()
+        cards_row_1.addWidget(self.total_bets_card)
+        cards_row_1.addWidget(self.status_card)
+        cards_row_1.addWidget(self.columns_card)
+        cards_row_1.addWidget(self.filter_card)
 
-    def run(self, features_df, odds_data):
+        cards_row_2 = QHBoxLayout()
+        cards_row_2.addWidget(self.bet_card)
+        cards_row_2.addWidget(self.watchlist_card)
+        cards_row_2.addWidget(self.no_bet_card)
 
-        plugins = self.loader.load_plugins()
+        cards_row_3 = QHBoxLayout()
+        cards_row_3.addWidget(self.confidence_avg_card)
+        cards_row_3.addWidget(self.agreement_avg_card)
+        cards_row_3.addWidget(self.max_edge_card)
 
-        results = []
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search...")
+        self.search_input.textChanged.connect(self.apply_filters)
 
-        for _, row in features_df.iterrows():
-
-            match_id = f"{row['home']}_vs_{row['away']}"
-
-            odds = odds_data.get(match_id)
-            if not odds:
-                continue
-
-            plugin_outputs = []
-
-            for plugin in plugins:
-                plugin_outputs.append(plugin.predict(row))
-
-            if not plugin_outputs:
-                continue
-
-            lambda_home = row["home_attack"] * row["away_defense"]
-            lambda_away = row["away_attack"] * row["home_defense"]
-
-            simulation_probs = self.simulator.simulate(
-                lambda_home,
-                lambda_away,
-            )
-
-            final_probs = self._combine_probabilities(
-                plugin_outputs,
-                simulation_probs,
-            )
-
-            agreement = self.agreement_engine.calculate(plugin_outputs)
-            market_probs = self.market.implied_probabilities(odds)
-            edge_map = self.market.edge_vs_market(final_probs, market_probs)
-
-            market_labels = {
-                "home": "home_win",
-                "draw": "draw",
-                "away": "away_win",
-            }
-
-            odds_labels = {
-                "home": odds.get("home"),
-                "draw": odds.get("draw"),
-                "away": odds.get("away"),
-            }
-
-            for market_name, prob_key in market_labels.items():
-
-                probability = float(final_probs.get(prob_key, 0.0))
-                edge_vs_market = float(edge_map.get(prob_key, 0.0))
-                odds_value = float(odds_labels.get(market_name) or 0.0)
-
-                if odds_value <= 0:
-                    continue
-
-                model_edge = self.edge_detector.calculate_edge(
-                    probability,
-                    odds_value,
-                )
-
-                confidence = self.confidence_engine.score(
-                    probability,
-                    edge_vs_market,
-                    agreement,
-                )
-
-                decision = self.no_bet_filter.decide(
-                    probability=probability,
-                    edge=edge_vs_market,
-                    confidence=confidence,
-                    agreement=agreement,
-                )
-
-                results.append(
-                    {
-                        "match_id": match_id,
-                        "market": market_name,
-                        "probability": probability,
-                        "odds": odds_value,
-                        "model_edge": model_edge,
-                        "market_edge": edge_vs_market,
-                        "confidence": confidence,
-                        "agreement": agreement,
-                        "decision": decision,
-                    }
-                )
-
-        results.sort(
-            key=lambda x: (
-                x["decision"] != "BET",
-                -x["confidence"],
-                -x["market_edge"],
-            )
+        self.decision_filter = QComboBox()
+        self.decision_filter.addItems(
+            ["ALL", "BET", "WATCHLIST", "NO_BET"]
         )
+        self.decision_filter.currentTextChanged.connect(self.apply_filters)
 
-        return results
-EOF
+        self.refresh_button = QPushButton("Refresh")
+        self.refresh_button.clicked.connect(self.refresh_table)
 
-CREA_FILE tests/test_probability_calibrator.py
-from engine.probability_calibrator import ProbabilityCalibrator
+        self.sort_button = QPushButton("Toggle Sort")
+        self.sort_button.clicked.connect(self.toggle_sort)
 
+        self.export_csv_button = QPushButton("Export CSV")
+        self.export_csv_button.clicked.connect(self.export_csv)
 
-def test_probability_calibrator_runs():
+        self.export_excel_button = QPushButton("Export Excel")
+        self.export_excel_button.clicked.connect(self.export_excel)
 
-    calibrator = ProbabilityCalibrator()
+        self.open_csv_button = QPushButton("Open CSV")
+        self.open_csv_button.clicked.connect(self.open_csv)
 
-    result = calibrator.calibrate(
-        {
-            "home_win": 0.50,
-            "draw": 0.25,
-            "away_win": 0.25,
-        }
-    )
+        self.open_excel_button = QPushButton("Open Excel")
+        self.open_excel_button.clicked.connect(self.open_excel)
 
-    total = result["home_win"] + result["draw"] + result["away_win"]
+        controls_layout = QHBoxLayout()
+        controls_layout.addWidget(QLabel("Search"))
+        controls_layout.addWidget(self.search_input)
+        controls_layout.addWidget(QLabel("Decision"))
+        controls_layout.addWidget(self.decision_filter)
+        controls_layout.addWidget(self.refresh_button)
+        controls_layout.addWidget(self.sort_button)
+        controls_layout.addWidget(self.export_csv_button)
+        controls_layout.addWidget(self.export_excel_button)
+        controls_layout.addWidget(self.open_csv_button)
+        controls_layout.addWidget(self.open_excel_button)
 
-    assert 0.999 <= total <= 1.001
-EOF
+        self.results_table = QTableWidget()
+        self.log_output = QTextEdit()
+        self.log_output.setReadOnly(True)
 
-CREA_FILE tests/test_model_agreement.py
-from engine.model_agreement import ModelAgreement
+        self.metrics_output = QTextEdit()
+        self.metrics_output.setReadOnly(True)
 
+        self.history_output = QTextEdit()
+        self.history_output.setReadOnly(True)
 
-def test_model_agreement_runs():
+        self.charts_output = QTextEdit()
+        self.charts_output.setReadOnly(True)
 
-    agreement = ModelAgreement().calculate(
-        [
-            {"home_win": 0.50, "draw": 0.25, "away_win": 0.25},
-            {"home_win": 0.52, "draw": 0.24, "away_win": 0.24},
+        self.inline_status = QLabel("Dashboard ready.")
+
+        self.tabs = QTabWidget()
+
+        results_tab = QWidget()
+        results_layout = QVBoxLayout()
+        results_layout.addWidget(self.results_table)
+        results_tab.setLayout(results_layout)
+
+        log_tab = QWidget()
+        log_layout = QVBoxLayout()
+        log_layout.addWidget(self.log_output)
+        log_tab.setLayout(log_layout)
+
+        history_tab = QWidget()
+        history_layout = QVBoxLayout()
+        history_layout.addWidget(self.history_output)
+        history_tab.setLayout(history_layout)
+
+        metrics_tab = QWidget()
+        metrics_layout = QVBoxLayout()
+        metrics_layout.addWidget(self.metrics_output)
+        metrics_tab.setLayout(metrics_layout)
+
+        charts_tab = QWidget()
+        charts_layout = QVBoxLayout()
+        charts_layout.addWidget(self.charts_output)
+        charts_tab.setLayout(charts_layout)
+
+        self.tabs.addTab(results_tab, "Results")
+        self.tabs.addTab(log_tab, "Log")
+        self.tabs.addTab(history_tab, "History")
+        self.tabs.addTab(metrics_tab, "Metrics")
+        self.tabs.addTab(charts_tab, "Charts")
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.title)
+        layout.addLayout(cards_row_1)
+        layout.addLayout(cards_row_2)
+        layout.addLayout(cards_row_3)
+        layout.addLayout(controls_layout)
+        layout.addWidget(self.tabs)
+        layout.addWidget(self.inline_status)
+
+        self.setLayout(layout)
+
+    def set_status(self, text):
+
+        self.status_card.set_value(text)
+        self.inline_status.setText(f"Status: {text}")
+
+    def append_log(self, text):
+
+        self.log_output.append(str(text))
+
+    def set_log_text(self, text):
+
+        self.log_output.setPlainText(str(text))
+
+    def clear_table(self):
+
+        self.current_df = pd.DataFrame()
+        self.filtered_df = pd.DataFrame()
+        self.results_table.setRowCount(0)
+        self.results_table.setColumnCount(0)
+
+        self.total_bets_card.set_value(0)
+        self.columns_card.set_value(0)
+        self.filter_card.set_value(0)
+        self.bet_card.set_value(0)
+        self.watchlist_card.set_value(0)
+        self.no_bet_card.set_value(0)
+        self.confidence_avg_card.set_value("0.00")
+        self.agreement_avg_card.set_value("0.00")
+        self.max_edge_card.set_value("0.00")
+
+    def set_results_dataframe(self, df):
+
+        if df is None or getattr(df, "empty", False):
+            self.clear_table()
+            return
+
+        self.current_df = df.copy()
+        self.filtered_df = df.copy()
+        self.apply_filters()
+
+    def set_results_from_records(self, records):
+
+        if not records:
+            self.clear_table()
+            return
+
+        df = pd.DataFrame(records)
+        self.set_results_dataframe(df)
+
+    def render_dataframe(self, df):
+
+        if df is None or df.empty:
+            self.results_table.setRowCount(0)
+            self.results_table.setColumnCount(0)
+            self.filter_card.set_value(0)
+            self.inline_status.setText("No rows to display.")
+            self._update_decision_cards(df)
+            return
+
+        columns = list(df.columns)
+        rows = len(df.index)
+
+        self.results_table.setColumnCount(len(columns))
+        self.results_table.setRowCount(rows)
+        self.results_table.setHorizontalHeaderLabels(columns)
+
+        for row_index in range(rows):
+            for col_index, col_name in enumerate(columns):
+                value = df.iloc[row_index][col_name]
+                self.results_table.setItem(
+                    row_index,
+                    col_index,
+                    QTableWidgetItem(str(value)),
+                )
+
+        self.results_table.resizeColumnsToContents()
+
+        self.total_bets_card.set_value(len(self.current_df.index))
+        self.columns_card.set_value(len(columns))
+        self.filter_card.set_value(rows)
+        self.inline_status.setText(f"Showing {rows} rows.")
+
+        self._update_decision_cards(df)
+
+    def _update_decision_cards(self, df):
+
+        if df is None or df.empty or "decision" not in df.columns:
+            self.bet_card.set_value(0)
+            self.watchlist_card.set_value(0)
+            self.no_bet_card.set_value(0)
+            self.confidence_avg_card.set_value("0.00")
+            self.agreement_avg_card.set_value("0.00")
+            self.max_edge_card.set_value("0.00")
+            return
+
+        self.bet_card.set_value(int((df["decision"] == "BET").sum()))
+        self.watchlist_card.set_value(int((df["decision"] == "WATCHLIST").sum()))
+        self.no_bet_card.set_value(int((df["decision"] == "NO_BET").sum()))
+
+        if "confidence" in df.columns and len(df.index) > 0:
+            self.confidence_avg_card.set_value(
+                f"{float(df['confidence'].mean()):.2%}"
+            )
+        else:
+            self.confidence_avg_card.set_value("0.00")
+
+        if "agreement" in df.columns and len(df.index) > 0:
+            self.agreement_avg_card.set_value(
+                f"{float(df['agreement'].mean()):.2%}"
+            )
+        else:
+            self.agreement_avg_card.set_value("0.00")
+
+        if "market_edge" in df.columns and len(df.index) > 0:
+            self.max_edge_card.set_value(
+                f"{float(df['market_edge'].max()):.4f}"
+            )
+        else:
+            self.max_edge_card.set_value("0.00")
+
+    def apply_filters(self):
+
+        if self.current_df is None or self.current_df.empty:
+            self.render_dataframe(pd.DataFrame())
+            return
+
+        filtered = self.current_df.copy()
+
+        query = self.search_input.text().strip().lower()
+        decision_value = self.decision_filter.currentText().strip()
+
+        if query:
+            mask = filtered.astype(str).apply(
+                lambda row: row.str.lower().str.contains(query, na=False).any(),
+                axis=1,
+            )
+            filtered = filtered[mask].copy()
+
+        if decision_value != "ALL" and "decision" in filtered.columns:
+            filtered = filtered[filtered["decision"] == decision_value].copy()
+
+        self.filtered_df = filtered
+        self.render_dataframe(self.filtered_df)
+
+    def refresh_table(self):
+
+        self.apply_filters()
+        self.append_log("Dashboard refreshed.")
+
+    def toggle_sort(self):
+
+        if self.filtered_df is None or self.filtered_df.empty:
+            return
+
+        sort_column = None
+
+        for candidate in ["confidence", "market_edge", "agreement", self.filtered_df.columns[0]]:
+            if candidate in self.filtered_df.columns:
+                sort_column = candidate
+                break
+
+        if sort_column is None:
+            return
+
+        self.filtered_df = self.filtered_df.sort_values(
+            by=sort_column,
+            ascending=self.sort_ascending,
+        )
+        self.sort_ascending = not self.sort_ascending
+        self.render_dataframe(self.filtered_df)
+
+    def export_csv(self):
+
+        if self.filtered_df is None or self.filtered_df.empty:
+            self.append_log("CSV export skipped: no data.")
+            return
+
+        Path("outputs").mkdir(parents=True, exist_ok=True)
+
+        CsvExporter().export_value_bets(
+            self.last_csv_path,
+            self.filtered_df.to_dict("records"),
+        )
+        self.append_log(f"CSV exported: {self.last_csv_path}")
+
+    def export_excel(self):
+
+        if self.filtered_df is None or self.filtered_df.empty:
+            self.append_log("Excel export skipped: no data.")
+            return
+
+        Path("outputs").mkdir(parents=True, exist_ok=True)
+
+        ExcelExporter().export_value_bets(
+            self.last_excel_path,
+            self.filtered_df.to_dict("records"),
+        )
+        self.append_log(f"Excel exported: {self.last_excel_path}")
+
+    def open_csv(self):
+
+        path = Path(self.last_csv_path)
+        if not path.exists():
+            self.append_log("CSV file not found.")
+            return
+
+        import webbrowser
+        webbrowser.open(f"file://{path.resolve()}")
+
+    def open_excel(self):
+
+        path = Path(self.last_excel_path)
+        if not path.exists():
+            self.append_log("Excel file not found.")
+            return
+
+        import webbrowser
+        webbrowser.open(f"file://{path.resolve()}")
+
+    def set_metrics(self, metrics):
+
+        if not metrics:
+            self.metrics_output.setPlainText("No metrics available.")
+            return
+
+        bankroll = (metrics.get("bankroll_history") or [100])[-1]
+
+        lines = [
+            f"Bankroll: {bankroll:.2f}",
+            f"Total Profit: {metrics.get('total_profit', 0):.2f}",
+            f"Total Staked: {metrics.get('total_staked', 0):.2f}",
+            f"ROI: {metrics.get('roi', 0):.2%}",
+            f"Yield: {metrics.get('yield', 0):.2%}",
+            f"Hit Rate: {metrics.get('hit_rate', 0):.2%}",
+            f"Total Bets: {metrics.get('total_bets', 0)}",
+            f"Max Drawdown: {metrics.get('max_drawdown', 0):.2%}",
+            f"Brier Score: {metrics.get('brier_score', 0):.4f}",
+            f"Log Loss: {metrics.get('log_loss', 0):.4f}",
         ]
-    )
+        self.metrics_output.setPlainText("\n".join(lines))
 
-    assert 0.0 <= agreement <= 1.0
+        chart_builder = SvgChartBuilder()
+        chart_html = []
+        chart_html.append(chart_builder.line_chart(
+            metrics.get("bankroll_history", []),
+            "Bankroll / Equity Curve",
+            "#2c7be5",
+        ))
+        chart_html.append(chart_builder.line_chart(
+            metrics.get("accuracy_history", []),
+            "Accuracy Curve",
+            "#28a745",
+        ))
+        chart_html.append(chart_builder.line_chart(
+            metrics.get("drawdown_history", []),
+            "Drawdown Curve",
+            "#dc3545",
+        ))
+
+        self.charts_output.setHtml("".join(chart_html))
 EOF
 
-CREA_FILE tests/test_market_comparison.py
-from engine.market_comparison import MarketComparison
+CREA_FILE ui/main_window.py
+from PySide6.QtWidgets import (
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QToolBar,
+)
+
+from ui.about_dialog import AboutDialog
+from ui.backtest_runner_window import BacktestRunnerWindow
+from ui.dashboard_view import DashboardView
+from ui.final_check_window import FinalCheckWindow
+from ui.manual_context_window import ManualContextWindow
+from ui.offline_import_window import OfflineImportWindow
+from ui.outputs_view import OutputsView
+from ui.project_summary_window import ProjectSummaryWindow
+from ui.settings_window import SettingsWindow
 
 
-def test_market_comparison_runs():
+class MainWindow(QMainWindow):
 
-    market = MarketComparison()
+    def __init__(self, controller):
 
-    implied = market.implied_probabilities(
-        {"home": 2.0, "draw": 3.2, "away": 3.8}
-    )
+        super().__init__()
 
-    total = implied["home_win"] + implied["draw"] + implied["away_win"]
+        self.controller = controller
 
-    assert 0.999 <= total <= 1.001
+        self.setWindowTitle("Football Quant Engine")
+        self.resize(1280, 820)
+
+        self.dashboard = DashboardView()
+        self.setCentralWidget(self.dashboard)
+
+        self.status_label = QLabel("Ready")
+        self.statusBar().addPermanentWidget(self.status_label)
+
+        toolbar = QToolBar("Main")
+        self.addToolBar(toolbar)
+
+        self.run_button = QPushButton("Run Cycle")
+        self.run_button.clicked.connect(self.run_cycle)
+        toolbar.addWidget(self.run_button)
+
+        self.backtest_button = QPushButton("Backtest")
+        self.backtest_button.clicked.connect(self.open_backtest)
+        toolbar.addWidget(self.backtest_button)
+
+        self.settings_button = QPushButton("Settings")
+        self.settings_button.clicked.connect(self.open_settings)
+        toolbar.addWidget(self.settings_button)
+
+        self.offline_import_button = QPushButton("Import CSV")
+        self.offline_import_button.clicked.connect(self.open_offline_import)
+        toolbar.addWidget(self.offline_import_button)
+
+        self.manual_context_button = QPushButton("Manual Context")
+        self.manual_context_button.clicked.connect(self.open_manual_context)
+        toolbar.addWidget(self.manual_context_button)
+
+        self.outputs_button = QPushButton("Outputs")
+        self.outputs_button.clicked.connect(self.open_outputs)
+        toolbar.addWidget(self.outputs_button)
+
+        self.final_check_button = QPushButton("Final Check")
+        self.final_check_button.clicked.connect(self.open_final_check)
+        toolbar.addWidget(self.final_check_button)
+
+        self.project_summary_button = QPushButton("Project Summary")
+        self.project_summary_button.clicked.connect(self.open_project_summary)
+        toolbar.addWidget(self.project_summary_button)
+
+        self.about_button = QPushButton("About")
+        self.about_button.clicked.connect(self.open_about)
+        toolbar.addWidget(self.about_button)
+
+        self.settings_window = None
+        self.about_dialog = None
+        self.offline_import_window = None
+        self.manual_context_window = None
+        self.outputs_view = None
+        self.final_check_window = None
+        self.project_summary_window = None
+        self.backtest_window = None
+
+        self.dashboard.set_status("Ready")
+        self.dashboard.append_log("Application started.")
+
+    def open_settings(self):
+
+        self.settings_window = SettingsWindow()
+        self.settings_window.show()
+
+    def open_about(self):
+
+        self.about_dialog = AboutDialog()
+        self.about_dialog.show()
+
+    def open_offline_import(self):
+
+        self.offline_import_window = OfflineImportWindow()
+        self.offline_import_window.show()
+
+    def open_manual_context(self):
+
+        self.manual_context_window = ManualContextWindow()
+        self.manual_context_window.show()
+
+    def open_outputs(self):
+
+        self.outputs_view = OutputsView()
+        self.outputs_view.show()
+
+    def open_final_check(self):
+
+        self.final_check_window = FinalCheckWindow()
+        self.final_check_window.show()
+
+    def open_project_summary(self):
+
+        self.project_summary_window = ProjectSummaryWindow()
+        self.project_summary_window.show()
+
+    def open_backtest(self):
+
+        self.backtest_window = BacktestRunnerWindow()
+        self.backtest_window.show()
+
+    def run_cycle(self):
+
+        self.dashboard.set_status("Running")
+        self.dashboard.append_log("Run cycle started.")
+
+        try:
+            ranked = self.controller.run_once()
+
+            if ranked is None:
+                self.dashboard.clear_table()
+                self.dashboard.set_log_text("No results returned.")
+                self.dashboard.set_status("Completed")
+                self.status_label.setText("Completed")
+                return
+
+            if isinstance(ranked, list):
+                self.dashboard.set_results_from_records(ranked)
+                self.dashboard.set_log_text(str(ranked))
+                self.dashboard.set_status("Completed")
+                self.status_label.setText("Completed")
+                return
+
+            if getattr(ranked, "empty", False):
+                self.dashboard.clear_table()
+                self.dashboard.set_log_text("No value bets found.")
+                self.dashboard.set_status("Completed")
+                self.status_label.setText("Completed")
+                return
+
+            self.dashboard.set_results_dataframe(ranked)
+            self.dashboard.set_log_text(ranked.to_string(index=False))
+            self.dashboard.set_status("Completed")
+            self.status_label.setText("Completed")
+
+        except Exception as exc:
+            self.dashboard.set_status("Error")
+            self.dashboard.append_log(f"Error: {exc}")
+            QMessageBox.critical(
+                self,
+                "Run Error",
+                str(exc),
+            )
+            self.status_label.setText("Error")
 EOF
 
-CREA_FILE tests/test_no_bet_filter.py
-from strategies.no_bet_filter import NoBetFilter
+CREA_FILE tests/test_decision_dashboard_ui.py
+import pytest
 
 
-def test_no_bet_filter_runs():
+def test_dashboard_view_decision_ui_import():
 
-    filt = NoBetFilter()
+    try:
+        from ui.dashboard_view import DashboardView
+    except (ModuleNotFoundError, ImportError) as exc:
+        pytest.skip(f"UI dependencies not available in CI: {exc}")
 
-    decision = filt.decide(
-        probability=0.57,
-        edge=0.06,
-        confidence=0.72,
-        agreement=0.68,
-    )
-
-    assert decision in ("BET", "WATCHLIST", "NO_BET")
-EOF
-
-CREA_FILE tests/test_confidence_engine.py
-from engine.confidence_engine import ConfidenceEngine
-
-
-def test_confidence_engine_runs():
-
-    score = ConfidenceEngine().score(
-        probability=0.58,
-        edge=0.07,
-        agreement=0.70,
-    )
-
-    assert 0.0 <= score <= 1.0
+    assert DashboardView is not None
 EOF
 
 FIX_WHITESPACE
-

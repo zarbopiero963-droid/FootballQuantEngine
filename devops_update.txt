@@ -168,3 +168,4 @@ def test_open_secondary_windows(qtbot):
 EOF
 
 FIX_WHITESPACE
+

@@ -14,7 +14,7 @@ except Exception as exc:
 
 
 class DummyController:
-    def run_predictions(self):
+    def _results(self):
         return [
             {
                 "match_id": "TeamA_vs_TeamB",
@@ -52,10 +52,10 @@ class DummyController:
         ]
 
     def run_once(self):
-        return self.run_predictions()
+        return self._results()
 
     def run_predictions(self):
-        return self.run_predictions()
+        return self._results()
 
 
 def build_window(qtbot):

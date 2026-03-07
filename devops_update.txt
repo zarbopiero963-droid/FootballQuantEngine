@@ -122,3 +122,4 @@ def test_installed_exe_does_not_exit_immediately():
 EOF
 
 FIX_WHITESPACE
+

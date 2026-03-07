@@ -22,6 +22,7 @@ class OfflineEngine:
         if fixtures_df is None or fixtures_df.empty:
             return {
                 "features": pd.DataFrame(),
+                "predictions": pd.DataFrame(),
                 "rows": 0,
             }
 
@@ -43,8 +44,17 @@ class OfflineEngine:
         features["goal_diff"] = features["home_goals"] - features["away_goals"]
         features["total_goals"] = features["home_goals"] + features["away_goals"]
 
+        predictions = pd.DataFrame(
+            {
+                "home_team": features["home_team"],
+                "away_team": features["away_team"],
+                "predicted_result": features["result"],
+            }
+        )
+
         return {
             "features": features,
+            "predictions": predictions,
             "rows": len(features.index),
         }
 

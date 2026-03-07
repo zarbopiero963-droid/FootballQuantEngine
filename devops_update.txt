@@ -28,3 +28,4 @@ def test_exe_smoke_placeholder():
 EOF
 
 FIX_WHITESPACE
+

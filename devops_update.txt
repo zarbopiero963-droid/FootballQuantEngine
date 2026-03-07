@@ -1,171 +1,68 @@
-CREA_FILE tests/ui/test_main_window_qt.py
-import pytest
+CREA_CARTELLA .github
+CREA_CARTELLA .github/workflows
 
-pytest.importorskip("PySide6")
-pytest.importorskip("pytestqt")
+CREA_FILE .github/workflows/gui-tests.yml
+name: GUI and Desktop Tests
 
-try:
-    from PySide6.QtCore import Qt
-    from ui.main_window import MainWindow
-except Exception as exc:
-    pytest.skip(f"Qt UI not available in this environment: {exc}", allow_module_level=True)
+on:
+  push:
+    branches: ["**"]
+  pull_request:
 
+jobs:
+  test-windows:
+    runs-on: windows-latest
 
-class DummyController:
-    def _results(self):
-        return [
-            {
-                "match_id": "TeamA_vs_TeamB",
-                "market": "home",
-                "probability": 0.58,
-                "odds": 2.05,
-                "model_edge": 0.04,
-                "market_edge": 0.06,
-                "confidence": 0.72,
-                "agreement": 0.68,
-                "decision": "BET",
-            },
-            {
-                "match_id": "TeamC_vs_TeamD",
-                "market": "draw",
-                "probability": 0.31,
-                "odds": 3.10,
-                "model_edge": 0.01,
-                "market_edge": 0.02,
-                "confidence": 0.55,
-                "agreement": 0.52,
-                "decision": "WATCHLIST",
-            },
-            {
-                "match_id": "TeamE_vs_TeamF",
-                "market": "away",
-                "probability": 0.22,
-                "odds": 4.20,
-                "model_edge": -0.01,
-                "market_edge": -0.02,
-                "confidence": 0.34,
-                "agreement": 0.44,
-                "decision": "NO_BET",
-            },
-        ]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    def run_once(self):
-        return self._results()
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-    def run_predictions(self):
-        return self._results()
+      - name: Upgrade pip
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
 
+      - name: Install app dependencies
+        shell: pwsh
+        run: |
+          pip install -r requirements.txt
 
-def build_window(qtbot):
-    controller = DummyController()
-    window = MainWindow(controller)
-    qtbot.addWidget(window)
-    window.show()
-    qtbot.waitUntil(lambda: window.isVisible(), timeout=5000)
-    return window
+      - name: Install test dependencies
+        shell: pwsh
+        run: |
+          pip install -r requirements-dev.txt
 
+      - name: Install PyInstaller
+        shell: pwsh
+        run: |
+          python -m pip install pyinstaller
 
-def test_main_window_opens(qtbot):
-    window = build_window(qtbot)
-    assert "Football Quant Engine" in window.windowTitle()
+      - name: Run logic tests
+        shell: pwsh
+        run: |
+          pytest tests/logic -q
 
+      - name: Run Qt UI tests
+        shell: pwsh
+        run: |
+          pytest tests/ui -q
 
-def test_run_cycle_populates_dashboard(qtbot):
-    window = build_window(qtbot)
+      - name: Build EXE
+        shell: pwsh
+        run: |
+          python -m PyInstaller football_quant_engine.spec
 
-    qtbot.mouseClick(window.run_button, Qt.LeftButton)
-
-    qtbot.waitUntil(
-        lambda: window.dashboard.results_table.rowCount() == 3,
-        timeout=5000,
-    )
-
-    assert window.dashboard.results_table.rowCount() == 3
-    assert window.dashboard.bet_card.value_label.text() == "1"
-    assert window.dashboard.watchlist_card.value_label.text() == "1"
-    assert window.dashboard.no_bet_card.value_label.text() == "1"
-
-
-def test_decision_filter_works(qtbot):
-    window = build_window(qtbot)
-
-    qtbot.mouseClick(window.run_button, Qt.LeftButton)
-
-    qtbot.waitUntil(
-        lambda: window.dashboard.results_table.rowCount() == 3,
-        timeout=5000,
-    )
-
-    window.dashboard.decision_filter.setCurrentText("BET")
-
-    qtbot.waitUntil(
-        lambda: window.dashboard.results_table.rowCount() == 1,
-        timeout=5000,
-    )
-
-    assert window.dashboard.results_table.rowCount() == 1
-
-
-def test_market_filter_works(qtbot):
-    window = build_window(qtbot)
-
-    qtbot.mouseClick(window.run_button, Qt.LeftButton)
-
-    qtbot.waitUntil(
-        lambda: window.dashboard.results_table.rowCount() == 3,
-        timeout=5000,
-    )
-
-    window.dashboard.market_filter.setCurrentText("away")
-
-    qtbot.waitUntil(
-        lambda: window.dashboard.results_table.rowCount() == 1,
-        timeout=5000,
-    )
-
-    assert window.dashboard.results_table.rowCount() == 1
-
-
-def test_search_filter_works(qtbot):
-    window = build_window(qtbot)
-
-    qtbot.mouseClick(window.run_button, Qt.LeftButton)
-
-    qtbot.waitUntil(
-        lambda: window.dashboard.results_table.rowCount() == 3,
-        timeout=5000,
-    )
-
-    window.dashboard.search_input.setText("TeamA_vs_TeamB")
-
-    qtbot.waitUntil(
-        lambda: window.dashboard.results_table.rowCount() == 1,
-        timeout=5000,
-    )
-
-    assert window.dashboard.results_table.rowCount() == 1
-
-
-def test_open_secondary_windows(qtbot):
-    window = build_window(qtbot)
-
-    qtbot.mouseClick(window.settings_button, Qt.LeftButton)
-    qtbot.waitUntil(lambda: window.settings_window is not None, timeout=3000)
-
-    qtbot.mouseClick(window.about_button, Qt.LeftButton)
-    qtbot.waitUntil(lambda: window.about_dialog is not None, timeout=3000)
-
-    qtbot.mouseClick(window.project_summary_button, Qt.LeftButton)
-    qtbot.waitUntil(lambda: window.project_summary_window is not None, timeout=3000)
-
-    qtbot.mouseClick(window.final_check_button, Qt.LeftButton)
-    qtbot.waitUntil(lambda: window.final_check_window is not None, timeout=3000)
-
-    assert window.settings_window is not None
-    assert window.about_dialog is not None
-    assert window.project_summary_window is not None
-    assert window.final_check_window is not None
+      - name: Run installed EXE smoke tests
+        shell: pwsh
+        env:
+          APP_EXE_PATH: dist\FootballQuantEngine\FootballQuantEngine.exe
+        run: |
+          pytest tests/exe -q
 EOF
 
 FIX_WHITESPACE
-

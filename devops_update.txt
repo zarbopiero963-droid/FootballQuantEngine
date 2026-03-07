@@ -1,163 +1,105 @@
-CREA_FILE engine/final_integrity_check.py
-from pathlib import Path
-
-
-class FinalIntegrityCheck:
-
-    def required_paths(self):
-
-        return [
-            "README.md",
-            "requirements.txt",
-            "football_quant_engine.spec",
-            "database/schema.sql",
-            "app/main.py",
-            "app/controller.py",
-            "engine/job_runner.py",
-            "engine/offline_engine.py",
-            "engine/plugin_loader.py",
-            "engine/prediction_pipeline.py",
-            "analysis/probability_markets.py",
-            "analysis/report_generator.py",
-            "features/feature_engine.py",
-            "features/offline_features.py",
-            "models/poisson_model.py",
-            "models/bivariate_poisson.py",
-            "models/elo_model.py",
-            "models/bayesian_model.py",
-            "training/dataset_builder.py",
-            "training/backtest_engine.py",
-            "training/backtest_metrics.py",
-            "ui/main_window.py",
-        ]
-
-    def missing_paths(self):
-
-        missing = []
-
-        for item in self.required_paths():
-            if not Path(item).exists():
-                missing.append(item)
-
-        return missing
-
-    def run(self):
-
-        missing = self.missing_paths()
-
-        return {
-            "ok": len(missing) == 0,
-            "missing": missing,
-            "checked_count": len(self.required_paths()),
-        }
+CREA_FILE app/app_metadata.py
+APP_NAME = "FootballQuantEngine"
+APP_VERSION = "1.0.0"
+APP_AUTHOR = "OpenAI + User Project"
+APP_DESCRIPTION = "Quantitative football analysis engine"
 EOF
 
-CREA_FILE app/final_check.py
-from engine.final_integrity_check import FinalIntegrityCheck
+CREA_FILE app/version_info.py
+from app.app_metadata import (
+    APP_AUTHOR,
+    APP_DESCRIPTION,
+    APP_NAME,
+    APP_VERSION,
+)
 
 
-def run_final_check():
+def get_version_info():
 
-    checker = FinalIntegrityCheck()
-
-    return checker.run()
+    return {
+        "name": APP_NAME,
+        "version": APP_VERSION,
+        "author": APP_AUTHOR,
+        "description": APP_DESCRIPTION,
+    }
 EOF
 
-CREA_FILE engine/project_summary.py
-from pathlib import Path
+CREA_FILE app/desktop_launcher.py
+import sys
 
+from PySide6.QtWidgets import QApplication
+
+from app.controller import AppController
+from app.version_info import get_version_info
+from ui.main_window import MainWindow
+
+
+def main():
+
+    app = QApplication(sys.argv)
+
+    info = get_version_info()
+
+    app.setApplicationName(info["name"])
+    app.setApplicationVersion(info["version"])
+
+    controller = AppController()
+    window = MainWindow(controller)
+    window.setWindowTitle(f"{info['name']} {info['version']}")
+    window.show()
+
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()
+EOF
+
+CREA_FILE tests/test_app_metadata.py
+from app.app_metadata import APP_NAME, APP_VERSION
 from app.version_info import get_version_info
 
 
-class ProjectSummary:
+def test_app_metadata_exists():
 
-    def build(self):
+    assert isinstance(APP_NAME, str)
+    assert isinstance(APP_VERSION, str)
 
-        info = get_version_info()
 
-        return {
-            "name": info["name"],
-            "version": info["version"],
-            "author": info["author"],
-            "description": info["description"],
-            "has_readme": Path("README.md").exists(),
-            "has_spec": Path("football_quant_engine.spec").exists(),
-            "has_license": Path("LICENSE").exists(),
-            "has_contributing": Path("CONTRIBUTING.md").exists(),
-            "has_requirements": Path("requirements.txt").exists(),
-            "has_outputs_dir": Path("outputs").exists(),
-            "core_modules": {
-                "analysis": Path("analysis").exists(),
-                "app": Path("app").exists(),
-                "config": Path("config").exists(),
-                "data": Path("data").exists(),
-                "database": Path("database").exists(),
-                "engine": Path("engine").exists(),
-                "export": Path("export").exists(),
-                "features": Path("features").exists(),
-                "models": Path("models").exists(),
-                "notifications": Path("notifications").exists(),
-                "plugins": Path("plugins").exists(),
-                "simulation": Path("simulation").exists(),
-                "strategies": Path("strategies").exists(),
-                "training": Path("training").exists(),
-                "ui": Path("ui").exists(),
-                "tests": Path("tests").exists(),
-            },
-        }
+def test_version_info_runs():
+
+    info = get_version_info()
+
+    assert "name" in info
+    assert "version" in info
 EOF
 
-CREA_FILE app/project_summary.py
-from engine.project_summary import ProjectSummary
+CREA_FILE tests/test_version_info.py
+from app.version_info import get_version_info
 
 
-def get_project_summary():
+def test_version_info_contains_expected_keys():
 
-    return ProjectSummary().build()
+    info = get_version_info()
+
+    assert "name" in info
+    assert "version" in info
+    assert "author" in info
+    assert "description" in info
 EOF
 
-CREA_FILE tests/test_final_integrity_check.py
-from engine.final_integrity_check import FinalIntegrityCheck
+CREA_FILE tests/test_desktop_launcher_import.py
+import pytest
 
 
-def test_final_integrity_check_runs():
+def test_desktop_launcher_import():
 
-    checker = FinalIntegrityCheck()
+    try:
+        from app.desktop_launcher import main
+    except (ModuleNotFoundError, ImportError) as exc:
+        pytest.skip(f"Desktop launcher dependencies not available in CI: {exc}")
 
-    result = checker.run()
-
-    assert isinstance(result, dict)
-    assert "ok" in result
-    assert "missing" in result
-    assert "checked_count" in result
-EOF
-
-CREA_FILE tests/test_final_check.py
-from app.final_check import run_final_check
-
-
-def test_app_final_check_runs():
-
-    result = run_final_check()
-
-    assert isinstance(result, dict)
-    assert "ok" in result
-    assert "missing" in result
-EOF
-
-CREA_FILE tests/test_project_summary.py
-from app.project_summary import get_project_summary
-
-
-def test_project_summary_runs():
-
-    summary = get_project_summary()
-
-    assert isinstance(summary, dict)
-    assert "name" in summary
-    assert "version" in summary
-    assert "core_modules" in summary
+    assert main is not None
 EOF
 
 FIX_WHITESPACE
-

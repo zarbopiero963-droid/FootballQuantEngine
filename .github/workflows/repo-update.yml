@@ -19,10 +19,12 @@ jobs:
       PYTHONPATH: ${{ github.workspace }}
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repository with PAT
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
+          token: ${{ secrets.REPO_PUSH_TOKEN }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -62,6 +64,10 @@ jobs:
           git diff --stat || true
           echo "=============================="
 
+      - name: Configure git remote with PAT
+        run: |
+          git remote set-url origin https://x-access-token:${{ secrets.REPO_PUSH_TOKEN }}@github.com/${{ github.repository }}.git
+
       - name: Commit changes
         shell: bash
         run: |
@@ -79,6 +85,7 @@ jobs:
 
           git commit -m "[skip ci] Automated DevOps Engine Update"
 
-          git pull --rebase origin main
+          git fetch origin main
+          git rebase origin/main
 
-          git push
+          git push --force-with-lease origin HEAD:main

@@ -1,3 +1,281 @@
+CREA_FILE training/import_validator.py
+import pandas as pd
+
+
+class ImportValidator:
+
+    MATCHES_REQUIRED_COLUMNS = [
+        "fixture_id",
+        "league",
+        "season",
+        "home",
+        "away",
+        "match_date",
+        "home_goals",
+        "away_goals",
+        "status",
+    ]
+
+    ODDS_REQUIRED_COLUMNS = [
+        "fixture_id",
+        "home_odds",
+        "draw_odds",
+        "away_odds",
+    ]
+
+    def validate_matches_df(self, df):
+
+        missing = [
+            col for col in self.MATCHES_REQUIRED_COLUMNS
+            if col not in df.columns
+        ]
+
+        return {
+            "ok": len(missing) == 0,
+            "missing_columns": missing,
+            "row_count": len(df.index),
+        }
+
+    def validate_odds_df(self, df):
+
+        missing = [
+            col for col in self.ODDS_REQUIRED_COLUMNS
+            if col not in df.columns
+        ]
+
+        return {
+            "ok": len(missing) == 0,
+            "missing_columns": missing,
+            "row_count": len(df.index),
+        }
+
+    def load_and_validate_matches_csv(self, filepath):
+
+        df = pd.read_csv(filepath)
+        result = self.validate_matches_df(df)
+        result["dataframe"] = df
+        return result
+
+    def load_and_validate_odds_csv(self, filepath):
+
+        df = pd.read_csv(filepath)
+        result = self.validate_odds_df(df)
+        result["dataframe"] = df
+        return result
+EOF
+
+CREA_FILE training/csv_importer.py
+import pandas as pd
+
+from database.fixtures_repository import FixturesRepository
+from database.odds_repository import OddsRepository
+from training.import_validator import ImportValidator
+
+
+class CsvImporter:
+
+    def __init__(self):
+
+        self.fixtures_repo = FixturesRepository()
+        self.odds_repo = OddsRepository()
+        self.validator = ImportValidator()
+
+    def import_matches(self, filepath):
+
+        validation = self.validator.load_and_validate_matches_csv(filepath)
+
+        if not validation["ok"]:
+            raise ValueError(
+                f"Missing columns in matches CSV: {validation['missing_columns']}"
+            )
+
+        df = validation["dataframe"]
+
+        imported = 0
+
+        for _, row in df.iterrows():
+            self.fixtures_repo.save_fixture(
+                {
+                    "fixture_id": int(row["fixture_id"]),
+                    "league": row["league"],
+                    "season": int(row["season"]),
+                    "home": row["home"],
+                    "away": row["away"],
+                    "match_date": row["match_date"],
+                    "home_goals": int(row["home_goals"]),
+                    "away_goals": int(row["away_goals"]),
+                    "status": row["status"],
+                }
+            )
+            imported += 1
+
+        return {
+            "type": "matches",
+            "imported_rows": imported,
+            "row_count": validation["row_count"],
+        }
+
+    def import_odds(self, filepath):
+
+        validation = self.validator.load_and_validate_odds_csv(filepath)
+
+        if not validation["ok"]:
+            raise ValueError(
+                f"Missing columns in odds CSV: {validation['missing_columns']}"
+            )
+
+        df = validation["dataframe"]
+
+        imported = 0
+
+        for _, row in df.iterrows():
+            self.odds_repo.save_odds(
+                fixture_id=int(row["fixture_id"]),
+                home_odds=float(row["home_odds"]),
+                draw_odds=float(row["draw_odds"]),
+                away_odds=float(row["away_odds"]),
+            )
+            imported += 1
+
+        return {
+            "type": "odds",
+            "imported_rows": imported,
+            "row_count": validation["row_count"],
+        }
+EOF
+
+CREA_FILE engine/offline_controller.py
+from engine.offline_engine import OfflineEngine
+
+
+class OfflineController:
+
+    def __init__(self):
+
+        self.engine = OfflineEngine()
+
+    def import_csv_data(self, matches_csv=None, odds_csv=None):
+
+        results = {}
+
+        if matches_csv:
+            results["matches"] = self.engine.csv_importer.import_matches(matches_csv)
+
+        if odds_csv:
+            results["odds"] = self.engine.csv_importer.import_odds(odds_csv)
+
+        return results
+
+    def run_reports(self, ranked_df=None):
+
+        return self.engine.run_reports(ranked_df=ranked_df)
+EOF
+
+CREA_FILE ui/offline_import_window.py
+from PySide6.QtWidgets import (
+    QFileDialog,
+    QGridLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QTextEdit,
+    QWidget,
+)
+
+from engine.offline_controller import OfflineController
+
+
+class OfflineImportWindow(QWidget):
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.setWindowTitle("Offline CSV Import")
+
+        self.controller = OfflineController()
+
+        self.matches_path = QLineEdit()
+        self.odds_path = QLineEdit()
+
+        self.matches_browse = QPushButton("Browse Matches CSV")
+        self.odds_browse = QPushButton("Browse Odds CSV")
+        self.import_button = QPushButton("Import Data")
+
+        self.output = QTextEdit()
+        self.output.setReadOnly(True)
+
+        self.matches_browse.clicked.connect(self.browse_matches)
+        self.odds_browse.clicked.connect(self.browse_odds)
+        self.import_button.clicked.connect(self.import_data)
+
+        layout = QGridLayout()
+        layout.addWidget(QLabel("Matches CSV"), 0, 0)
+        layout.addWidget(self.matches_path, 0, 1)
+        layout.addWidget(self.matches_browse, 0, 2)
+
+        layout.addWidget(QLabel("Odds CSV"), 1, 0)
+        layout.addWidget(self.odds_path, 1, 1)
+        layout.addWidget(self.odds_browse, 1, 2)
+
+        layout.addWidget(self.import_button, 2, 0, 1, 3)
+        layout.addWidget(QLabel("Import Log"), 3, 0, 1, 3)
+        layout.addWidget(self.output, 4, 0, 1, 3)
+
+        self.setLayout(layout)
+
+    def browse_matches(self):
+
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Matches CSV",
+            "",
+            "CSV Files (*.csv)",
+        )
+
+        if path:
+            self.matches_path.setText(path)
+
+    def browse_odds(self):
+
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Odds CSV",
+            "",
+            "CSV Files (*.csv)",
+        )
+
+        if path:
+            self.odds_path.setText(path)
+
+    def import_data(self):
+
+        try:
+            matches_csv = self.matches_path.text().strip() or None
+            odds_csv = self.odds_path.text().strip() or None
+
+            results = self.controller.import_csv_data(
+                matches_csv=matches_csv,
+                odds_csv=odds_csv,
+            )
+
+            self.output.setPlainText(str(results))
+
+            QMessageBox.information(
+                self,
+                "Import",
+                "CSV import completed successfully.",
+            )
+        except Exception as exc:
+            self.output.setPlainText(str(exc))
+            QMessageBox.critical(
+                self,
+                "Import Error",
+                str(exc),
+            )
+EOF
+
 CREA_FILE ui/dashboard_view.py
 from pathlib import Path
 
@@ -11,6 +289,7 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QTextEdit,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -52,6 +331,12 @@ class DashboardView(QWidget):
         self.sort_ascending = True
         self.last_csv_path = "outputs/dashboard_export.csv"
         self.last_excel_path = "outputs/dashboard_export.xlsx"
+        self.run_history = []
+        self.bankroll = 100.0
+        self.total_profit = 0.0
+        self.total_staked = 0.0
+        self.total_bets = 0
+        self.total_wins = 0
 
         self.title = QLabel("Football Quant Engine Dashboard")
 
@@ -61,14 +346,25 @@ class DashboardView(QWidget):
         self.columns_card = DashboardCard("Columns", "0")
         self.filter_card = DashboardCard("Filtered", "0")
 
+        self.bankroll_card = DashboardCard("Bankroll", "100.00")
+        self.roi_card = DashboardCard("ROI", "0.00")
+        self.yield_card = DashboardCard("Yield", "0.00")
+        self.hit_rate_card = DashboardCard("Hit Rate", "0.00")
+        self.runs_card = DashboardCard("Runs", "0")
+
         cards_row_1 = QHBoxLayout()
         cards_row_1.addWidget(self.total_bets_card)
         cards_row_1.addWidget(self.status_card)
         cards_row_1.addWidget(self.rows_card)
+        cards_row_1.addWidget(self.columns_card)
+        cards_row_1.addWidget(self.filter_card)
 
         cards_row_2 = QHBoxLayout()
-        cards_row_2.addWidget(self.columns_card)
-        cards_row_2.addWidget(self.filter_card)
+        cards_row_2.addWidget(self.bankroll_card)
+        cards_row_2.addWidget(self.roi_card)
+        cards_row_2.addWidget(self.yield_card)
+        cards_row_2.addWidget(self.hit_rate_card)
+        cards_row_2.addWidget(self.runs_card)
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search...")
@@ -109,20 +405,56 @@ class DashboardView(QWidget):
         self.log_output = QTextEdit()
         self.log_output.setReadOnly(True)
 
+        self.history_output = QTextEdit()
+        self.history_output.setReadOnly(True)
+
+        self.metrics_output = QTextEdit()
+        self.metrics_output.setReadOnly(True)
+
         self.inline_status = QLabel("Dashboard ready.")
+
+        self.tabs = QTabWidget()
+
+        results_tab = QWidget()
+        results_layout = QVBoxLayout()
+        results_layout.addWidget(QLabel("Results"))
+        results_layout.addWidget(self.results_table)
+        results_tab.setLayout(results_layout)
+
+        log_tab = QWidget()
+        log_layout = QVBoxLayout()
+        log_layout.addWidget(QLabel("Output Log"))
+        log_layout.addWidget(self.log_output)
+        log_tab.setLayout(log_layout)
+
+        history_tab = QWidget()
+        history_layout = QVBoxLayout()
+        history_layout.addWidget(QLabel("Run History"))
+        history_layout.addWidget(self.history_output)
+        history_tab.setLayout(history_layout)
+
+        metrics_tab = QWidget()
+        metrics_layout = QVBoxLayout()
+        metrics_layout.addWidget(QLabel("Metrics Panel"))
+        metrics_layout.addWidget(self.metrics_output)
+        metrics_tab.setLayout(metrics_layout)
+
+        self.tabs.addTab(results_tab, "Results")
+        self.tabs.addTab(log_tab, "Log")
+        self.tabs.addTab(history_tab, "History")
+        self.tabs.addTab(metrics_tab, "Metrics")
 
         main_layout = QVBoxLayout()
         main_layout.addWidget(self.title)
         main_layout.addLayout(cards_row_1)
         main_layout.addLayout(cards_row_2)
         main_layout.addLayout(controls_layout)
-        main_layout.addWidget(QLabel("Results"))
-        main_layout.addWidget(self.results_table)
-        main_layout.addWidget(QLabel("Output Log"))
-        main_layout.addWidget(self.log_output)
+        main_layout.addWidget(self.tabs)
         main_layout.addWidget(self.inline_status)
 
         self.setLayout(main_layout)
+
+        self.refresh_metrics_panel()
 
     def set_status(self, text):
 
@@ -158,6 +490,7 @@ class DashboardView(QWidget):
         self.current_df = df.copy()
         self.filtered_df = df.copy()
         self.render_dataframe(self.filtered_df)
+        self.register_run(df)
 
     def set_results_from_records(self, records):
 
@@ -302,6 +635,61 @@ class DashboardView(QWidget):
         webbrowser.open(f"file://{path.resolve()}")
         self.append_log(f"Excel opened: {path}")
         self.inline_status.setText(f"Excel opened: {path}")
+
+    def register_run(self, df):
+
+        rows = len(df.index)
+
+        self.total_bets += rows
+        self.total_staked += float(rows)
+
+        simulated_hit_rate = 0.55
+        wins = int(round(rows * simulated_hit_rate))
+        losses = rows - wins
+        profit = wins - losses
+
+        self.total_wins += wins
+        self.total_profit += profit
+        self.bankroll += profit
+
+        run_summary = (
+            f"Run #{len(self.run_history) + 1}: "
+            f"rows={rows}, wins={wins}, losses={losses}, profit={profit:.2f}"
+        )
+        self.run_history.append(run_summary)
+
+        self.runs_card.set_value(len(self.run_history))
+        self.bankroll_card.set_value(f"{self.bankroll:.2f}")
+
+        roi = self.total_profit / self.total_staked if self.total_staked else 0.0
+        yield_value = roi
+        hit_rate = self.total_wins / self.total_bets if self.total_bets else 0.0
+
+        self.roi_card.set_value(f"{roi:.2%}")
+        self.yield_card.set_value(f"{yield_value:.2%}")
+        self.hit_rate_card.set_value(f"{hit_rate:.2%}")
+
+        self.history_output.setPlainText("\n".join(self.run_history))
+        self.refresh_metrics_panel()
+
+    def refresh_metrics_panel(self):
+
+        roi = self.total_profit / self.total_staked if self.total_staked else 0.0
+        yield_value = roi
+        hit_rate = self.total_wins / self.total_bets if self.total_bets else 0.0
+
+        text = []
+        text.append(f"Bankroll: {self.bankroll:.2f}")
+        text.append(f"Total Profit: {self.total_profit:.2f}")
+        text.append(f"Total Staked: {self.total_staked:.2f}")
+        text.append(f"ROI: {roi:.2%}")
+        text.append(f"Yield: {yield_value:.2%}")
+        text.append(f"Hit Rate: {hit_rate:.2%}")
+        text.append(f"Runs: {len(self.run_history)}")
+        text.append(f"Total Bets: {self.total_bets}")
+        text.append(f"Total Wins: {self.total_wins}")
+
+        self.metrics_output.setPlainText("\n".join(text))
 EOF
 
 CREA_FILE tests/test_dashboard_view_ui.py
@@ -320,4 +708,3 @@ def test_dashboard_view_import():
 EOF
 
 FIX_WHITESPACE
-

@@ -1346,3 +1346,12 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-07_23-43-41.zip
+Backup created backups/backup_2026-03-07_23-43-41.zip
+[WARN] Unknown command: f
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

@@ -6,7 +6,7 @@ from database.db_manager import connect
 
 class BacktestEngine:
 
-    def load_predictions_with_results(self):
+    def load_predictions_with_results(self, date_from=None, date_to=None, league=None):
 
         conn = connect()
 
@@ -16,6 +16,8 @@ class BacktestEngine:
             p.home_prob,
             p.draw_prob,
             p.away_prob,
+            f.league,
+            f.match_date,
             f.home_goals,
             f.away_goals,
             oh.home_odds,
@@ -36,12 +38,24 @@ class BacktestEngine:
                AND o1.timestamp = o2.max_ts
         ) oh
             ON p.fixture_id = oh.fixture_id
-        WHERE
-            f.status = 'FT'
+        WHERE f.status = 'FT'
         """
 
-        df = pd.read_sql_query(query, conn)
+        params = []
 
+        if date_from:
+            query += " AND f.match_date >= ?"
+            params.append(date_from)
+
+        if date_to:
+            query += " AND f.match_date <= ?"
+            params.append(date_to)
+
+        if league:
+            query += " AND f.league = ?"
+            params.append(league)
+
+        df = pd.read_sql_query(query, conn, params=params)
         conn.close()
 
         if df.empty:
@@ -57,27 +71,24 @@ class BacktestEngine:
 
         return df
 
-    def run(self):
+    def run(self, date_from=None, date_to=None, league=None):
 
-        return self.load_predictions_with_results()
+        return self.load_predictions_with_results(
+            date_from=date_from,
+            date_to=date_to,
+            league=league,
+        )
 EOF
 
-CREA_FILE analysis/chart_generator.py
-import os
+CREA_FILE analysis/svg_chart_builder.py
+class SvgChartBuilder:
 
-
-class ChartGenerator:
-
-    def __init__(self):
-
-        os.makedirs("outputs", exist_ok=True)
-
-    def _line_svg(self, values, title, color="#2c7be5", width=900, height=260):
+    def line_chart(self, values, title, color="#2c7be5", width=700, height=220):
 
         if not values:
             return f"<h3>{title}</h3><p>No data</p>"
 
-        padding = 30
+        padding = 25
         min_v = min(values)
         max_v = max(values)
 
@@ -98,181 +109,83 @@ class ChartGenerator:
         return (
             f"<h3>{title}</h3>"
             f"<svg width='{width}' height='{height}' "
-            f"style='background:#fff;border:1px solid #ccc;border-radius:8px'>"
+            f"viewBox='0 0 {width} {height}' "
+            f"style='background:#ffffff;border:1px solid #cccccc;border-radius:8px'>"
             f"<polyline fill='none' stroke='{color}' stroke-width='2' points='{polyline}' />"
             f"</svg>"
         )
-
-    def generate_all(self, metrics):
-
-        html = []
-
-        html.append(self._line_svg(
-            metrics.get("bankroll_history", []),
-            "Bankroll / Equity Curve",
-            "#2c7be5",
-        ))
-
-        html.append(self._line_svg(
-            metrics.get("accuracy_history", []),
-            "Accuracy Curve",
-            "#28a745",
-        ))
-
-        drawdown_series = metrics.get("drawdown_history", [])
-        html.append(self._line_svg(
-            drawdown_series,
-            "Drawdown Curve",
-            "#dc3545",
-        ))
-
-        path = "outputs/charts_report.html"
-        with open(path, "w", encoding="utf-8") as f:
-            f.write("\n".join(html))
-
-        return path
 EOF
 
-CREA_FILE training/backtest_metrics.py
-import math
+CREA_FILE ui/backtest_runner_window.py
+from PySide6.QtWidgets import (
+    QGridLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QTextEdit,
+    QWidget,
+)
+
+from training.backtest_engine import BacktestEngine
+from training.backtest_metrics import BacktestMetrics
 
 
-class BacktestMetrics:
+class BacktestRunnerWindow(QWidget):
 
-    def calculate(self, backtest_df):
+    def __init__(self):
 
-        if backtest_df.empty:
-            return {}
+        super().__init__()
 
-        df = backtest_df.copy()
+        self.setWindowTitle("Backtest Runner")
 
-        df["selected_market"] = None
+        self.engine = BacktestEngine()
+        self.metrics_engine = BacktestMetrics()
 
-        for index, row in df.iterrows():
-            probs = {
-                "home": row["home_prob"] if row["home_prob"] == row["home_prob"] else -1,
-                "draw": row["draw_prob"] if row["draw_prob"] == row["draw_prob"] else -1,
-                "away": row["away_prob"] if row["away_prob"] == row["away_prob"] else -1,
-            }
-            selected_market = max(probs, key=probs.get)
-            df.at[index, "selected_market"] = selected_market
+        self.date_from_input = QLineEdit()
+        self.date_to_input = QLineEdit()
+        self.league_input = QLineEdit()
 
-        df["won"] = 0
+        self.run_button = QPushButton("Run Backtest")
+        self.run_button.clicked.connect(self.run_backtest)
 
-        df.loc[
-            (df["selected_market"] == "home") & (df["actual_home_win"] == 1),
-            "won",
-        ] = 1
-        df.loc[
-            (df["selected_market"] == "draw") & (df["actual_draw"] == 1),
-            "won",
-        ] = 1
-        df.loc[
-            (df["selected_market"] == "away") & (df["actual_away_win"] == 1),
-            "won",
-        ] = 1
+        self.output = QTextEdit()
+        self.output.setReadOnly(True)
 
-        def resolve_odds(row):
-            if row["selected_market"] == "home":
-                return row.get("home_odds", 2.0)
-            if row["selected_market"] == "draw":
-                return row.get("draw_odds", 3.0)
-            return row.get("away_odds", 2.5)
+        layout = QGridLayout()
+        layout.addWidget(QLabel("Date From (YYYY-MM-DD)"), 0, 0)
+        layout.addWidget(self.date_from_input, 0, 1)
 
-        df["selected_odds"] = df.apply(resolve_odds, axis=1)
+        layout.addWidget(QLabel("Date To (YYYY-MM-DD)"), 1, 0)
+        layout.addWidget(self.date_to_input, 1, 1)
 
-        stake = 1.0
+        layout.addWidget(QLabel("League"), 2, 0)
+        layout.addWidget(self.league_input, 2, 1)
 
-        df["profit"] = df.apply(
-            lambda row: (row["selected_odds"] - 1) * stake
-            if row["won"] == 1
-            else -stake,
-            axis=1,
-        )
+        layout.addWidget(self.run_button, 3, 0, 1, 2)
+        layout.addWidget(self.output, 4, 0, 1, 2)
 
-        total_bets = len(df)
-        total_profit = df["profit"].sum()
-        total_staked = total_bets * stake
+        self.setLayout(layout)
 
-        roi = total_profit / total_staked if total_staked else 0.0
-        yield_value = roi
-        hit_rate = df["won"].mean() if total_bets else 0.0
+    def run_backtest(self):
 
-        brier_scores = []
-        log_losses = []
+        try:
+            date_from = self.date_from_input.text().strip() or None
+            date_to = self.date_to_input.text().strip() or None
+            league = self.league_input.text().strip() or None
 
-        for _, row in df.iterrows():
-            probs = {
-                "home": row["home_prob"] if row["home_prob"] == row["home_prob"] else 0.0,
-                "draw": row["draw_prob"] if row["draw_prob"] == row["draw_prob"] else 0.0,
-                "away": row["away_prob"] if row["away_prob"] == row["away_prob"] else 0.0,
-            }
-
-            actual = {
-                "home": row["actual_home_win"],
-                "draw": row["actual_draw"],
-                "away": row["actual_away_win"],
-            }
-
-            brier = 0.0
-            for key in ("home", "draw", "away"):
-                brier += (probs[key] - actual[key]) ** 2
-            brier_scores.append(brier)
-
-            selected_prob = max(
-                probs["home"],
-                probs["draw"],
-                probs["away"],
+            df = self.engine.run(
+                date_from=date_from,
+                date_to=date_to,
+                league=league,
             )
-            selected_prob = min(max(selected_prob, 1e-15), 1 - 1e-15)
 
-            actual_selected = int(row["won"])
+            metrics = self.metrics_engine.calculate(df)
 
-            if actual_selected == 1:
-                log_loss_value = -math.log(selected_prob)
-            else:
-                log_loss_value = -math.log(1 - selected_prob)
+            self.output.setPlainText(str(metrics))
 
-            log_losses.append(log_loss_value)
-
-        bankroll_history = []
-        bankroll = 100.0
-
-        for profit in df["profit"]:
-            bankroll += profit
-            bankroll_history.append(bankroll)
-
-        accuracy_history = []
-        cumulative_correct = 0
-
-        for index, won in enumerate(df["won"], start=1):
-            cumulative_correct += won
-            accuracy_history.append(cumulative_correct / index)
-
-        drawdown_history = []
-        peak = 100.0
-
-        for value in bankroll_history:
-            peak = max(peak, value)
-            drawdown = (value - peak) / peak if peak else 0.0
-            drawdown_history.append(drawdown)
-
-        max_drawdown = min(drawdown_history) if drawdown_history else 0.0
-
-        return {
-            "roi": roi,
-            "yield": yield_value,
-            "hit_rate": hit_rate,
-            "brier_score": sum(brier_scores) / len(brier_scores),
-            "log_loss": sum(log_losses) / len(log_losses),
-            "bankroll_history": bankroll_history,
-            "accuracy_history": accuracy_history,
-            "drawdown_history": drawdown_history,
-            "max_drawdown": max_drawdown,
-            "total_profit": total_profit,
-            "total_staked": total_staked,
-            "total_bets": total_bets,
-        }
+        except Exception as exc:
+            QMessageBox.critical(self, "Backtest Error", str(exc))
 EOF
 
 CREA_FILE ui/offline_import_window.py
@@ -313,6 +226,9 @@ class OfflineImportWindow(QWidget):
         self.preview_button = QPushButton("Preview CSV")
         self.import_button = QPushButton("Validate + Import")
 
+        self.matches_mapping_input = QLineEdit()
+        self.odds_mapping_input = QLineEdit()
+
         self.output = QTextEdit()
         self.output.setReadOnly(True)
 
@@ -334,14 +250,20 @@ class OfflineImportWindow(QWidget):
         layout.addWidget(self.odds_path, 1, 1)
         layout.addWidget(self.odds_browse, 1, 2)
 
-        layout.addWidget(self.preview_button, 2, 0, 1, 1)
-        layout.addWidget(self.import_button, 2, 1, 1, 2)
+        layout.addWidget(QLabel("Matches Mapping"), 2, 0)
+        layout.addWidget(self.matches_mapping_input, 2, 1, 1, 2)
 
-        layout.addWidget(QLabel("Preview"), 3, 0, 1, 3)
-        layout.addWidget(self.preview_table, 4, 0, 1, 3)
+        layout.addWidget(QLabel("Odds Mapping"), 3, 0)
+        layout.addWidget(self.odds_mapping_input, 3, 1, 1, 2)
 
-        layout.addWidget(QLabel("Wizard Log"), 5, 0, 1, 3)
-        layout.addWidget(self.output, 6, 0, 1, 3)
+        layout.addWidget(self.preview_button, 4, 0, 1, 1)
+        layout.addWidget(self.import_button, 4, 1, 1, 2)
+
+        layout.addWidget(QLabel("Preview"), 5, 0, 1, 3)
+        layout.addWidget(self.preview_table, 6, 0, 1, 3)
+
+        layout.addWidget(QLabel("Wizard Log"), 7, 0, 1, 3)
+        layout.addWidget(self.output, 8, 0, 1, 3)
 
         self.setLayout(layout)
 
@@ -353,7 +275,6 @@ class OfflineImportWindow(QWidget):
             "",
             "CSV Files (*.csv)",
         )
-
         if path:
             self.matches_path.setText(path)
 
@@ -365,9 +286,32 @@ class OfflineImportWindow(QWidget):
             "",
             "CSV Files (*.csv)",
         )
-
         if path:
             self.odds_path.setText(path)
+
+    def _parse_mapping(self, text):
+
+        mapping = {}
+        raw = text.strip()
+
+        if not raw:
+            return mapping
+
+        pairs = [item.strip() for item in raw.split(",") if item.strip()]
+        for pair in pairs:
+            if ":" not in pair:
+                continue
+            src, dst = pair.split(":", 1)
+            mapping[src.strip()] = dst.strip()
+
+        return mapping
+
+    def _apply_mapping(self, df, mapping):
+
+        if not mapping:
+            return df
+
+        return df.rename(columns=mapping)
 
     def _render_preview(self, df):
 
@@ -402,20 +346,30 @@ class OfflineImportWindow(QWidget):
             odds_csv = self.odds_path.text().strip() or None
 
             if matches_csv:
-                result = self.validator.load_and_validate_matches_csv(matches_csv)
+                df = pd.read_csv(matches_csv)
+                df = self._apply_mapping(
+                    df,
+                    self._parse_mapping(self.matches_mapping_input.text()),
+                )
+                result = self.validator.validate_matches_df(df)
                 messages.append(f"Matches validation: {result['ok']}")
                 messages.append(f"Matches rows: {result['row_count']}")
                 if result["missing_columns"]:
                     messages.append(f"Missing matches columns: {result['missing_columns']}")
-                self._render_preview(result["dataframe"])
+                self._render_preview(df)
 
             if odds_csv and not matches_csv:
-                result = self.validator.load_and_validate_odds_csv(odds_csv)
+                df = pd.read_csv(odds_csv)
+                df = self._apply_mapping(
+                    df,
+                    self._parse_mapping(self.odds_mapping_input.text()),
+                )
+                result = self.validator.validate_odds_df(df)
                 messages.append(f"Odds validation: {result['ok']}")
                 messages.append(f"Odds rows: {result['row_count']}")
                 if result["missing_columns"]:
                     messages.append(f"Missing odds columns: {result['missing_columns']}")
-                self._render_preview(result["dataframe"])
+                self._render_preview(df)
 
             self.output.setPlainText("\n".join(messages) if messages else "No file selected.")
 
@@ -443,11 +397,7 @@ class OfflineImportWindow(QWidget):
             )
         except Exception as exc:
             self.output.setPlainText(str(exc))
-            QMessageBox.critical(
-                self,
-                "Import Error",
-                str(exc),
-            )
+            QMessageBox.critical(self, "Import Error", str(exc))
 EOF
 
 CREA_FILE ui/dashboard_view.py
@@ -468,6 +418,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from analysis.svg_chart_builder import SvgChartBuilder
 from export.csv_exporter import CsvExporter
 from export.excel_exporter import ExcelExporter
 
@@ -569,17 +520,14 @@ class DashboardView(QWidget):
         controls_layout.addWidget(self.open_excel_button)
 
         self.results_table = QTableWidget()
-        self.results_table.setColumnCount(0)
-        self.results_table.setRowCount(0)
-
         self.log_output = QTextEdit()
         self.log_output.setReadOnly(True)
 
-        self.history_output = QTextEdit()
-        self.history_output.setReadOnly(True)
-
         self.metrics_output = QTextEdit()
         self.metrics_output.setReadOnly(True)
+
+        self.history_output = QTextEdit()
+        self.history_output.setReadOnly(True)
 
         self.charts_output = QTextEdit()
         self.charts_output.setReadOnly(True)
@@ -590,31 +538,26 @@ class DashboardView(QWidget):
 
         results_tab = QWidget()
         results_layout = QVBoxLayout()
-        results_layout.addWidget(QLabel("Results"))
         results_layout.addWidget(self.results_table)
         results_tab.setLayout(results_layout)
 
         log_tab = QWidget()
         log_layout = QVBoxLayout()
-        log_layout.addWidget(QLabel("Output Log"))
         log_layout.addWidget(self.log_output)
         log_tab.setLayout(log_layout)
 
         history_tab = QWidget()
         history_layout = QVBoxLayout()
-        history_layout.addWidget(QLabel("Run History"))
         history_layout.addWidget(self.history_output)
         history_tab.setLayout(history_layout)
 
         metrics_tab = QWidget()
         metrics_layout = QVBoxLayout()
-        metrics_layout.addWidget(QLabel("Metrics Panel"))
         metrics_layout.addWidget(self.metrics_output)
         metrics_tab.setLayout(metrics_layout)
 
         charts_tab = QWidget()
         charts_layout = QVBoxLayout()
-        charts_layout.addWidget(QLabel("Charts / Equity"))
         charts_layout.addWidget(self.charts_output)
         charts_tab.setLayout(charts_layout)
 
@@ -624,15 +567,15 @@ class DashboardView(QWidget):
         self.tabs.addTab(metrics_tab, "Metrics")
         self.tabs.addTab(charts_tab, "Charts")
 
-        main_layout = QVBoxLayout()
-        main_layout.addWidget(self.title)
-        main_layout.addLayout(cards_row_1)
-        main_layout.addLayout(cards_row_2)
-        main_layout.addLayout(controls_layout)
-        main_layout.addWidget(self.tabs)
-        main_layout.addWidget(self.inline_status)
+        layout = QVBoxLayout()
+        layout.addWidget(self.title)
+        layout.addLayout(cards_row_1)
+        layout.addLayout(cards_row_2)
+        layout.addLayout(controls_layout)
+        layout.addWidget(self.tabs)
+        layout.addWidget(self.inline_status)
 
-        self.setLayout(main_layout)
+        self.setLayout(layout)
 
     def set_status(self, text):
 
@@ -653,52 +596,6 @@ class DashboardView(QWidget):
         self.filtered_df = pd.DataFrame()
         self.results_table.setRowCount(0)
         self.results_table.setColumnCount(0)
-        self.rows_card.set_value(0)
-        self.total_bets_card.set_value(0)
-        self.columns_card.set_value(0)
-        self.filter_card.set_value(0)
-        self.inline_status.setText("Dashboard cleared.")
-
-    def set_metrics(self, metrics):
-
-        if not metrics:
-            self.metrics_output.setPlainText("No metrics available.")
-            return
-
-        self.bankroll_card.set_value(
-            f"{(metrics.get('bankroll_history') or [100])[-1]:.2f}"
-        )
-        self.roi_card.set_value(f"{metrics.get('roi', 0):.2%}")
-        self.yield_card.set_value(f"{metrics.get('yield', 0):.2%}")
-        self.hit_rate_card.set_value(f"{metrics.get('hit_rate', 0):.2%}")
-        self.runs_card.set_value(metrics.get("total_bets", 0))
-        self.max_dd_card.set_value(f"{metrics.get('max_drawdown', 0):.2%}")
-
-        text = []
-        text.append(f"Bankroll: {(metrics.get('bankroll_history') or [100])[-1]:.2f}")
-        text.append(f"Total Profit: {metrics.get('total_profit', 0):.2f}")
-        text.append(f"Total Staked: {metrics.get('total_staked', 0):.2f}")
-        text.append(f"ROI: {metrics.get('roi', 0):.2%}")
-        text.append(f"Yield: {metrics.get('yield', 0):.2%}")
-        text.append(f"Hit Rate: {metrics.get('hit_rate', 0):.2%}")
-        text.append(f"Total Bets: {metrics.get('total_bets', 0)}")
-        text.append(f"Max Drawdown: {metrics.get('max_drawdown', 0):.2%}")
-        text.append(f"Brier Score: {metrics.get('brier_score', 0):.4f}")
-        text.append(f"Log Loss: {metrics.get('log_loss', 0):.4f}")
-
-        self.metrics_output.setPlainText("\n".join(text))
-
-        chart_lines = []
-        chart_lines.append("Bankroll History:")
-        chart_lines.append(str(metrics.get("bankroll_history", [])))
-        chart_lines.append("")
-        chart_lines.append("Accuracy History:")
-        chart_lines.append(str(metrics.get("accuracy_history", [])))
-        chart_lines.append("")
-        chart_lines.append("Drawdown History:")
-        chart_lines.append(str(metrics.get("drawdown_history", [])))
-
-        self.charts_output.setPlainText("\n".join(chart_lines))
 
     def set_results_dataframe(self, df):
 
@@ -710,25 +607,11 @@ class DashboardView(QWidget):
         self.filtered_df = df.copy()
         self.render_dataframe(self.filtered_df)
 
-    def set_results_from_records(self, records):
-
-        if not records:
-            self.clear_table()
-            return
-
-        df = pd.DataFrame(records)
-        self.set_results_dataframe(df)
-
     def render_dataframe(self, df):
 
         if df is None or df.empty:
             self.results_table.setRowCount(0)
             self.results_table.setColumnCount(0)
-            self.rows_card.set_value(0)
-            self.total_bets_card.set_value(0)
-            self.columns_card.set_value(0)
-            self.filter_card.set_value(0)
-            self.inline_status.setText("No rows to display.")
             return
 
         columns = list(df.columns)
@@ -741,17 +624,17 @@ class DashboardView(QWidget):
         for row_index in range(rows):
             for col_index, col_name in enumerate(columns):
                 value = df.iloc[row_index][col_name]
-                item = QTableWidgetItem(str(value))
-                self.results_table.setItem(row_index, col_index, item)
+                self.results_table.setItem(
+                    row_index,
+                    col_index,
+                    QTableWidgetItem(str(value)),
+                )
 
         self.results_table.resizeColumnsToContents()
-        self.results_table.resizeRowsToContents()
-
         self.rows_card.set_value(rows)
         self.total_bets_card.set_value(rows)
         self.columns_card.set_value(len(columns))
         self.filter_card.set_value(rows)
-        self.inline_status.setText(f"Showing {rows} rows and {len(columns)} columns.")
 
     def apply_filters(self):
 
@@ -777,7 +660,6 @@ class DashboardView(QWidget):
 
         self.apply_filters()
         self.append_log("Dashboard refreshed.")
-        self.inline_status.setText("Dashboard refreshed.")
 
     def toggle_sort(self):
 
@@ -791,79 +673,165 @@ class DashboardView(QWidget):
         )
         self.sort_ascending = not self.sort_ascending
         self.render_dataframe(self.filtered_df)
-        self.append_log("Sort toggled.")
-        self.inline_status.setText(f"Sorted by {first_column}.")
 
     def export_csv(self):
 
         if self.filtered_df is None or self.filtered_df.empty:
-            self.append_log("CSV export skipped: no data.")
-            self.inline_status.setText("CSV export skipped.")
             return
 
         Path("outputs").mkdir(parents=True, exist_ok=True)
-
         CsvExporter().export_value_bets(
             self.last_csv_path,
             self.filtered_df.to_dict("records"),
         )
-        self.append_log(f"CSV exported: {self.last_csv_path}")
-        self.inline_status.setText(f"CSV exported: {self.last_csv_path}")
 
     def export_excel(self):
 
         if self.filtered_df is None or self.filtered_df.empty:
-            self.append_log("Excel export skipped: no data.")
-            self.inline_status.setText("Excel export skipped.")
             return
 
         Path("outputs").mkdir(parents=True, exist_ok=True)
-
         ExcelExporter().export_value_bets(
             self.last_excel_path,
             self.filtered_df.to_dict("records"),
         )
-        self.append_log(f"Excel exported: {self.last_excel_path}")
-        self.inline_status.setText(f"Excel exported: {self.last_excel_path}")
 
     def open_csv(self):
 
         path = Path(self.last_csv_path)
         if not path.exists():
-            self.append_log("Open CSV skipped: file not found.")
-            self.inline_status.setText("CSV file not found.")
             return
-
         import webbrowser
-
         webbrowser.open(f"file://{path.resolve()}")
-        self.append_log(f"CSV opened: {path}")
-        self.inline_status.setText(f"CSV opened: {path}")
 
     def open_excel(self):
 
         path = Path(self.last_excel_path)
         if not path.exists():
-            self.append_log("Open Excel skipped: file not found.")
-            self.inline_status.setText("Excel file not found.")
+            return
+        import webbrowser
+        webbrowser.open(f"file://{path.resolve()}")
+
+    def set_metrics(self, metrics):
+
+        if not metrics:
+            self.metrics_output.setPlainText("No metrics available.")
             return
 
-        import webbrowser
+        bankroll = (metrics.get("bankroll_history") or [100])[-1]
 
-        webbrowser.open(f"file://{path.resolve()}")
-        self.append_log(f"Excel opened: {path}")
-        self.inline_status.setText(f"Excel opened: {path}")
+        self.bankroll_card.set_value(f"{bankroll:.2f}")
+        self.roi_card.set_value(f"{metrics.get('roi', 0):.2%}")
+        self.yield_card.set_value(f"{metrics.get('yield', 0):.2%}")
+        self.hit_rate_card.set_value(f"{metrics.get('hit_rate', 0):.2%}")
+        self.runs_card.set_value(metrics.get("total_bets", 0))
+        self.max_dd_card.set_value(f"{metrics.get('max_drawdown', 0):.2%}")
+
+        lines = [
+            f"Bankroll: {bankroll:.2f}",
+            f"Total Profit: {metrics.get('total_profit', 0):.2f}",
+            f"Total Staked: {metrics.get('total_staked', 0):.2f}",
+            f"ROI: {metrics.get('roi', 0):.2%}",
+            f"Yield: {metrics.get('yield', 0):.2%}",
+            f"Hit Rate: {metrics.get('hit_rate', 0):.2%}",
+            f"Total Bets: {metrics.get('total_bets', 0)}",
+            f"Max Drawdown: {metrics.get('max_drawdown', 0):.2%}",
+            f"Brier Score: {metrics.get('brier_score', 0):.4f}",
+            f"Log Loss: {metrics.get('log_loss', 0):.4f}",
+        ]
+        self.metrics_output.setPlainText("\n".join(lines))
+
+        chart_builder = SvgChartBuilder()
+        chart_html = []
+        chart_html.append(chart_builder.line_chart(
+            metrics.get("bankroll_history", []),
+            "Bankroll / Equity Curve",
+            "#2c7be5",
+        ))
+        chart_html.append(chart_builder.line_chart(
+            metrics.get("accuracy_history", []),
+            "Accuracy Curve",
+            "#28a745",
+        ))
+        chart_html.append(chart_builder.line_chart(
+            metrics.get("drawdown_history", []),
+            "Drawdown Curve",
+            "#dc3545",
+        ))
+
+        self.charts_output.setHtml("".join(chart_html))
 EOF
 
-CREA_FILE tests/test_import_validator.py
-from training.import_validator import ImportValidator
+CREA_FILE ui/backtest_runner_window.py
+from PySide6.QtWidgets import (
+    QGridLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QTextEdit,
+    QWidget,
+)
+
+from training.backtest_engine import BacktestEngine
+from training.backtest_metrics import BacktestMetrics
 
 
-def test_import_validator_class_exists():
+class BacktestRunnerWindow(QWidget):
 
-    validator = ImportValidator()
+    def __init__(self):
 
-    assert isinstance(validator, ImportValidator)
+        super().__init__()
+
+        self.setWindowTitle("Backtest Runner")
+
+        self.engine = BacktestEngine()
+        self.metrics_engine = BacktestMetrics()
+
+        self.date_from_input = QLineEdit()
+        self.date_to_input = QLineEdit()
+        self.league_input = QLineEdit()
+
+        self.run_button = QPushButton("Run Backtest")
+        self.run_button.clicked.connect(self.run_backtest)
+
+        self.output = QTextEdit()
+        self.output.setReadOnly(True)
+
+        layout = QGridLayout()
+        layout.addWidget(QLabel("Date From (YYYY-MM-DD)"), 0, 0)
+        layout.addWidget(self.date_from_input, 0, 1)
+
+        layout.addWidget(QLabel("Date To (YYYY-MM-DD)"), 1, 0)
+        layout.addWidget(self.date_to_input, 1, 1)
+
+        layout.addWidget(QLabel("League"), 2, 0)
+        layout.addWidget(self.league_input, 2, 1)
+
+        layout.addWidget(self.run_button, 3, 0, 1, 2)
+        layout.addWidget(self.output, 4, 0, 1, 2)
+
+        self.setLayout(layout)
+
+    def run_backtest(self):
+
+        try:
+            date_from = self.date_from_input.text().strip() or None
+            date_to = self.date_to_input.text().strip() or None
+            league = self.league_input.text().strip() or None
+
+            df = self.engine.run(
+                date_from=date_from,
+                date_to=date_to,
+                league=league,
+            )
+
+            metrics = self.metrics_engine.calculate(df)
+
+            self.output.setPlainText(str(metrics))
+
+        except Exception as exc:
+            QMessageBox.critical(self, "Backtest Error", str(exc))
 EOF
 
 CREA_FILE tests/test_backtest_engine.py
@@ -911,6 +879,17 @@ def test_backtest_metrics_runs():
     assert "max_drawdown" in metrics
 EOF
 
+CREA_FILE tests/test_import_validator.py
+from training.import_validator import ImportValidator
+
+
+def test_import_validator_class_exists():
+
+    validator = ImportValidator()
+
+    assert isinstance(validator, ImportValidator)
+EOF
+
 CREA_FILE tests/test_dashboard_view_ui.py
 import pytest
 
@@ -927,4 +906,3 @@ def test_dashboard_view_import():
 EOF
 
 FIX_WHITESPACE
-

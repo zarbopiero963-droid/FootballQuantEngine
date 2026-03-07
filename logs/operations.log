@@ -479,3 +479,22 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-07_00-08-06.zip
+Backup created backups/backup_2026-03-07_00-08-06.zip
+[CREATE] file engine/final_integrity_check.py
+[CREATE] file app/final_check.py
+[CREATE] file engine/project_summary.py
+[CREATE] file app/project_summary.py
+[CREATE] file ui/final_check_window.py
+[CREATE] file ui/project_summary_window.py
+[CREATE] file tests/test_final_integrity_check.py
+[CREATE] file tests/test_final_check.py
+[CREATE] file tests/test_project_summary.py
+[CREATE] file tests/test_project_summary_window.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

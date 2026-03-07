@@ -1,71 +1,308 @@
-CREA_FILE tests/test_readme_alignment.py
-from pathlib import Path
+CREA_FILE ui/dashboard_view.py
+from PySide6.QtWidgets import (
+    QFrame,
+    QLabel,
+    QTableWidget,
+    QTableWidgetItem,
+    QTextEdit,
+    QVBoxLayout,
+    QHBoxLayout,
+    QWidget,
+)
 
 
-def test_readme_exists_and_not_empty():
+class DashboardCard(QFrame):
 
-    readme = Path("README.md")
+    def __init__(self, title, value="-"):
 
-    assert readme.exists()
+        super().__init__()
 
-    content = readme.read_text(encoding="utf-8")
+        self.setFrameShape(QFrame.Shape.StyledPanel)
 
-    assert len(content.strip()) > 0
-    assert "Football Quant Engine" in content
+        self.title_label = QLabel(title)
+        self.value_label = QLabel(str(value))
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.title_label)
+        layout.addWidget(self.value_label)
+
+        self.setLayout(layout)
+
+    def set_value(self, value):
+
+        self.value_label.setText(str(value))
+
+
+class DashboardView(QWidget):
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.title = QLabel("Football Quant Engine Dashboard")
+
+        self.total_bets_card = DashboardCard("Value Bets", "0")
+        self.status_card = DashboardCard("Last Status", "Ready")
+        self.rows_card = DashboardCard("Rows", "0")
+
+        cards_layout = QHBoxLayout()
+        cards_layout.addWidget(self.total_bets_card)
+        cards_layout.addWidget(self.status_card)
+        cards_layout.addWidget(self.rows_card)
+
+        self.results_table = QTableWidget()
+        self.results_table.setColumnCount(0)
+        self.results_table.setRowCount(0)
+
+        self.log_output = QTextEdit()
+        self.log_output.setReadOnly(True)
+
+        main_layout = QVBoxLayout()
+        main_layout.addWidget(self.title)
+        main_layout.addLayout(cards_layout)
+        main_layout.addWidget(QLabel("Results"))
+        main_layout.addWidget(self.results_table)
+        main_layout.addWidget(QLabel("Output Log"))
+        main_layout.addWidget(self.log_output)
+
+        self.setLayout(main_layout)
+
+    def set_status(self, text):
+
+        self.status_card.set_value(text)
+
+    def append_log(self, text):
+
+        self.log_output.append(str(text))
+
+    def set_log_text(self, text):
+
+        self.log_output.setPlainText(str(text))
+
+    def clear_table(self):
+
+        self.results_table.setRowCount(0)
+        self.results_table.setColumnCount(0)
+        self.rows_card.set_value(0)
+        self.total_bets_card.set_value(0)
+
+    def set_results_dataframe(self, df):
+
+        if df is None:
+            self.clear_table()
+            return
+
+        if getattr(df, "empty", False):
+            self.clear_table()
+            return
+
+        columns = list(df.columns)
+        rows = len(df.index)
+
+        self.results_table.setColumnCount(len(columns))
+        self.results_table.setRowCount(rows)
+        self.results_table.setHorizontalHeaderLabels(columns)
+
+        for row_index in range(rows):
+            for col_index, col_name in enumerate(columns):
+                value = df.iloc[row_index][col_name]
+                item = QTableWidgetItem(str(value))
+                self.results_table.setItem(row_index, col_index, item)
+
+        self.rows_card.set_value(rows)
+        self.total_bets_card.set_value(rows)
+
+    def set_results_from_records(self, records):
+
+        if not records:
+            self.clear_table()
+            return
+
+        columns = list(records[0].keys())
+        rows = len(records)
+
+        self.results_table.setColumnCount(len(columns))
+        self.results_table.setRowCount(rows)
+        self.results_table.setHorizontalHeaderLabels(columns)
+
+        for row_index, row_data in enumerate(records):
+            for col_index, col_name in enumerate(columns):
+                value = row_data.get(col_name, "")
+                item = QTableWidgetItem(str(value))
+                self.results_table.setItem(row_index, col_index, item)
+
+        self.rows_card.set_value(rows)
+        self.total_bets_card.set_value(rows)
 EOF
 
-CREA_FILE tests/test_requirements_alignment.py
-from pathlib import Path
+CREA_FILE ui/main_window.py
+from PySide6.QtWidgets import (
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QToolBar,
+)
+
+from ui.about_dialog import AboutDialog
+from ui.dashboard_view import DashboardView
+from ui.final_check_window import FinalCheckWindow
+from ui.manual_context_window import ManualContextWindow
+from ui.offline_import_window import OfflineImportWindow
+from ui.outputs_view import OutputsView
+from ui.project_summary_window import ProjectSummaryWindow
+from ui.settings_window import SettingsWindow
 
 
-def test_requirements_contains_core_dependencies():
+class MainWindow(QMainWindow):
 
-    requirements = Path("requirements.txt")
+    def __init__(self, controller):
 
-    assert requirements.exists()
+        super().__init__()
 
-    content = requirements.read_text(encoding="utf-8")
+        self.controller = controller
 
-    required = [
-        "requests",
-        "pandas",
-        "numpy",
-        "scipy",
-        "scikit-learn",
-        "matplotlib",
-        "PySide6",
-        "openpyxl",
-        "pytest",
-        "black",
-        "isort",
-        "ruff",
-        "pyinstaller",
-    ]
+        self.setWindowTitle("Football Quant Engine")
+        self.resize(1200, 800)
 
-    for item in required:
-        assert item in content
+        self.dashboard = DashboardView()
+        self.setCentralWidget(self.dashboard)
+
+        self.status_label = QLabel("Ready")
+        self.statusBar().addPermanentWidget(self.status_label)
+
+        toolbar = QToolBar("Main")
+        self.addToolBar(toolbar)
+
+        self.run_button = QPushButton("Run Cycle")
+        self.run_button.clicked.connect(self.run_cycle)
+        toolbar.addWidget(self.run_button)
+
+        self.settings_button = QPushButton("Settings")
+        self.settings_button.clicked.connect(self.open_settings)
+        toolbar.addWidget(self.settings_button)
+
+        self.offline_import_button = QPushButton("Import CSV")
+        self.offline_import_button.clicked.connect(self.open_offline_import)
+        toolbar.addWidget(self.offline_import_button)
+
+        self.manual_context_button = QPushButton("Manual Context")
+        self.manual_context_button.clicked.connect(self.open_manual_context)
+        toolbar.addWidget(self.manual_context_button)
+
+        self.outputs_button = QPushButton("Outputs")
+        self.outputs_button.clicked.connect(self.open_outputs)
+        toolbar.addWidget(self.outputs_button)
+
+        self.final_check_button = QPushButton("Final Check")
+        self.final_check_button.clicked.connect(self.open_final_check)
+        toolbar.addWidget(self.final_check_button)
+
+        self.project_summary_button = QPushButton("Project Summary")
+        self.project_summary_button.clicked.connect(self.open_project_summary)
+        toolbar.addWidget(self.project_summary_button)
+
+        self.about_button = QPushButton("About")
+        self.about_button.clicked.connect(self.open_about)
+        toolbar.addWidget(self.about_button)
+
+        self.settings_window = None
+        self.about_dialog = None
+        self.offline_import_window = None
+        self.manual_context_window = None
+        self.outputs_view = None
+        self.final_check_window = None
+        self.project_summary_window = None
+
+        self.dashboard.set_status("Ready")
+        self.dashboard.append_log("Application started.")
+
+    def open_settings(self):
+
+        self.settings_window = SettingsWindow()
+        self.settings_window.show()
+
+    def open_about(self):
+
+        self.about_dialog = AboutDialog()
+        self.about_dialog.show()
+
+    def open_offline_import(self):
+
+        self.offline_import_window = OfflineImportWindow()
+        self.offline_import_window.show()
+
+    def open_manual_context(self):
+
+        self.manual_context_window = ManualContextWindow()
+        self.manual_context_window.show()
+
+    def open_outputs(self):
+
+        self.outputs_view = OutputsView()
+        self.outputs_view.show()
+
+    def open_final_check(self):
+
+        self.final_check_window = FinalCheckWindow()
+        self.final_check_window.show()
+
+    def open_project_summary(self):
+
+        self.project_summary_window = ProjectSummaryWindow()
+        self.project_summary_window.show()
+
+    def run_cycle(self):
+
+        self.dashboard.set_status("Running")
+        self.dashboard.append_log("Run cycle started.")
+
+        try:
+            ranked = self.controller.run_once()
+
+            if ranked is None:
+                self.dashboard.clear_table()
+                self.dashboard.set_log_text("No results returned.")
+                self.dashboard.set_status("Completed")
+                self.status_label.setText("Completed")
+                return
+
+            if getattr(ranked, "empty", False):
+                self.dashboard.clear_table()
+                self.dashboard.set_log_text("No value bets found.")
+                self.dashboard.set_status("Completed")
+                self.status_label.setText("Completed")
+                return
+
+            self.dashboard.set_results_dataframe(ranked)
+            self.dashboard.set_log_text(ranked.to_string(index=False))
+            self.dashboard.set_status("Completed")
+            self.status_label.setText("Completed")
+
+        except Exception as exc:
+            self.dashboard.set_status("Error")
+            self.dashboard.append_log(f"Error: {exc}")
+            QMessageBox.critical(
+                self,
+                "Run Error",
+                str(exc),
+            )
+            self.status_label.setText("Error")
 EOF
 
-CREA_FILE tests/test_spec_file.py
-from pathlib import Path
+CREA_FILE tests/test_dashboard_view_ui.py
+import pytest
 
 
-def test_spec_file_exists():
+def test_dashboard_view_import():
 
-    spec = Path("football_quant_engine.spec")
+    try:
+        from ui.dashboard_view import DashboardView, DashboardCard
+    except (ModuleNotFoundError, ImportError) as exc:
+        pytest.skip(f"UI dependencies not available in CI: {exc}")
 
-    assert spec.exists()
-EOF
-
-CREA_FILE tests/test_repo_files.py
-from pathlib import Path
-
-
-def test_repository_files_exist():
-
-    assert Path("LICENSE").exists()
-    assert Path("CONTRIBUTING.md").exists()
-    assert Path(".editorconfig").exists()
+    assert DashboardView is not None
+    assert DashboardCard is not None
 EOF
 
 FIX_WHITESPACE

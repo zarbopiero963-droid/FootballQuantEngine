@@ -871,3 +871,21 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-07_10-22-04.zip
+Backup created backups/backup_2026-03-07_10-22-04.zip
+[CREATE] file training/backtest_metrics.py
+[CREATE] file analysis/report_generator.py
+[CREATE] file training/import_validator.py
+[CREATE] file training/csv_importer.py
+[SKIP] file identical engine/offline_controller.py
+[CREATE] file ui/offline_import_window.py
+[CREATE] file ui/dashboard_view.py
+[CREATE] file tests/test_import_validator.py
+[SKIP] file identical tests/test_dashboard_view_ui.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

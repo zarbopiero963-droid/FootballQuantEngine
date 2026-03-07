@@ -18,7 +18,7 @@ class OfflineImportWindow(QWidget):
 
         super().__init__()
 
-        self.setWindowTitle("Offline CSV Import")
+        self.setWindowTitle("Offline CSV Import Wizard")
 
         self.controller = OfflineController()
 
@@ -27,7 +27,7 @@ class OfflineImportWindow(QWidget):
 
         self.matches_browse = QPushButton("Browse Matches CSV")
         self.odds_browse = QPushButton("Browse Odds CSV")
-        self.import_button = QPushButton("Import Data")
+        self.import_button = QPushButton("Validate + Import")
 
         self.output = QTextEdit()
         self.output.setReadOnly(True)
@@ -46,7 +46,7 @@ class OfflineImportWindow(QWidget):
         layout.addWidget(self.odds_browse, 1, 2)
 
         layout.addWidget(self.import_button, 2, 0, 1, 3)
-        layout.addWidget(QLabel("Import Log"), 3, 0, 1, 3)
+        layout.addWidget(QLabel("Wizard Log"), 3, 0, 1, 3)
         layout.addWidget(self.output, 4, 0, 1, 3)
 
         self.setLayout(layout)
@@ -91,7 +91,7 @@ class OfflineImportWindow(QWidget):
             QMessageBox.information(
                 self,
                 "Import",
-                "CSV import completed successfully.",
+                "CSV validation and import completed successfully.",
             )
         except Exception as exc:
             self.output.setPlainText(str(exc))

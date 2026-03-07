@@ -7,14 +7,14 @@ class ReportGenerator:
 
         os.makedirs("outputs", exist_ok=True)
 
-    def _line_svg(self, values, title):
+    def _line_svg(self, values, title, color="#2c7be5"):
 
         if not values:
             return f"<h3>{title}</h3><p>No data</p>"
 
-        width = 700
-        height = 220
-        padding = 25
+        width = 900
+        height = 260
+        padding = 30
 
         min_v = min(values)
         max_v = max(values)
@@ -40,8 +40,8 @@ class ReportGenerator:
         return (
             f"<h3>{title}</h3>"
             f"<svg width='{width}' height='{height}' "
-            f"style='background:#fff;border:1px solid #ccc'>"
-            f"<polyline fill='none' stroke='#2c7be5' stroke-width='2' "
+            f"style='background:#fff;border:1px solid #ccc;border-radius:8px'>"
+            f"<polyline fill='none' stroke='{color}' stroke-width='2' "
             f"points='{polyline}' />"
             f"</svg>"
         )
@@ -60,18 +60,24 @@ class ReportGenerator:
             html.append(f"<li>Hit Rate: {metrics.get('hit_rate', 0):.4f}</li>")
             html.append(f"<li>Brier Score: {metrics.get('brier_score', 0):.4f}</li>")
             html.append(f"<li>Log Loss: {metrics.get('log_loss', 0):.4f}</li>")
+            html.append(f"<li>Total Profit: {metrics.get('total_profit', 0):.4f}</li>")
+            html.append(f"<li>Total Staked: {metrics.get('total_staked', 0):.4f}</li>")
+            html.append(f"<li>Total Bets: {metrics.get('total_bets', 0)}</li>")
+            html.append(f"<li>Max Drawdown: {metrics.get('max_drawdown', 0):.4f}</li>")
             html.append("</ul>")
 
             html.append(
                 self._line_svg(
                     metrics.get("bankroll_history", []),
-                    "Bankroll Chart",
+                    "Bankroll / Equity Curve",
+                    "#2c7be5",
                 )
             )
             html.append(
                 self._line_svg(
                     metrics.get("accuracy_history", []),
-                    "Accuracy Chart",
+                    "Accuracy Curve",
+                    "#28a745",
                 )
             )
 

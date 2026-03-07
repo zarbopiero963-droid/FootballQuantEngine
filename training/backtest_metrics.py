@@ -40,9 +40,23 @@ class BacktestMetrics:
             "won",
         ] = 1
 
+        def resolve_odds(row):
+            if row["selected_market"] == "home":
+                return row.get("home_odds", 2.0)
+            if row["selected_market"] == "draw":
+                return row.get("draw_odds", 3.0)
+            return row.get("away_odds", 2.5)
+
+        df["selected_odds"] = df.apply(resolve_odds, axis=1)
+
         stake = 1.0
 
-        df["profit"] = df["won"].apply(lambda won: stake if won == 1 else -stake)
+        df["profit"] = df.apply(
+            lambda row: (
+                (row["selected_odds"] - 1) * stake if row["won"] == 1 else -stake
+            ),
+            axis=1,
+        )
 
         total_bets = len(df)
         total_profit = df["profit"].sum()
@@ -107,6 +121,16 @@ class BacktestMetrics:
             cumulative_correct += won
             accuracy_history.append(cumulative_correct / index)
 
+        max_bankroll = bankroll_history[0] if bankroll_history else 100.0
+        drawdowns = []
+
+        for value in bankroll_history:
+            max_bankroll = max(max_bankroll, value)
+            drawdown = (value - max_bankroll) / max_bankroll if max_bankroll else 0.0
+            drawdowns.append(drawdown)
+
+        max_drawdown = min(drawdowns) if drawdowns else 0.0
+
         return {
             "roi": roi,
             "yield": yield_value,
@@ -115,4 +139,8 @@ class BacktestMetrics:
             "log_loss": sum(log_losses) / len(log_losses),
             "bankroll_history": bankroll_history,
             "accuracy_history": accuracy_history,
+            "max_drawdown": max_drawdown,
+            "total_profit": total_profit,
+            "total_staked": total_staked,
+            "total_bets": total_bets,
         }

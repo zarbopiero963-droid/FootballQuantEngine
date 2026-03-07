@@ -1,4 +1,3 @@
-
 from database.fixtures_repository import FixturesRepository
 from database.odds_repository import OddsRepository
 from training.import_validator import ImportValidator

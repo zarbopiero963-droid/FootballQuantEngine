@@ -1,0 +1,32 @@
+name: Live Provider Tests
+
+on:
+  workflow_dispatch:
+
+jobs:
+  integration-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run live provider tests
+        run: |
+          pytest tests -q -k "live or api_football"

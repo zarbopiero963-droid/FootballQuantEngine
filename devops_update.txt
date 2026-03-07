@@ -1,10 +1,6 @@
-############################################
-LIVE API FOOTBALL PROVIDER
-############################################
-
 CREA_FILE quant/providers/api_football_client.py
-import requests
 import os
+import requests
 
 
 BASE_URL = "https://v3.football.api-sports.io"
@@ -13,144 +9,132 @@ BASE_URL = "https://v3.football.api-sports.io"
 class APIFootballClient:
 
     def __init__(self, api_key=None):
-
         self.api_key = api_key or os.getenv("API_FOOTBALL_KEY")
 
         if not self.api_key:
             raise RuntimeError("API_FOOTBALL_KEY missing")
 
         self.headers = {
-            "x-apisports-key": self.api_key
+            "x-apisports-key": self.api_key,
         }
 
     def _get(self, path, params=None):
-
         url = BASE_URL + path
 
-        r = requests.get(
+        response = requests.get(
             url,
             headers=self.headers,
             params=params,
-            timeout=30
+            timeout=30,
         )
+        response.raise_for_status()
 
-        r.raise_for_status()
+        payload = response.json()
 
-        return r.json()["response"]
+        if "response" not in payload:
+            raise RuntimeError("API-Football response missing 'response' field")
 
-
-############################################
-LEAGUES
-############################################
+        return payload["response"]
 
     def get_leagues(self):
-
-        data = self._get("/leagues")
-
-        return data
-
-
-############################################
-FIXTURES
-############################################
+        return self._get("/leagues")
 
     def get_fixtures(self, league, season):
-
-        data = self._get(
-            "/fixtures",
-            {
-                "league": league,
-                "season": season
-            }
-        )
-
-        fixtures = []
-
-        for item in data:
-
-            fixtures.append({
-                "fixture_id": item["fixture"]["id"],
-                "home_team": item["teams"]["home"]["name"],
-                "away_team": item["teams"]["away"]["name"]
-            })
-
-        return fixtures
-
-
-############################################
-COMPLETED MATCHES
-############################################
-
-    def get_completed_matches(self, league, season):
-
         data = self._get(
             "/fixtures",
             {
                 "league": league,
                 "season": season,
-                "status": "FT"
-            }
+            },
+        )
+
+        fixtures = []
+
+        for item in data:
+            fixtures.append(
+                {
+                    "fixture_id": str(item["fixture"]["id"]),
+                    "home_team": item["teams"]["home"]["name"],
+                    "away_team": item["teams"]["away"]["name"],
+                }
+            )
+
+        return fixtures
+
+    def get_completed_matches(self, league, season):
+        data = self._get(
+            "/fixtures",
+            {
+                "league": league,
+                "season": season,
+                "status": "FT",
+            },
         )
 
         matches = []
 
         for item in data:
+            home_goals = item.get("goals", {}).get("home")
+            away_goals = item.get("goals", {}).get("away")
 
-            matches.append({
-                "fixture_id": item["fixture"]["id"],
-                "home_team": item["teams"]["home"]["name"],
-                "away_team": item["teams"]["away"]["name"],
-                "home_goals": item["goals"]["home"],
-                "away_goals": item["goals"]["away"]
-            })
+            if home_goals is None or away_goals is None:
+                continue
+
+            matches.append(
+                {
+                    "fixture_id": str(item["fixture"]["id"]),
+                    "home_team": item["teams"]["home"]["name"],
+                    "away_team": item["teams"]["away"]["name"],
+                    "home_goals": int(home_goals),
+                    "away_goals": int(away_goals),
+                }
+            )
 
         return matches
 
-
-############################################
-PREMATCH ODDS
-############################################
-
     def get_odds(self, fixture_ids):
-
         odds_map = {}
 
-        for fid in fixture_ids:
-
+        for fixture_id in fixture_ids:
             data = self._get(
                 "/odds",
                 {
-                    "fixture": fid
-                }
+                    "fixture": fixture_id,
+                },
             )
 
             if not data:
                 continue
 
             try:
+                bookmakers = data[0].get("bookmakers", [])
+                if not bookmakers:
+                    continue
 
-                bookmakers = data[0]["bookmakers"]
-
-                markets = bookmakers[0]["bets"]
+                bets = bookmakers[0].get("bets", [])
 
                 odds = {}
 
-                for m in markets:
+                for bet in bets:
+                    if bet.get("name") != "Match Winner":
+                        continue
 
-                    if m["name"] == "Match Winner":
+                    for value in bet.get("values", []):
+                        label = value.get("value")
+                        odd = value.get("odd")
 
-                        for v in m["values"]:
+                        if odd in (None, ""):
+                            continue
 
-                            if v["value"] == "Home":
-                                odds["home"] = float(v["odd"])
+                        if label == "Home":
+                            odds["home"] = float(odd)
+                        elif label == "Draw":
+                            odds["draw"] = float(odd)
+                        elif label == "Away":
+                            odds["away"] = float(odd)
 
-                            if v["value"] == "Draw":
-                                odds["draw"] = float(v["odd"])
-
-                            if v["value"] == "Away":
-                                odds["away"] = float(v["odd"])
-
-                odds_map[fid] = odds
+                if odds:
+                    odds_map[str(fixture_id)] = odds
 
             except Exception:
                 continue
@@ -158,113 +142,4 @@ PREMATCH ODDS
         return odds_map
 EOF
 
-
-############################################
-QUANT PROVIDER WRAPPER
-############################################
-
-CREA_FILE quant/providers/api_football_provider.py
-from quant.providers.api_football_client import APIFootballClient
-
-
-class APIFootballProvider:
-
-    def __init__(self, api_key=None):
-
-        self.client = APIFootballClient(api_key)
-
-    def get_completed_matches(self, league=None, season=None):
-
-        return self.client.get_completed_matches(
-            league=league,
-            season=season
-        )
-
-    def get_upcoming_matches(self, league=None, season=None):
-
-        return self.client.get_fixtures(
-            league=league,
-            season=season
-        )
-
-    def get_prematch_odds(self, fixture_ids):
-
-        return self.client.get_odds(
-            fixture_ids
-        )
-EOF
-
-
-############################################
-UNDERSTAT LIVE PROVIDER
-############################################
-
-CREA_FILE quant/providers/understat_provider.py
-import requests
-
-
-class UnderstatProvider:
-
-    def get_team_advanced_stats(self, league=None, season=None):
-
-        # placeholder until scraping layer added
-
-        return {}
-EOF
-
-
-############################################
-UPDATE QUANT CONTROLLER
-############################################
-
-MODIFICA_FILE quant/services/quant_controller.py
-
-from quant.providers.api_football_provider import APIFootballProvider
-from quant.providers.understat_provider import UnderstatProvider
-from quant.services.quant_engine import QuantEngine
-
-
-class QuantController:
-
-    def __init__(self):
-
-        self.fixtures_provider = APIFootballProvider()
-        self.odds_provider = self.fixtures_provider
-        self.advanced_provider = UnderstatProvider()
-
-        self.engine = QuantEngine(
-            fixtures_provider=self.fixtures_provider,
-            odds_provider=self.odds_provider,
-            advanced_provider=self.advanced_provider
-        )
-
-    def run(self, league=135, season=2024):
-
-        self.engine.fit(
-            league=league,
-            season=season
-        )
-
-        return self.engine.predict(
-            league=league,
-            season=season
-        )
-EOF
-
-
-############################################
-TEST LIVE API
-############################################
-
-CREA_FILE tests/test_api_football_live.py
-from quant.providers.api_football_client import APIFootballClient
-
-
-def test_api_connection():
-
-    client = APIFootballClient()
-
-    leagues = client.get_leagues()
-
-    assert isinstance(leagues, list)
-EOF
+FIX_WHITESPACE

@@ -42,13 +42,3 @@ python app/cli.py
 
 python -m PyInstaller football_quant_engine.spec
 
-## Build GitHub
-
-Workflow:
-
-.github/workflows/build.yml
-
-Artifact atteso:
-
-FootballQuantEngine-Windows.zip
-

@@ -526,3 +526,19 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-07_00-26-02.zip
+Backup created backups/backup_2026-03-07_00-26-02.zip
+[SKIP] folder exists ui
+[SKIP] file identical ui/dashboard_view.py
+[SKIP] file identical ui/about_dialog.py
+[SKIP] file identical ui/settings_window.py
+[SKIP] file identical ui/offline_import_window.py
+[SKIP] file identical ui/manual_context_window.py
+[SKIP] file identical ui/outputs_view.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
 )
 
 from ui.about_dialog import AboutDialog
+from ui.backtest_runner_window import BacktestRunnerWindow
 from ui.dashboard_view import DashboardView
 from ui.final_check_window import FinalCheckWindow
 from ui.manual_context_window import ManualContextWindow
@@ -25,7 +26,7 @@ class MainWindow(QMainWindow):
         self.controller = controller
 
         self.setWindowTitle("Football Quant Engine")
-        self.resize(1200, 800)
+        self.resize(1280, 820)
 
         self.dashboard = DashboardView()
         self.setCentralWidget(self.dashboard)
@@ -39,6 +40,10 @@ class MainWindow(QMainWindow):
         self.run_button = QPushButton("Run Cycle")
         self.run_button.clicked.connect(self.run_cycle)
         toolbar.addWidget(self.run_button)
+
+        self.backtest_button = QPushButton("Backtest")
+        self.backtest_button.clicked.connect(self.open_backtest)
+        toolbar.addWidget(self.backtest_button)
 
         self.settings_button = QPushButton("Settings")
         self.settings_button.clicked.connect(self.open_settings)
@@ -75,6 +80,7 @@ class MainWindow(QMainWindow):
         self.outputs_view = None
         self.final_check_window = None
         self.project_summary_window = None
+        self.backtest_window = None
 
         self.dashboard.set_status("Ready")
         self.dashboard.append_log("Application started.")
@@ -114,6 +120,11 @@ class MainWindow(QMainWindow):
         self.project_summary_window = ProjectSummaryWindow()
         self.project_summary_window.show()
 
+    def open_backtest(self):
+
+        self.backtest_window = BacktestRunnerWindow()
+        self.backtest_window.show()
+
     def run_cycle(self):
 
         self.dashboard.set_status("Running")
@@ -125,6 +136,13 @@ class MainWindow(QMainWindow):
             if ranked is None:
                 self.dashboard.clear_table()
                 self.dashboard.set_log_text("No results returned.")
+                self.dashboard.set_status("Completed")
+                self.status_label.setText("Completed")
+                return
+
+            if isinstance(ranked, list):
+                self.dashboard.set_results_from_records(ranked)
+                self.dashboard.set_log_text(str(ranked))
                 self.dashboard.set_status("Completed")
                 self.status_label.setText("Completed")
                 return

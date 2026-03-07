@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 from PySide6.QtWidgets import (
+    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -56,37 +57,42 @@ class DashboardView(QWidget):
 
         self.title = QLabel("Football Quant Engine Dashboard")
 
-        self.total_bets_card = DashboardCard("Value Bets", "0")
+        self.total_bets_card = DashboardCard("Rows", "0")
         self.status_card = DashboardCard("Last Status", "Ready")
-        self.rows_card = DashboardCard("Rows", "0")
         self.columns_card = DashboardCard("Columns", "0")
         self.filter_card = DashboardCard("Filtered", "0")
 
-        self.bankroll_card = DashboardCard("Bankroll", "100.00")
-        self.roi_card = DashboardCard("ROI", "0.00")
-        self.yield_card = DashboardCard("Yield", "0.00")
-        self.hit_rate_card = DashboardCard("Hit Rate", "0.00")
-        self.runs_card = DashboardCard("Runs", "0")
-        self.max_dd_card = DashboardCard("Max Drawdown", "0.00")
+        self.bet_card = DashboardCard("BET", "0")
+        self.watchlist_card = DashboardCard("WATCHLIST", "0")
+        self.no_bet_card = DashboardCard("NO_BET", "0")
+
+        self.confidence_avg_card = DashboardCard("Avg Confidence", "0.00")
+        self.agreement_avg_card = DashboardCard("Avg Agreement", "0.00")
+        self.max_edge_card = DashboardCard("Max Market Edge", "0.00")
 
         cards_row_1 = QHBoxLayout()
         cards_row_1.addWidget(self.total_bets_card)
         cards_row_1.addWidget(self.status_card)
-        cards_row_1.addWidget(self.rows_card)
         cards_row_1.addWidget(self.columns_card)
         cards_row_1.addWidget(self.filter_card)
 
         cards_row_2 = QHBoxLayout()
-        cards_row_2.addWidget(self.bankroll_card)
-        cards_row_2.addWidget(self.roi_card)
-        cards_row_2.addWidget(self.yield_card)
-        cards_row_2.addWidget(self.hit_rate_card)
-        cards_row_2.addWidget(self.runs_card)
-        cards_row_2.addWidget(self.max_dd_card)
+        cards_row_2.addWidget(self.bet_card)
+        cards_row_2.addWidget(self.watchlist_card)
+        cards_row_2.addWidget(self.no_bet_card)
+
+        cards_row_3 = QHBoxLayout()
+        cards_row_3.addWidget(self.confidence_avg_card)
+        cards_row_3.addWidget(self.agreement_avg_card)
+        cards_row_3.addWidget(self.max_edge_card)
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search...")
         self.search_input.textChanged.connect(self.apply_filters)
+
+        self.decision_filter = QComboBox()
+        self.decision_filter.addItems(["ALL", "BET", "WATCHLIST", "NO_BET"])
+        self.decision_filter.currentTextChanged.connect(self.apply_filters)
 
         self.refresh_button = QPushButton("Refresh")
         self.refresh_button.clicked.connect(self.refresh_table)
@@ -107,8 +113,10 @@ class DashboardView(QWidget):
         self.open_excel_button.clicked.connect(self.open_excel)
 
         controls_layout = QHBoxLayout()
-        controls_layout.addWidget(QLabel("Filter"))
+        controls_layout.addWidget(QLabel("Search"))
         controls_layout.addWidget(self.search_input)
+        controls_layout.addWidget(QLabel("Decision"))
+        controls_layout.addWidget(self.decision_filter)
         controls_layout.addWidget(self.refresh_button)
         controls_layout.addWidget(self.sort_button)
         controls_layout.addWidget(self.export_csv_button)
@@ -168,6 +176,7 @@ class DashboardView(QWidget):
         layout.addWidget(self.title)
         layout.addLayout(cards_row_1)
         layout.addLayout(cards_row_2)
+        layout.addLayout(cards_row_3)
         layout.addLayout(controls_layout)
         layout.addWidget(self.tabs)
         layout.addWidget(self.inline_status)
@@ -194,6 +203,16 @@ class DashboardView(QWidget):
         self.results_table.setRowCount(0)
         self.results_table.setColumnCount(0)
 
+        self.total_bets_card.set_value(0)
+        self.columns_card.set_value(0)
+        self.filter_card.set_value(0)
+        self.bet_card.set_value(0)
+        self.watchlist_card.set_value(0)
+        self.no_bet_card.set_value(0)
+        self.confidence_avg_card.set_value("0.00")
+        self.agreement_avg_card.set_value("0.00")
+        self.max_edge_card.set_value("0.00")
+
     def set_results_dataframe(self, df):
 
         if df is None or getattr(df, "empty", False):
@@ -202,13 +221,25 @@ class DashboardView(QWidget):
 
         self.current_df = df.copy()
         self.filtered_df = df.copy()
-        self.render_dataframe(self.filtered_df)
+        self.apply_filters()
+
+    def set_results_from_records(self, records):
+
+        if not records:
+            self.clear_table()
+            return
+
+        df = pd.DataFrame(records)
+        self.set_results_dataframe(df)
 
     def render_dataframe(self, df):
 
         if df is None or df.empty:
             self.results_table.setRowCount(0)
             self.results_table.setColumnCount(0)
+            self.filter_card.set_value(0)
+            self.inline_status.setText("No rows to display.")
+            self._update_decision_cards(df)
             return
 
         columns = list(df.columns)
@@ -228,10 +259,43 @@ class DashboardView(QWidget):
                 )
 
         self.results_table.resizeColumnsToContents()
-        self.rows_card.set_value(rows)
-        self.total_bets_card.set_value(rows)
+
+        self.total_bets_card.set_value(len(self.current_df.index))
         self.columns_card.set_value(len(columns))
         self.filter_card.set_value(rows)
+        self.inline_status.setText(f"Showing {rows} rows.")
+
+        self._update_decision_cards(df)
+
+    def _update_decision_cards(self, df):
+
+        if df is None or df.empty or "decision" not in df.columns:
+            self.bet_card.set_value(0)
+            self.watchlist_card.set_value(0)
+            self.no_bet_card.set_value(0)
+            self.confidence_avg_card.set_value("0.00")
+            self.agreement_avg_card.set_value("0.00")
+            self.max_edge_card.set_value("0.00")
+            return
+
+        self.bet_card.set_value(int((df["decision"] == "BET").sum()))
+        self.watchlist_card.set_value(int((df["decision"] == "WATCHLIST").sum()))
+        self.no_bet_card.set_value(int((df["decision"] == "NO_BET").sum()))
+
+        if "confidence" in df.columns and len(df.index) > 0:
+            self.confidence_avg_card.set_value(f"{float(df['confidence'].mean()):.2%}")
+        else:
+            self.confidence_avg_card.set_value("0.00")
+
+        if "agreement" in df.columns and len(df.index) > 0:
+            self.agreement_avg_card.set_value(f"{float(df['agreement'].mean()):.2%}")
+        else:
+            self.agreement_avg_card.set_value("0.00")
+
+        if "market_edge" in df.columns and len(df.index) > 0:
+            self.max_edge_card.set_value(f"{float(df['market_edge'].max()):.4f}")
+        else:
+            self.max_edge_card.set_value("0.00")
 
     def apply_filters(self):
 
@@ -239,16 +303,20 @@ class DashboardView(QWidget):
             self.render_dataframe(pd.DataFrame())
             return
 
-        query = self.search_input.text().strip().lower()
+        filtered = self.current_df.copy()
 
-        if not query:
-            filtered = self.current_df.copy()
-        else:
-            mask = self.current_df.astype(str).apply(
+        query = self.search_input.text().strip().lower()
+        decision_value = self.decision_filter.currentText().strip()
+
+        if query:
+            mask = filtered.astype(str).apply(
                 lambda row: row.str.lower().str.contains(query, na=False).any(),
                 axis=1,
             )
-            filtered = self.current_df[mask].copy()
+            filtered = filtered[mask].copy()
+
+        if decision_value != "ALL" and "decision" in filtered.columns:
+            filtered = filtered[filtered["decision"] == decision_value].copy()
 
         self.filtered_df = filtered
         self.render_dataframe(self.filtered_df)
@@ -263,9 +331,23 @@ class DashboardView(QWidget):
         if self.filtered_df is None or self.filtered_df.empty:
             return
 
-        first_column = self.filtered_df.columns[0]
+        sort_column = None
+
+        for candidate in [
+            "confidence",
+            "market_edge",
+            "agreement",
+            self.filtered_df.columns[0],
+        ]:
+            if candidate in self.filtered_df.columns:
+                sort_column = candidate
+                break
+
+        if sort_column is None:
+            return
+
         self.filtered_df = self.filtered_df.sort_values(
-            by=first_column,
+            by=sort_column,
             ascending=self.sort_ascending,
         )
         self.sort_ascending = not self.sort_ascending
@@ -274,30 +356,38 @@ class DashboardView(QWidget):
     def export_csv(self):
 
         if self.filtered_df is None or self.filtered_df.empty:
+            self.append_log("CSV export skipped: no data.")
             return
 
         Path("outputs").mkdir(parents=True, exist_ok=True)
+
         CsvExporter().export_value_bets(
             self.last_csv_path,
             self.filtered_df.to_dict("records"),
         )
+        self.append_log(f"CSV exported: {self.last_csv_path}")
 
     def export_excel(self):
 
         if self.filtered_df is None or self.filtered_df.empty:
+            self.append_log("Excel export skipped: no data.")
             return
 
         Path("outputs").mkdir(parents=True, exist_ok=True)
+
         ExcelExporter().export_value_bets(
             self.last_excel_path,
             self.filtered_df.to_dict("records"),
         )
+        self.append_log(f"Excel exported: {self.last_excel_path}")
 
     def open_csv(self):
 
         path = Path(self.last_csv_path)
         if not path.exists():
+            self.append_log("CSV file not found.")
             return
+
         import webbrowser
 
         webbrowser.open(f"file://{path.resolve()}")
@@ -306,7 +396,9 @@ class DashboardView(QWidget):
 
         path = Path(self.last_excel_path)
         if not path.exists():
+            self.append_log("Excel file not found.")
             return
+
         import webbrowser
 
         webbrowser.open(f"file://{path.resolve()}")
@@ -318,13 +410,6 @@ class DashboardView(QWidget):
             return
 
         bankroll = (metrics.get("bankroll_history") or [100])[-1]
-
-        self.bankroll_card.set_value(f"{bankroll:.2f}")
-        self.roi_card.set_value(f"{metrics.get('roi', 0):.2%}")
-        self.yield_card.set_value(f"{metrics.get('yield', 0):.2%}")
-        self.hit_rate_card.set_value(f"{metrics.get('hit_rate', 0):.2%}")
-        self.runs_card.set_value(metrics.get("total_bets", 0))
-        self.max_dd_card.set_value(f"{metrics.get('max_drawdown', 0):.2%}")
 
         lines = [
             f"Bankroll: {bankroll:.2f}",

@@ -1082,3 +1082,15 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-07_13-28-44.zip
+Backup created backups/backup_2026-03-07_13-28-44.zip
+[CREATE] file conftest.py
+[CREATE] file tests/conftest.py
+[SKIP] file identical engine/__init__.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

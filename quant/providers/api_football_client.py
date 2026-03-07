@@ -1,7 +1,6 @@
-CREA_FILE quant/providers/api_football_client.py
 import os
-import requests
 
+import requests
 
 BASE_URL = "https://v3.football.api-sports.io"
 
@@ -140,7 +139,3 @@ class APIFootballClient:
                 continue
 
         return odds_map
-EOF
-
-FIX_WHITESPACE
-

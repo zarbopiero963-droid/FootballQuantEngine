@@ -1312,3 +1312,13 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-07_17-05-16.zip
+Backup created backups/backup_2026-03-07_17-05-16.zip
+[CREATE] file quant/providers/api_football_client.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

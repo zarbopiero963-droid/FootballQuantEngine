@@ -131,14 +131,14 @@ class MainWindow(QMainWindow):
     def run_cycle(self):
 
         self.dashboard.set_status("Running")
-        self.dashboard.append_log("Run cycle started.")
+        self.dashboard.append_log("Prediction pipeline started.")
 
         try:
-            ranked = self.controller.run_once()
+            ranked = self.controller.run_predictions()
 
             if ranked is None:
                 self.dashboard.clear_table()
-                self.dashboard.set_log_text("No results returned.")
+                self.dashboard.set_log_text("No prediction results returned.")
                 self.dashboard.set_status("Completed")
                 self.status_label.setText("Completed")
                 return
@@ -155,7 +155,7 @@ class MainWindow(QMainWindow):
 
             if getattr(ranked, "empty", False):
                 self.dashboard.clear_table()
-                self.dashboard.set_log_text("No value bets found.")
+                self.dashboard.set_log_text("No prediction rows found.")
                 self.dashboard.set_status("Completed")
                 self.status_label.setText("Completed")
                 return

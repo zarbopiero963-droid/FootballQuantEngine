@@ -10,3 +10,7 @@ class AppController:
     def run_once(self):
 
         return self.runner.run_cycle()
+
+    def run_predictions(self):
+
+        return self.runner.run_cycle()

@@ -346,3 +346,4 @@ class ProjectSummaryWindow(QWidget):
 EOF
 
 FIX_WHITESPACE
+

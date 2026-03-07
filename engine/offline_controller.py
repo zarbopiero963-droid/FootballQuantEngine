@@ -9,10 +9,15 @@ class OfflineController:
 
     def import_csv_data(self, matches_csv=None, odds_csv=None):
 
-        self.engine.import_csv_data(
-            matches_csv=matches_csv,
-            odds_csv=odds_csv,
-        )
+        results = {}
+
+        if matches_csv:
+            results["matches"] = self.engine.csv_importer.import_matches(matches_csv)
+
+        if odds_csv:
+            results["odds"] = self.engine.csv_importer.import_odds(odds_csv)
+
+        return results
 
     def run_reports(self, ranked_df=None):
 

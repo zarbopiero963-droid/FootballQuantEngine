@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QTextEdit,
     QWidget,
 )
 
@@ -28,6 +29,9 @@ class OfflineImportWindow(QWidget):
         self.odds_browse = QPushButton("Browse Odds CSV")
         self.import_button = QPushButton("Import Data")
 
+        self.output = QTextEdit()
+        self.output.setReadOnly(True)
+
         self.matches_browse.clicked.connect(self.browse_matches)
         self.odds_browse.clicked.connect(self.browse_odds)
         self.import_button.clicked.connect(self.import_data)
@@ -42,6 +46,8 @@ class OfflineImportWindow(QWidget):
         layout.addWidget(self.odds_browse, 1, 2)
 
         layout.addWidget(self.import_button, 2, 0, 1, 3)
+        layout.addWidget(QLabel("Import Log"), 3, 0, 1, 3)
+        layout.addWidget(self.output, 4, 0, 1, 3)
 
         self.setLayout(layout)
 
@@ -75,10 +81,12 @@ class OfflineImportWindow(QWidget):
             matches_csv = self.matches_path.text().strip() or None
             odds_csv = self.odds_path.text().strip() or None
 
-            self.controller.import_csv_data(
+            results = self.controller.import_csv_data(
                 matches_csv=matches_csv,
                 odds_csv=odds_csv,
             )
+
+            self.output.setPlainText(str(results))
 
             QMessageBox.information(
                 self,
@@ -86,6 +94,7 @@ class OfflineImportWindow(QWidget):
                 "CSV import completed successfully.",
             )
         except Exception as exc:
+            self.output.setPlainText(str(exc))
             QMessageBox.critical(
                 self,
                 "Import Error",

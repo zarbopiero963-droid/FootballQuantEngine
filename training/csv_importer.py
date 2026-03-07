@@ -1,7 +1,7 @@
-import pandas as pd
 
 from database.fixtures_repository import FixturesRepository
 from database.odds_repository import OddsRepository
+from training.import_validator import ImportValidator
 
 
 class CsvImporter:
@@ -10,26 +10,20 @@ class CsvImporter:
 
         self.fixtures_repo = FixturesRepository()
         self.odds_repo = OddsRepository()
+        self.validator = ImportValidator()
 
     def import_matches(self, filepath):
 
-        df = pd.read_csv(filepath)
+        validation = self.validator.load_and_validate_matches_csv(filepath)
 
-        required = [
-            "fixture_id",
-            "league",
-            "season",
-            "home",
-            "away",
-            "match_date",
-            "home_goals",
-            "away_goals",
-            "status",
-        ]
+        if not validation["ok"]:
+            raise ValueError(
+                f"Missing columns in matches CSV: {validation['missing_columns']}"
+            )
 
-        for col in required:
-            if col not in df.columns:
-                raise ValueError(f"Missing column: {col}")
+        df = validation["dataframe"]
+
+        imported = 0
 
         for _, row in df.iterrows():
             self.fixtures_repo.save_fixture(
@@ -45,21 +39,26 @@ class CsvImporter:
                     "status": row["status"],
                 }
             )
+            imported += 1
+
+        return {
+            "type": "matches",
+            "imported_rows": imported,
+            "row_count": validation["row_count"],
+        }
 
     def import_odds(self, filepath):
 
-        df = pd.read_csv(filepath)
+        validation = self.validator.load_and_validate_odds_csv(filepath)
 
-        required = [
-            "fixture_id",
-            "home_odds",
-            "draw_odds",
-            "away_odds",
-        ]
+        if not validation["ok"]:
+            raise ValueError(
+                f"Missing columns in odds CSV: {validation['missing_columns']}"
+            )
 
-        for col in required:
-            if col not in df.columns:
-                raise ValueError(f"Missing column: {col}")
+        df = validation["dataframe"]
+
+        imported = 0
 
         for _, row in df.iterrows():
             self.odds_repo.save_odds(
@@ -68,3 +67,10 @@ class CsvImporter:
                 draw_odds=float(row["draw_odds"]),
                 away_odds=float(row["away_odds"]),
             )
+            imported += 1
+
+        return {
+            "type": "odds",
+            "imported_rows": imported,
+            "row_count": validation["row_count"],
+        }

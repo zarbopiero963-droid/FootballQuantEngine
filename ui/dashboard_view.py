@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -51,6 +52,12 @@ class DashboardView(QWidget):
         self.sort_ascending = True
         self.last_csv_path = "outputs/dashboard_export.csv"
         self.last_excel_path = "outputs/dashboard_export.xlsx"
+        self.run_history = []
+        self.bankroll = 100.0
+        self.total_profit = 0.0
+        self.total_staked = 0.0
+        self.total_bets = 0
+        self.total_wins = 0
 
         self.title = QLabel("Football Quant Engine Dashboard")
 
@@ -60,14 +67,25 @@ class DashboardView(QWidget):
         self.columns_card = DashboardCard("Columns", "0")
         self.filter_card = DashboardCard("Filtered", "0")
 
+        self.bankroll_card = DashboardCard("Bankroll", "100.00")
+        self.roi_card = DashboardCard("ROI", "0.00")
+        self.yield_card = DashboardCard("Yield", "0.00")
+        self.hit_rate_card = DashboardCard("Hit Rate", "0.00")
+        self.runs_card = DashboardCard("Runs", "0")
+
         cards_row_1 = QHBoxLayout()
         cards_row_1.addWidget(self.total_bets_card)
         cards_row_1.addWidget(self.status_card)
         cards_row_1.addWidget(self.rows_card)
+        cards_row_1.addWidget(self.columns_card)
+        cards_row_1.addWidget(self.filter_card)
 
         cards_row_2 = QHBoxLayout()
-        cards_row_2.addWidget(self.columns_card)
-        cards_row_2.addWidget(self.filter_card)
+        cards_row_2.addWidget(self.bankroll_card)
+        cards_row_2.addWidget(self.roi_card)
+        cards_row_2.addWidget(self.yield_card)
+        cards_row_2.addWidget(self.hit_rate_card)
+        cards_row_2.addWidget(self.runs_card)
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search...")
@@ -108,20 +126,56 @@ class DashboardView(QWidget):
         self.log_output = QTextEdit()
         self.log_output.setReadOnly(True)
 
+        self.history_output = QTextEdit()
+        self.history_output.setReadOnly(True)
+
+        self.metrics_output = QTextEdit()
+        self.metrics_output.setReadOnly(True)
+
         self.inline_status = QLabel("Dashboard ready.")
+
+        self.tabs = QTabWidget()
+
+        results_tab = QWidget()
+        results_layout = QVBoxLayout()
+        results_layout.addWidget(QLabel("Results"))
+        results_layout.addWidget(self.results_table)
+        results_tab.setLayout(results_layout)
+
+        log_tab = QWidget()
+        log_layout = QVBoxLayout()
+        log_layout.addWidget(QLabel("Output Log"))
+        log_layout.addWidget(self.log_output)
+        log_tab.setLayout(log_layout)
+
+        history_tab = QWidget()
+        history_layout = QVBoxLayout()
+        history_layout.addWidget(QLabel("Run History"))
+        history_layout.addWidget(self.history_output)
+        history_tab.setLayout(history_layout)
+
+        metrics_tab = QWidget()
+        metrics_layout = QVBoxLayout()
+        metrics_layout.addWidget(QLabel("Metrics Panel"))
+        metrics_layout.addWidget(self.metrics_output)
+        metrics_tab.setLayout(metrics_layout)
+
+        self.tabs.addTab(results_tab, "Results")
+        self.tabs.addTab(log_tab, "Log")
+        self.tabs.addTab(history_tab, "History")
+        self.tabs.addTab(metrics_tab, "Metrics")
 
         main_layout = QVBoxLayout()
         main_layout.addWidget(self.title)
         main_layout.addLayout(cards_row_1)
         main_layout.addLayout(cards_row_2)
         main_layout.addLayout(controls_layout)
-        main_layout.addWidget(QLabel("Results"))
-        main_layout.addWidget(self.results_table)
-        main_layout.addWidget(QLabel("Output Log"))
-        main_layout.addWidget(self.log_output)
+        main_layout.addWidget(self.tabs)
         main_layout.addWidget(self.inline_status)
 
         self.setLayout(main_layout)
+
+        self.refresh_metrics_panel()
 
     def set_status(self, text):
 
@@ -157,6 +211,7 @@ class DashboardView(QWidget):
         self.current_df = df.copy()
         self.filtered_df = df.copy()
         self.render_dataframe(self.filtered_df)
+        self.register_run(df)
 
     def set_results_from_records(self, records):
 
@@ -301,3 +356,58 @@ class DashboardView(QWidget):
         webbrowser.open(f"file://{path.resolve()}")
         self.append_log(f"Excel opened: {path}")
         self.inline_status.setText(f"Excel opened: {path}")
+
+    def register_run(self, df):
+
+        rows = len(df.index)
+
+        self.total_bets += rows
+        self.total_staked += float(rows)
+
+        simulated_hit_rate = 0.55
+        wins = int(round(rows * simulated_hit_rate))
+        losses = rows - wins
+        profit = wins - losses
+
+        self.total_wins += wins
+        self.total_profit += profit
+        self.bankroll += profit
+
+        run_summary = (
+            f"Run #{len(self.run_history) + 1}: "
+            f"rows={rows}, wins={wins}, losses={losses}, profit={profit:.2f}"
+        )
+        self.run_history.append(run_summary)
+
+        self.runs_card.set_value(len(self.run_history))
+        self.bankroll_card.set_value(f"{self.bankroll:.2f}")
+
+        roi = self.total_profit / self.total_staked if self.total_staked else 0.0
+        yield_value = roi
+        hit_rate = self.total_wins / self.total_bets if self.total_bets else 0.0
+
+        self.roi_card.set_value(f"{roi:.2%}")
+        self.yield_card.set_value(f"{yield_value:.2%}")
+        self.hit_rate_card.set_value(f"{hit_rate:.2%}")
+
+        self.history_output.setPlainText("\n".join(self.run_history))
+        self.refresh_metrics_panel()
+
+    def refresh_metrics_panel(self):
+
+        roi = self.total_profit / self.total_staked if self.total_staked else 0.0
+        yield_value = roi
+        hit_rate = self.total_wins / self.total_bets if self.total_bets else 0.0
+
+        text = []
+        text.append(f"Bankroll: {self.bankroll:.2f}")
+        text.append(f"Total Profit: {self.total_profit:.2f}")
+        text.append(f"Total Staked: {self.total_staked:.2f}")
+        text.append(f"ROI: {roi:.2%}")
+        text.append(f"Yield: {yield_value:.2%}")
+        text.append(f"Hit Rate: {hit_rate:.2%}")
+        text.append(f"Runs: {len(self.run_history)}")
+        text.append(f"Total Bets: {self.total_bets}")
+        text.append(f"Total Wins: {self.total_wins}")
+
+        self.metrics_output.setPlainText("\n".join(text))

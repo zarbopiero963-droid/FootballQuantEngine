@@ -1,145 +1,371 @@
 CREA_CARTELLA ui
 
-CREA_FILE ui/main_window.py
-from PySide6.QtWidgets import (
-    QLabel,
-    QMainWindow,
-    QMessageBox,
-    QPushButton,
-    QToolBar,
-)
-
-from ui.about_dialog import AboutDialog
-from ui.dashboard_view import DashboardView
-from ui.final_check_window import FinalCheckWindow
-from ui.manual_context_window import ManualContextWindow
-from ui.offline_import_window import OfflineImportWindow
-from ui.outputs_view import OutputsView
-from ui.project_summary_window import ProjectSummaryWindow
-from ui.settings_window import SettingsWindow
+CREA_FILE ui/dashboard_view.py
+from PySide6.QtWidgets import QLabel, QTextEdit, QVBoxLayout, QWidget
 
 
-class MainWindow(QMainWindow):
+class DashboardView(QWidget):
 
-    def __init__(self, controller):
+    def __init__(self):
 
         super().__init__()
 
-        self.controller = controller
+        self.title = QLabel("Football Quant Engine Dashboard")
+        self.output = QTextEdit()
+        self.output.setReadOnly(True)
 
-        self.setWindowTitle("Football Quant Engine")
-        self.resize(1000, 700)
+        layout = QVBoxLayout()
+        layout.addWidget(self.title)
+        layout.addWidget(self.output)
 
-        self.dashboard = DashboardView()
-        self.setCentralWidget(self.dashboard)
+        self.setLayout(layout)
 
-        self.status_label = QLabel("Ready")
-        self.statusBar().addPermanentWidget(self.status_label)
+    def set_text(self, text):
 
-        toolbar = QToolBar("Main")
-        self.addToolBar(toolbar)
+        self.output.setPlainText(text)
+EOF
 
-        self.run_button = QPushButton("Run Cycle")
-        self.run_button.clicked.connect(self.run_cycle)
-        toolbar.addWidget(self.run_button)
+CREA_FILE ui/about_dialog.py
+from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
-        self.settings_button = QPushButton("Settings")
-        self.settings_button.clicked.connect(self.open_settings)
-        toolbar.addWidget(self.settings_button)
 
-        self.offline_import_button = QPushButton("Import CSV")
-        self.offline_import_button.clicked.connect(self.open_offline_import)
-        toolbar.addWidget(self.offline_import_button)
+class AboutDialog(QWidget):
 
-        self.manual_context_button = QPushButton("Manual Context")
-        self.manual_context_button.clicked.connect(self.open_manual_context)
-        toolbar.addWidget(self.manual_context_button)
+    def __init__(self):
 
-        self.outputs_button = QPushButton("Outputs")
-        self.outputs_button.clicked.connect(self.open_outputs)
-        toolbar.addWidget(self.outputs_button)
+        super().__init__()
 
-        self.final_check_button = QPushButton("Final Check")
-        self.final_check_button.clicked.connect(self.open_final_check)
-        toolbar.addWidget(self.final_check_button)
+        self.setWindowTitle("About")
 
-        self.project_summary_button = QPushButton("Project Summary")
-        self.project_summary_button.clicked.connect(self.open_project_summary)
-        toolbar.addWidget(self.project_summary_button)
+        label = QLabel(
+            "Football Quant Engine\n"
+            "Quantitative football analysis engine\n"
+            "Poisson + Monte Carlo + Value Betting"
+        )
 
-        self.about_button = QPushButton("About")
-        self.about_button.clicked.connect(self.open_about)
-        toolbar.addWidget(self.about_button)
+        layout = QVBoxLayout()
+        layout.addWidget(label)
 
-        self.settings_window = None
-        self.about_dialog = None
-        self.offline_import_window = None
-        self.manual_context_window = None
-        self.outputs_view = None
-        self.final_check_window = None
-        self.project_summary_window = None
+        self.setLayout(layout)
+EOF
 
-    def open_settings(self):
+CREA_FILE ui/settings_window.py
+from PySide6.QtWidgets import (
+    QFormLayout,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
-        self.settings_window = SettingsWindow()
-        self.settings_window.show()
+from config.settings_manager import Settings, load_settings, save_settings
 
-    def open_about(self):
 
-        self.about_dialog = AboutDialog()
-        self.about_dialog.show()
+class SettingsWindow(QWidget):
 
-    def open_offline_import(self):
+    def __init__(self):
 
-        self.offline_import_window = OfflineImportWindow()
-        self.offline_import_window.show()
+        super().__init__()
 
-    def open_manual_context(self):
+        self.setWindowTitle("Settings")
 
-        self.manual_context_window = ManualContextWindow()
-        self.manual_context_window.show()
+        self.api_football_input = QLineEdit()
+        self.odds_api_input = QLineEdit()
+        self.telegram_token_input = QLineEdit()
+        self.telegram_chat_id_input = QLineEdit()
 
-    def open_outputs(self):
+        self.save_button = QPushButton("Save")
+        self.save_button.clicked.connect(self.save)
 
-        self.outputs_view = OutputsView()
-        self.outputs_view.show()
+        form = QFormLayout()
+        form.addRow("API-Football Key", self.api_football_input)
+        form.addRow("Odds API Key", self.odds_api_input)
+        form.addRow("Telegram Token", self.telegram_token_input)
+        form.addRow("Telegram Chat ID", self.telegram_chat_id_input)
 
-    def open_final_check(self):
+        layout = QVBoxLayout()
+        layout.addLayout(form)
+        layout.addWidget(self.save_button)
 
-        self.final_check_window = FinalCheckWindow()
-        self.final_check_window.show()
+        self.setLayout(layout)
 
-    def open_project_summary(self):
+        self.load_values()
 
-        self.project_summary_window = ProjectSummaryWindow()
-        self.project_summary_window.show()
+    def load_values(self):
 
-    def run_cycle(self):
+        settings = load_settings()
+
+        self.api_football_input.setText(settings.api_football_key)
+        self.odds_api_input.setText(settings.odds_api_key)
+        self.telegram_token_input.setText(settings.telegram_token)
+        self.telegram_chat_id_input.setText(settings.telegram_chat_id)
+
+    def save(self):
+
+        settings = Settings()
+        settings.api_football_key = self.api_football_input.text().strip()
+        settings.odds_api_key = self.odds_api_input.text().strip()
+        settings.telegram_token = self.telegram_token_input.text().strip()
+        settings.telegram_chat_id = self.telegram_chat_id_input.text().strip()
+
+        save_settings(settings)
+
+        QMessageBox.information(
+            self,
+            "Settings",
+            "Settings saved successfully.",
+        )
+EOF
+
+CREA_FILE ui/offline_import_window.py
+from PySide6.QtWidgets import (
+    QFileDialog,
+    QGridLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QWidget,
+)
+
+from engine.offline_controller import OfflineController
+
+
+class OfflineImportWindow(QWidget):
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.setWindowTitle("Offline CSV Import")
+
+        self.controller = OfflineController()
+
+        self.matches_path = QLineEdit()
+        self.odds_path = QLineEdit()
+
+        self.matches_browse = QPushButton("Browse Matches CSV")
+        self.odds_browse = QPushButton("Browse Odds CSV")
+        self.import_button = QPushButton("Import Data")
+
+        self.matches_browse.clicked.connect(self.browse_matches)
+        self.odds_browse.clicked.connect(self.browse_odds)
+        self.import_button.clicked.connect(self.import_data)
+
+        layout = QGridLayout()
+        layout.addWidget(QLabel("Matches CSV"), 0, 0)
+        layout.addWidget(self.matches_path, 0, 1)
+        layout.addWidget(self.matches_browse, 0, 2)
+
+        layout.addWidget(QLabel("Odds CSV"), 1, 0)
+        layout.addWidget(self.odds_path, 1, 1)
+        layout.addWidget(self.odds_browse, 1, 2)
+
+        layout.addWidget(self.import_button, 2, 0, 1, 3)
+
+        self.setLayout(layout)
+
+    def browse_matches(self):
+
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Matches CSV",
+            "",
+            "CSV Files (*.csv)",
+        )
+
+        if path:
+            self.matches_path.setText(path)
+
+    def browse_odds(self):
+
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Odds CSV",
+            "",
+            "CSV Files (*.csv)",
+        )
+
+        if path:
+            self.odds_path.setText(path)
+
+    def import_data(self):
 
         try:
-            ranked = self.controller.run_once()
+            matches_csv = self.matches_path.text().strip() or None
+            odds_csv = self.odds_path.text().strip() or None
 
-            if ranked is None:
-                self.dashboard.set_text("No results returned.")
-                self.status_label.setText("Completed")
-                return
+            self.controller.import_csv_data(
+                matches_csv=matches_csv,
+                odds_csv=odds_csv,
+            )
 
-            if getattr(ranked, "empty", False):
-                self.dashboard.set_text("No value bets found.")
-                self.status_label.setText("Completed")
-                return
-
-            self.dashboard.set_text(ranked.to_string(index=False))
-            self.status_label.setText("Completed")
-
+            QMessageBox.information(
+                self,
+                "Import",
+                "CSV import completed successfully.",
+            )
         except Exception as exc:
             QMessageBox.critical(
                 self,
-                "Run Error",
+                "Import Error",
                 str(exc),
             )
-            self.status_label.setText("Error")
+EOF
+
+CREA_FILE ui/manual_context_window.py
+import json
+import os
+
+from PySide6.QtWidgets import (
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
+
+
+class ManualContextWindow(QWidget):
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.setWindowTitle("Manual Context")
+
+        self.info_label = QLabel(
+            "Edit manual context JSON for lineups, injuries and weather."
+        )
+        self.editor = QTextEdit()
+        self.save_button = QPushButton("Save Context")
+        self.save_button.clicked.connect(self.save_context)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.info_label)
+        layout.addWidget(self.editor)
+        layout.addWidget(self.save_button)
+
+        self.setLayout(layout)
+
+        self.load_context()
+
+    def load_context(self):
+
+        path = "manual_context.json"
+
+        if not os.path.exists(path):
+            default_data = {
+                "lineups": {},
+                "injuries": {},
+                "weather": {},
+            }
+            self.editor.setPlainText(json.dumps(default_data, indent=2))
+            return
+
+        with open(path, encoding="utf-8") as f:
+            self.editor.setPlainText(f.read())
+
+    def save_context(self):
+
+        try:
+            content = self.editor.toPlainText()
+            parsed = json.loads(content)
+
+            with open("manual_context.json", "w", encoding="utf-8") as f:
+                json.dump(parsed, f, indent=2)
+
+            QMessageBox.information(
+                self,
+                "Manual Context",
+                "manual_context.json saved successfully.",
+            )
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Save Error",
+                str(exc),
+            )
+EOF
+
+CREA_FILE ui/outputs_view.py
+from PySide6.QtWidgets import (
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
+
+from analysis.report_viewer_helper import ReportViewerHelper
+from engine.offline_controller import OfflineController
+
+
+class OutputsView(QWidget):
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.setWindowTitle("Outputs & Reports")
+
+        self.viewer = ReportViewerHelper()
+        self.offline_controller = OfflineController()
+
+        self.run_reports_button = QPushButton("Generate Offline Reports")
+        self.open_dashboard_button = QPushButton("Open Dashboard HTML")
+        self.open_report_button = QPushButton("Open Advanced Report HTML")
+
+        self.run_reports_button.clicked.connect(self.run_reports)
+        self.open_dashboard_button.clicked.connect(self.open_dashboard)
+        self.open_report_button.clicked.connect(self.open_report)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.run_reports_button)
+        layout.addWidget(self.open_dashboard_button)
+        layout.addWidget(self.open_report_button)
+
+        self.setLayout(layout)
+
+    def run_reports(self):
+
+        try:
+            self.offline_controller.run_reports()
+
+            QMessageBox.information(
+                self,
+                "Reports",
+                "Offline reports generated successfully.",
+            )
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Reports Error",
+                str(exc),
+            )
+
+    def open_dashboard(self):
+
+        ok = self.viewer.open_dashboard()
+
+        if not ok:
+            QMessageBox.warning(
+                self,
+                "Dashboard",
+                "outputs/dashboard.html not found.",
+            )
+
+    def open_report(self):
+
+        ok = self.viewer.open_advanced_report()
+
+        if not ok:
+            QMessageBox.warning(
+                self,
+                "Advanced Report",
+                "outputs/advanced_report.html not found.",
+            )
 EOF
 
 FIX_WHITESPACE
-

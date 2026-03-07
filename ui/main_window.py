@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 
 from ui.about_dialog import AboutDialog
 from ui.dashboard_view import DashboardView
+from ui.final_check_window import FinalCheckWindow
 from ui.manual_context_window import ManualContextWindow
 from ui.offline_import_window import OfflineImportWindow
 from ui.outputs_view import OutputsView
@@ -54,6 +55,10 @@ class MainWindow(QMainWindow):
         self.outputs_button.clicked.connect(self.open_outputs)
         toolbar.addWidget(self.outputs_button)
 
+        self.final_check_button = QPushButton("Final Check")
+        self.final_check_button.clicked.connect(self.open_final_check)
+        toolbar.addWidget(self.final_check_button)
+
         self.about_button = QPushButton("About")
         self.about_button.clicked.connect(self.open_about)
         toolbar.addWidget(self.about_button)
@@ -63,6 +68,7 @@ class MainWindow(QMainWindow):
         self.offline_import_window = None
         self.manual_context_window = None
         self.outputs_view = None
+        self.final_check_window = None
 
     def open_settings(self):
 
@@ -88,6 +94,11 @@ class MainWindow(QMainWindow):
 
         self.outputs_view = OutputsView()
         self.outputs_view.show()
+
+    def open_final_check(self):
+
+        self.final_check_window = FinalCheckWindow()
+        self.final_check_window.show()
 
     def run_cycle(self):
 

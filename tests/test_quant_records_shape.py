@@ -1,3 +1,10 @@
+import os
+
+import pytest
+
+if not os.getenv("API_FOOTBALL_KEY"):
+    pytest.skip("API_FOOTBALL_KEY missing", allow_module_level=True)
+
 from quant.services.quant_job_runner import QuantJobRunner
 
 

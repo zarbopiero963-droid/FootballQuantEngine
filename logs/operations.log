@@ -568,3 +568,20 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-07_08-39-21.zip
+Backup created backups/backup_2026-03-07_08-39-21.zip
+[SKIP] folder exists ui
+[CREATE] file ui/final_check_window.py
+[CREATE] file ui/project_summary_window.py
+[SKIP] file identical ui/about_dialog.py
+[SKIP] file identical ui/dashboard_view.py
+[SKIP] file identical ui/settings_window.py
+[CREATE] file tests/test_final_check_window.py
+[SKIP] file identical tests/test_project_summary_window.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

@@ -1,1452 +1,293 @@
 ############################################
-QUANT ENGINE 2
+CONNECT QUANT ENGINE 2 TO APP
 ############################################
 
-CREA_CARTELLA quant
-CREA_CARTELLA quant/models
-CREA_CARTELLA quant/features
-CREA_CARTELLA quant/providers
-CREA_CARTELLA quant/services
-CREA_CARTELLA quant/tests
-
-############################################
-PROVIDER INTERFACES
-############################################
-
-CREA_FILE quant/providers/base_provider.py
-from abc import ABC, abstractmethod
-
-
-class BaseFixturesProvider(ABC):
-
-    @abstractmethod
-    def get_completed_matches(self, league=None, season=None):
-        raise NotImplementedError
-
-    @abstractmethod
-    def get_upcoming_matches(self, league=None, season=None):
-        raise NotImplementedError
-
-
-class BaseOddsProvider(ABC):
-
-    @abstractmethod
-    def get_prematch_odds(self, fixture_ids):
-        raise NotImplementedError
-
-
-class BaseAdvancedStatsProvider(ABC):
-
-    @abstractmethod
-    def get_team_advanced_stats(self, league=None, season=None):
-        raise NotImplementedError
-EOF
-
-CREA_FILE quant/providers/api_football_provider.py
-class APIFootballProvider:
-
-    def __init__(self, client=None):
-        self.client = client
-
-    def get_completed_matches(self, league=None, season=None):
-        if self.client is None:
-            return []
-
-        return self.client.get_completed_matches(
-            league=league,
-            season=season,
-        )
-
-    def get_upcoming_matches(self, league=None, season=None):
-        if self.client is None:
-            return []
-
-        return self.client.get_upcoming_matches(
-            league=league,
-            season=season,
-        )
-
-    def get_prematch_odds(self, fixture_ids):
-        if self.client is None:
-            return {}
-
-        return self.client.get_prematch_odds(fixture_ids=fixture_ids)
-EOF
-
-CREA_FILE quant/providers/understat_provider.py
-class UnderstatProvider:
-
-    def __init__(self, client=None):
-        self.client = client
-
-    def get_team_advanced_stats(self, league=None, season=None):
-        if self.client is None:
-            return {}
-
-        return self.client.get_team_advanced_stats(
-            league=league,
-            season=season,
-        )
-EOF
-
-############################################
-DOMAIN HELPERS
-############################################
-
-CREA_FILE quant/models/team_strength.py
-from dataclasses import dataclass
-
-
-@dataclass
-class TeamStrength:
-    team_name: str
-    elo: float = 1500.0
-    attack_home: float = 1.0
-    defense_home: float = 1.0
-    attack_away: float = 1.0
-    defense_away: float = 1.0
-    xg_for: float = 1.0
-    xg_against: float = 1.0
-    form_score: float = 0.0
-EOF
-
-CREA_FILE quant/models/prediction_result.py
-from dataclasses import dataclass, field
-
-
-@dataclass
-class PredictionResult:
-    fixture_id: str
-    home_team: str
-    away_team: str
-    market: str
-    probability: float
-    fair_odds: float
-    bookmaker_odds: float
-    market_edge: float
-    model_edge: float
-    confidence: float
-    agreement: float
-    decision: str
-    details: dict = field(default_factory=dict)
-EOF
-
-############################################
-ELO ENGINE
-############################################
-
-CREA_FILE quant/models/elo_engine.py
-class EloEngine:
-
-    def __init__(self, base_rating=1500.0, k_factor=20.0, home_advantage=55.0):
-        self.base_rating = base_rating
-        self.k_factor = k_factor
-        self.home_advantage = home_advantage
-        self.ratings = {}
-
-    def get_rating(self, team_name):
-        return self.ratings.get(team_name, self.base_rating)
-
-    def expected_score(self, rating_a, rating_b):
-        return 1.0 / (1.0 + 10 ** ((rating_b - rating_a) / 400.0))
-
-    def update_match(self, home_team, away_team, home_goals, away_goals):
-        home_rating = self.get_rating(home_team)
-        away_rating = self.get_rating(away_team)
-
-        adjusted_home = home_rating + self.home_advantage
-        expected_home = self.expected_score(adjusted_home, away_rating)
-        expected_away = 1.0 - expected_home
-
-        if home_goals > away_goals:
-            actual_home = 1.0
-            actual_away = 0.0
-        elif home_goals < away_goals:
-            actual_home = 0.0
-            actual_away = 1.0
-        else:
-            actual_home = 0.5
-            actual_away = 0.5
-
-        new_home = home_rating + self.k_factor * (actual_home - expected_home)
-        new_away = away_rating + self.k_factor * (actual_away - expected_away)
-
-        self.ratings[home_team] = new_home
-        self.ratings[away_team] = new_away
-
-    def fit(self, completed_matches):
-        for match in completed_matches:
-            home_team = match["home_team"]
-            away_team = match["away_team"]
-            home_goals = int(match["home_goals"])
-            away_goals = int(match["away_goals"])
-
-            self.update_match(
-                home_team=home_team,
-                away_team=away_team,
-                home_goals=home_goals,
-                away_goals=away_goals,
-            )
-
-    def get_elo_diff(self, home_team, away_team):
-        home_rating = self.get_rating(home_team)
-        away_rating = self.get_rating(away_team)
-        return (home_rating + self.home_advantage) - away_rating
-EOF
-
-############################################
-POISSON ENGINE
-############################################
-
-CREA_FILE quant/models/poisson_engine.py
-import math
-
-
-class PoissonEngine:
-
-    def __init__(self, max_goals=8):
-        self.max_goals = max_goals
-        self.league_avg_home_goals = 1.35
-        self.league_avg_away_goals = 1.10
-        self.team_stats = {}
-
-    def _poisson_pmf(self, goals, lam):
-        return (math.exp(-lam) * (lam ** goals)) / math.factorial(goals)
-
-    def fit(self, completed_matches):
-        if not completed_matches:
-            self.team_stats = {}
-            return
-
-        total_home_goals = 0.0
-        total_away_goals = 0.0
-        match_count = 0
-
-        raw = {}
-
-        for match in completed_matches:
-            home = match["home_team"]
-            away = match["away_team"]
-            hg = float(match["home_goals"])
-            ag = float(match["away_goals"])
-
-            total_home_goals += hg
-            total_away_goals += ag
-            match_count += 1
-
-            if home not in raw:
-                raw[home] = {
-                    "home_scored": 0.0,
-                    "home_conceded": 0.0,
-                    "home_matches": 0,
-                    "away_scored": 0.0,
-                    "away_conceded": 0.0,
-                    "away_matches": 0,
-                }
-
-            if away not in raw:
-                raw[away] = {
-                    "home_scored": 0.0,
-                    "home_conceded": 0.0,
-                    "home_matches": 0,
-                    "away_scored": 0.0,
-                    "away_conceded": 0.0,
-                    "away_matches": 0,
-                }
-
-            raw[home]["home_scored"] += hg
-            raw[home]["home_conceded"] += ag
-            raw[home]["home_matches"] += 1
-
-            raw[away]["away_scored"] += ag
-            raw[away]["away_conceded"] += hg
-            raw[away]["away_matches"] += 1
-
-        self.league_avg_home_goals = total_home_goals / match_count if match_count else 1.35
-        self.league_avg_away_goals = total_away_goals / match_count if match_count else 1.10
-
-        fitted = {}
-
-        for team, values in raw.items():
-            home_matches = max(values["home_matches"], 1)
-            away_matches = max(values["away_matches"], 1)
-
-            avg_home_scored = values["home_scored"] / home_matches
-            avg_home_conceded = values["home_conceded"] / home_matches
-            avg_away_scored = values["away_scored"] / away_matches
-            avg_away_conceded = values["away_conceded"] / away_matches
-
-            fitted[team] = {
-                "attack_home": avg_home_scored / self.league_avg_home_goals if self.league_avg_home_goals else 1.0,
-                "defense_home": avg_home_conceded / self.league_avg_away_goals if self.league_avg_away_goals else 1.0,
-                "attack_away": avg_away_scored / self.league_avg_away_goals if self.league_avg_away_goals else 1.0,
-                "defense_away": avg_away_conceded / self.league_avg_home_goals if self.league_avg_home_goals else 1.0,
-            }
-
-        self.team_stats = fitted
-
-    def get_team_profile(self, team_name):
-        return self.team_stats.get(
-            team_name,
-            {
-                "attack_home": 1.0,
-                "defense_home": 1.0,
-                "attack_away": 1.0,
-                "defense_away": 1.0,
-            },
-        )
-
-    def expected_goals(self, home_team, away_team):
-        home_profile = self.get_team_profile(home_team)
-        away_profile = self.get_team_profile(away_team)
-
-        lambda_home = self.league_avg_home_goals * home_profile["attack_home"] * away_profile["defense_away"]
-        lambda_away = self.league_avg_away_goals * away_profile["attack_away"] * home_profile["defense_home"]
-
-        lambda_home = max(0.2, lambda_home)
-        lambda_away = max(0.2, lambda_away)
-
-        return lambda_home, lambda_away
-
-    def score_matrix(self, home_team, away_team):
-        lambda_home, lambda_away = self.expected_goals(home_team, away_team)
-
-        matrix = []
-        for hg in range(self.max_goals + 1):
-            row = []
-            for ag in range(self.max_goals + 1):
-                p = self._poisson_pmf(hg, lambda_home) * self._poisson_pmf(ag, lambda_away)
-                row.append(p)
-            matrix.append(row)
-
-        return matrix
-
-    def probabilities_1x2(self, home_team, away_team):
-        matrix = self.score_matrix(home_team, away_team)
-
-        home_win = 0.0
-        draw = 0.0
-        away_win = 0.0
-
-        for hg, row in enumerate(matrix):
-            for ag, prob in enumerate(row):
-                if hg > ag:
-                    home_win += prob
-                elif hg == ag:
-                    draw += prob
-                else:
-                    away_win += prob
-
-        total = home_win + draw + away_win
-        if total <= 0:
-            return {
-                "home_win": 1 / 3,
-                "draw": 1 / 3,
-                "away_win": 1 / 3,
-            }
-
-        return {
-            "home_win": home_win / total,
-            "draw": draw / total,
-            "away_win": away_win / total,
-        }
-
-    def probabilities_ou_btts(self, home_team, away_team):
-        matrix = self.score_matrix(home_team, away_team)
-
-        over_25 = 0.0
-        under_25 = 0.0
-        btts_yes = 0.0
-        btts_no = 0.0
-
-        for hg, row in enumerate(matrix):
-            for ag, prob in enumerate(row):
-                if hg + ag > 2:
-                    over_25 += prob
-                else:
-                    under_25 += prob
-
-                if hg > 0 and ag > 0:
-                    btts_yes += prob
-                else:
-                    btts_no += prob
-
-        total_ou = over_25 + under_25
-        total_btts = btts_yes + btts_no
-
-        return {
-            "over_25": over_25 / total_ou if total_ou else 0.5,
-            "under_25": under_25 / total_ou if total_ou else 0.5,
-            "btts_yes": btts_yes / total_btts if total_btts else 0.5,
-            "btts_no": btts_no / total_btts if total_btts else 0.5,
-        }
-EOF
-
-############################################
-FORM ENGINE
-############################################
-
-CREA_FILE quant/models/form_engine.py
-class FormEngine:
-
-    def __init__(self, lookback=5):
-        self.lookback = lookback
-        self.team_form = {}
-
-    def fit(self, completed_matches):
-        history = {}
-
-        for match in completed_matches:
-            home = match["home_team"]
-            away = match["away_team"]
-            hg = int(match["home_goals"])
-            ag = int(match["away_goals"])
-
-            if home not in history:
-                history[home] = []
-
-            if away not in history:
-                history[away] = []
-
-            if hg > ag:
-                history[home].append(1.0)
-                history[away].append(0.0)
-            elif hg < ag:
-                history[home].append(0.0)
-                history[away].append(1.0)
-            else:
-                history[home].append(0.5)
-                history[away].append(0.5)
-
-        team_form = {}
-        for team, values in history.items():
-            recent = values[-self.lookback :]
-            if not recent:
-                team_form[team] = 0.5
-            else:
-                team_form[team] = sum(recent) / len(recent)
-
-        self.team_form = team_form
-
-    def get_form(self, team_name):
-        return self.team_form.get(team_name, 0.5)
-
-    def get_form_diff(self, home_team, away_team):
-        return self.get_form(home_team) - self.get_form(away_team)
-EOF
-
-############################################
-ADVANCED STATS MERGER
-############################################
-
-CREA_FILE quant/features/advanced_stats_features.py
-class AdvancedStatsFeatureBuilder:
-
-    def __init__(self, stats_by_team=None):
-        self.stats_by_team = stats_by_team or {}
-
-    def _team_stats(self, team_name):
-        return self.stats_by_team.get(
-            team_name,
-            {
-                "xg_for": 1.2,
-                "xg_against": 1.2,
-                "xpts": 1.4,
-                "shots": 10.0,
-                "shots_on_target": 3.5,
-            },
-        )
-
-    def build(self, home_team, away_team):
-        home = self._team_stats(home_team)
-        away = self._team_stats(away_team)
-
-        return {
-            "home_xg_for": float(home.get("xg_for", 1.2)),
-            "away_xg_for": float(away.get("xg_for", 1.2)),
-            "home_xg_against": float(home.get("xg_against", 1.2)),
-            "away_xg_against": float(away.get("xg_against", 1.2)),
-            "xg_diff": float(home.get("xg_for", 1.2)) - float(away.get("xg_for", 1.2)),
-            "xga_diff": float(away.get("xg_against", 1.2)) - float(home.get("xg_against", 1.2)),
-            "xpts_diff": float(home.get("xpts", 1.4)) - float(away.get("xpts", 1.4)),
-            "shots_diff": float(home.get("shots", 10.0)) - float(away.get("shots", 10.0)),
-            "sot_diff": float(home.get("shots_on_target", 3.5)) - float(away.get("shots_on_target", 3.5)),
-        }
-EOF
-
-############################################
-FEATURE ENGINEERING
-############################################
-
-CREA_FILE quant/features/feature_builder.py
-from quant.features.advanced_stats_features import AdvancedStatsFeatureBuilder
-
-
-class FeatureBuilder:
-
-    def __init__(self, elo_engine, poisson_engine, form_engine, advanced_stats=None):
-        self.elo_engine = elo_engine
-        self.poisson_engine = poisson_engine
-        self.form_engine = form_engine
-        self.advanced_builder = AdvancedStatsFeatureBuilder(advanced_stats or {})
-
-    def build_fixture_features(self, fixture):
-        home_team = fixture["home_team"]
-        away_team = fixture["away_team"]
-
-        elo_diff = self.elo_engine.get_elo_diff(home_team, away_team)
-        form_diff = self.form_engine.get_form_diff(home_team, away_team)
-        lambda_home, lambda_away = self.poisson_engine.expected_goals(home_team, away_team)
-
-        advanced = self.advanced_builder.build(home_team, away_team)
-
-        features = {
-            "fixture_id": fixture["fixture_id"],
-            "home_team": home_team,
-            "away_team": away_team,
-            "elo_diff": elo_diff,
-            "form_diff": form_diff,
-            "expected_goals_home": lambda_home,
-            "expected_goals_away": lambda_away,
-            "goal_expectancy_diff": lambda_home - lambda_away,
-        }
-
-        features.update(advanced)
-        return features
-
-    def build_many(self, fixtures):
-        return [self.build_fixture_features(fixture) for fixture in fixtures]
-EOF
-
-############################################
-MANUAL BLEND MODEL
-############################################
-
-CREA_FILE quant/models/manual_blend_model.py
-class ManualBlendModel:
-
-    def __init__(self):
-        self.weights = {
-            "poisson": 0.42,
-            "elo": 0.18,
-            "form": 0.10,
-            "xg": 0.20,
-            "market": 0.10,
-        }
-
-    def elo_to_probs(self, elo_diff):
-        scaled = max(min(elo_diff / 400.0, 1.0), -1.0)
-
-        home = 0.45 + scaled * 0.22
-        away = 0.27 - scaled * 0.18
-        draw = 1.0 - home - away
-
-        draw = max(0.10, draw)
-        total = home + draw + away
-
-        return {
-            "home_win": home / total,
-            "draw": draw / total,
-            "away_win": away / total,
-        }
-
-    def form_to_probs(self, form_diff):
-        scaled = max(min(form_diff, 1.0), -1.0)
-
-        home = 0.43 + scaled * 0.20
-        away = 0.29 - scaled * 0.16
-        draw = 1.0 - home - away
-
-        draw = max(0.10, draw)
-        total = home + draw + away
-
-        return {
-            "home_win": home / total,
-            "draw": draw / total,
-            "away_win": away / total,
-        }
-
-    def xg_to_probs(self, xg_diff):
-        scaled = max(min(xg_diff / 1.5, 1.0), -1.0)
-
-        home = 0.44 + scaled * 0.24
-        away = 0.28 - scaled * 0.20
-        draw = 1.0 - home - away
-
-        draw = max(0.08, draw)
-        total = home + draw + away
-
-        return {
-            "home_win": home / total,
-            "draw": draw / total,
-            "away_win": away / total,
-        }
-
-    def market_support_probs(self, market_probs):
-        return {
-            "home_win": float(market_probs.get("home_win", 1 / 3)),
-            "draw": float(market_probs.get("draw", 1 / 3)),
-            "away_win": float(market_probs.get("away_win", 1 / 3)),
-        }
-
-    def combine(self, poisson_probs, elo_diff, form_diff, xg_diff, market_probs):
-        elo_probs = self.elo_to_probs(elo_diff)
-        form_probs = self.form_to_probs(form_diff)
-        xg_probs = self.xg_to_probs(xg_diff)
-        market_component = self.market_support_probs(market_probs)
-
-        result = {}
-        for key in ("home_win", "draw", "away_win"):
-            value = 0.0
-            value += self.weights["poisson"] * float(poisson_probs.get(key, 0.0))
-            value += self.weights["elo"] * float(elo_probs.get(key, 0.0))
-            value += self.weights["form"] * float(form_probs.get(key, 0.0))
-            value += self.weights["xg"] * float(xg_probs.get(key, 0.0))
-            value += self.weights["market"] * float(market_component.get(key, 0.0))
-            result[key] = value
-
-        total = sum(result.values())
-        if total <= 0:
-            return {
-                "home_win": 1 / 3,
-                "draw": 1 / 3,
-                "away_win": 1 / 3,
-            }
-
-        return {
-            "home_win": result["home_win"] / total,
-            "draw": result["draw"] / total,
-            "away_win": result["away_win"] / total,
-        }
-EOF
-
-############################################
-CALIBRATION
-############################################
-
-CREA_FILE quant/models/calibration.py
-class ProbabilityCalibration:
-
-    def __init__(self, shrink=0.08):
-        self.shrink = shrink
-
-    def calibrate_three_way(self, probs):
-        home = float(probs.get("home_win", 0.0))
-        draw = float(probs.get("draw", 0.0))
-        away = float(probs.get("away_win", 0.0))
-
-        total = home + draw + away
-        if total <= 0:
-            return {
-                "home_win": 1 / 3,
-                "draw": 1 / 3,
-                "away_win": 1 / 3,
-            }
-
-        home /= total
-        draw /= total
-        away /= total
-
-        uniform = 1 / 3
-
-        home = (1 - self.shrink) * home + self.shrink * uniform
-        draw = (1 - self.shrink) * draw + self.shrink * uniform
-        away = (1 - self.shrink) * away + self.shrink * uniform
-
-        total = home + draw + away
-
-        return {
-            "home_win": home / total,
-            "draw": draw / total,
-            "away_win": away / total,
-        }
-
-    def calibrate_binary(self, p):
-        p = float(p)
-        p = max(0.0001, min(0.9999, p))
-        return (1 - self.shrink) * p + self.shrink * 0.5
-EOF
-
-############################################
-ODDS / MARKET HELPERS
-############################################
-
-CREA_FILE quant/services/market_tools.py
-class MarketTools:
-
-    def normalize_implied_probs_1x2(self, odds):
-        home_odds = float(odds.get("home", 0) or 0)
-        draw_odds = float(odds.get("draw", 0) or 0)
-        away_odds = float(odds.get("away", 0) or 0)
-
-        raw = {
-            "home_win": 1 / home_odds if home_odds > 0 else 0.0,
-            "draw": 1 / draw_odds if draw_odds > 0 else 0.0,
-            "away_win": 1 / away_odds if away_odds > 0 else 0.0,
-        }
-
-        total = raw["home_win"] + raw["draw"] + raw["away_win"]
-        if total <= 0:
-            return {
-                "home_win": 1 / 3,
-                "draw": 1 / 3,
-                "away_win": 1 / 3,
-            }
-
-        return {
-            "home_win": raw["home_win"] / total,
-            "draw": raw["draw"] / total,
-            "away_win": raw["away_win"] / total,
-        }
-
-    def fair_odds(self, probability):
-        probability = float(probability)
-        if probability <= 0:
-            return 999.0
-        return 1.0 / probability
-
-    def edge(self, probability, bookmaker_odds):
-        probability = float(probability)
-        bookmaker_odds = float(bookmaker_odds or 0.0)
-        if bookmaker_odds <= 0:
-            return 0.0
-        return (probability * bookmaker_odds) - 1.0
-
-    def probability_edge_vs_market(self, model_prob, market_prob):
-        return float(model_prob) - float(market_prob)
-EOF
-
-############################################
-AGREEMENT + CONFIDENCE
-############################################
-
-CREA_FILE quant/services/agreement_engine.py
-class AgreementEngine:
-
-    def three_way_agreement(self, probs_list):
-        if not probs_list:
-            return 0.0
-
-        def dispersion(values):
-            if not values:
-                return 1.0
-            mean_value = sum(values) / len(values)
-            variance = sum((v - mean_value) ** 2 for v in values) / len(values)
-            return variance ** 0.5
-
-        home_values = [float(p.get("home_win", 0.0)) for p in probs_list]
-        draw_values = [float(p.get("draw", 0.0)) for p in probs_list]
-        away_values = [float(p.get("away_win", 0.0)) for p in probs_list]
-
-        mean_disp = (
-            dispersion(home_values)
-            + dispersion(draw_values)
-            + dispersion(away_values)
-        ) / 3.0
-
-        agreement = 1.0 - mean_disp * 3.0
-        agreement = max(0.0, min(1.0, agreement))
-        return agreement
-EOF
-
-CREA_FILE quant/services/confidence_engine.py
-class QuantConfidenceEngine:
-
-    def score(self, probability, edge, agreement, xg_support=0.0):
-        probability = max(0.0, min(1.0, float(probability)))
-        edge = max(0.0, float(edge))
-        agreement = max(0.0, min(1.0, float(agreement)))
-        xg_support = max(0.0, min(1.0, float(xg_support)))
-
-        edge_score = min(edge / 0.15, 1.0)
-
-        confidence = (
-            probability * 0.40
-            + edge_score * 0.28
-            + agreement * 0.22
-            + xg_support * 0.10
-        )
-
-        confidence = max(0.0, min(1.0, confidence))
-        return confidence
-EOF
-
-############################################
-NO BET FILTER
-############################################
-
-CREA_FILE quant/services/no_bet_filter.py
-class QuantNoBetFilter:
-
-    def __init__(
-        self,
-        min_probability=0.54,
-        min_edge=0.04,
-        min_confidence=0.64,
-        min_agreement=0.58,
-    ):
-        self.min_probability = min_probability
-        self.min_edge = min_edge
-        self.min_confidence = min_confidence
-        self.min_agreement = min_agreement
-
-    def decide(self, probability, edge, confidence, agreement):
-        probability = float(probability)
-        edge = float(edge)
-        confidence = float(confidence)
-        agreement = float(agreement)
-
-        if (
-            probability >= self.min_probability
-            and edge >= self.min_edge
-            and confidence >= self.min_confidence
-            and agreement >= self.min_agreement
-        ):
-            return "BET"
-
-        if (
-            probability >= self.min_probability * 0.95
-            and edge >= self.min_edge * 0.65
-            and confidence >= self.min_confidence * 0.80
-            and agreement >= self.min_agreement * 0.85
-        ):
-            return "WATCHLIST"
-
-        return "NO_BET"
-EOF
-
-############################################
-RANKER
-############################################
-
-CREA_FILE quant/services/ranker.py
-class QuantRanker:
-
-    def rank(self, prediction_results):
-        return sorted(
-            prediction_results,
-            key=lambda x: (
-                x.decision != "BET",
-                -x.confidence,
-                -x.market_edge,
-                -x.probability,
-            ),
-        )
-EOF
-
-############################################
-DATASET BUILDER
-############################################
-
-CREA_FILE quant/features/dataset_builder.py
-class QuantDatasetBuilder:
-
-    def __init__(self, fixtures_provider, odds_provider, advanced_provider):
-        self.fixtures_provider = fixtures_provider
-        self.odds_provider = odds_provider
-        self.advanced_provider = advanced_provider
-
-    def build_training_data(self, league=None, season=None):
-        completed_matches = self.fixtures_provider.get_completed_matches(
-            league=league,
-            season=season,
-        )
-
-        advanced = self.advanced_provider.get_team_advanced_stats(
-            league=league,
-            season=season,
-        )
-
-        return {
-            "completed_matches": completed_matches,
-            "advanced_stats": advanced,
-        }
-
-    def build_prediction_data(self, league=None, season=None):
-        upcoming_matches = self.fixtures_provider.get_upcoming_matches(
-            league=league,
-            season=season,
-        )
-
-        fixture_ids = [match["fixture_id"] for match in upcoming_matches]
-        odds = self.odds_provider.get_prematch_odds(fixture_ids)
-
-        return {
-            "upcoming_matches": upcoming_matches,
-            "odds": odds,
-        }
-EOF
-
-############################################
-QUANT PIPELINE
-############################################
-
-CREA_FILE quant/services/quant_engine.py
-from quant.features.dataset_builder import QuantDatasetBuilder
-from quant.features.feature_builder import FeatureBuilder
-from quant.models.calibration import ProbabilityCalibration
-from quant.models.elo_engine import EloEngine
-from quant.models.form_engine import FormEngine
-from quant.models.manual_blend_model import ManualBlendModel
-from quant.models.poisson_engine import PoissonEngine
-from quant.models.prediction_result import PredictionResult
-from quant.services.agreement_engine import AgreementEngine
-from quant.services.confidence_engine import QuantConfidenceEngine
-from quant.services.market_tools import MarketTools
-from quant.services.no_bet_filter import QuantNoBetFilter
-from quant.services.ranker import QuantRanker
-
-
-class QuantEngine:
-
-    def __init__(self, fixtures_provider, odds_provider, advanced_provider):
-        self.dataset_builder = QuantDatasetBuilder(
-            fixtures_provider=fixtures_provider,
-            odds_provider=odds_provider,
-            advanced_provider=advanced_provider,
-        )
-        self.elo_engine = EloEngine()
-        self.poisson_engine = PoissonEngine()
-        self.form_engine = FormEngine()
-        self.blend_model = ManualBlendModel()
-        self.calibration = ProbabilityCalibration()
-        self.market_tools = MarketTools()
-        self.agreement_engine = AgreementEngine()
-        self.confidence_engine = QuantConfidenceEngine()
-        self.no_bet_filter = QuantNoBetFilter()
-        self.ranker = QuantRanker()
-
-    def fit(self, league=None, season=None):
-        training = self.dataset_builder.build_training_data(
-            league=league,
-            season=season,
-        )
-
-        completed_matches = training["completed_matches"]
-        advanced_stats = training["advanced_stats"]
-
-        self.elo_engine.fit(completed_matches)
-        self.poisson_engine.fit(completed_matches)
-        self.form_engine.fit(completed_matches)
-
-        self.feature_builder = FeatureBuilder(
-            elo_engine=self.elo_engine,
-            poisson_engine=self.poisson_engine,
-            form_engine=self.form_engine,
-            advanced_stats=advanced_stats,
-        )
-
-    def _three_way_component_bundle(self, features, bookmaker_odds):
-        home_team = features["home_team"]
-        away_team = features["away_team"]
-
-        poisson_probs = self.poisson_engine.probabilities_1x2(home_team, away_team)
-        market_probs = self.market_tools.normalize_implied_probs_1x2(bookmaker_odds)
-
-        blended = self.blend_model.combine(
-            poisson_probs=poisson_probs,
-            elo_diff=features["elo_diff"],
-            form_diff=features["form_diff"],
-            xg_diff=features["xg_diff"],
-            market_probs=market_probs,
-        )
-
-        calibrated = self.calibration.calibrate_three_way(blended)
-
-        agreement = self.agreement_engine.three_way_agreement(
-            [
-                poisson_probs,
-                self.blend_model.elo_to_probs(features["elo_diff"]),
-                self.blend_model.form_to_probs(features["form_diff"]),
-                self.blend_model.xg_to_probs(features["xg_diff"]),
-                market_probs,
-            ]
-        )
-
-        return {
-            "poisson_probs": poisson_probs,
-            "market_probs": market_probs,
-            "final_probs": calibrated,
-            "agreement": agreement,
-        }
-
-    def _build_1x2_results(self, fixture, features, bookmaker_odds):
-        bundle = self._three_way_component_bundle(features, bookmaker_odds)
-
-        final_probs = bundle["final_probs"]
-        market_probs = bundle["market_probs"]
-        agreement = bundle["agreement"]
-
-        xg_support = 0.0
-        if features["xg_diff"] > 0.20:
-            xg_support = 1.0
-        elif features["xg_diff"] < -0.20:
-            xg_support = 0.6
-        else:
-            xg_support = 0.4
-
-        mapping = {
-            "home": ("home_win", float(bookmaker_odds.get("home", 0.0))),
-            "draw": ("draw", float(bookmaker_odds.get("draw", 0.0))),
-            "away": ("away_win", float(bookmaker_odds.get("away", 0.0))),
-        }
-
-        results = []
-
-        for market_name, (prob_key, bookmaker_price) in mapping.items():
-            probability = float(final_probs.get(prob_key, 0.0))
-            fair_odds = self.market_tools.fair_odds(probability)
-            model_edge = self.market_tools.edge(probability, bookmaker_price)
-            market_edge = self.market_tools.probability_edge_vs_market(
-                probability,
-                market_probs.get(prob_key, 0.0),
-            )
-            confidence = self.confidence_engine.score(
-                probability=probability,
-                edge=market_edge,
-                agreement=agreement,
-                xg_support=xg_support,
-            )
-            decision = self.no_bet_filter.decide(
-                probability=probability,
-                edge=market_edge,
-                confidence=confidence,
-                agreement=agreement,
-            )
-
-            results.append(
-                PredictionResult(
-                    fixture_id=str(fixture["fixture_id"]),
-                    home_team=fixture["home_team"],
-                    away_team=fixture["away_team"],
-                    market=market_name,
-                    probability=round(probability, 6),
-                    fair_odds=round(fair_odds, 4),
-                    bookmaker_odds=round(bookmaker_price, 4),
-                    market_edge=round(market_edge, 6),
-                    model_edge=round(model_edge, 6),
-                    confidence=round(confidence, 6),
-                    agreement=round(agreement, 6),
-                    decision=decision,
-                    details={
-                        "elo_diff": round(features["elo_diff"], 4),
-                        "form_diff": round(features["form_diff"], 4),
-                        "xg_diff": round(features["xg_diff"], 4),
-                        "expected_goals_home": round(features["expected_goals_home"], 4),
-                        "expected_goals_away": round(features["expected_goals_away"], 4),
-                    },
-                )
-            )
-
-        return results
-
-    def predict(self, league=None, season=None):
-        prediction_data = self.dataset_builder.build_prediction_data(
-            league=league,
-            season=season,
-        )
-
-        upcoming_matches = prediction_data["upcoming_matches"]
-        odds_map = prediction_data["odds"]
-
-        features_list = self.feature_builder.build_many(upcoming_matches)
-
-        all_results = []
-
-        for fixture, features in zip(upcoming_matches, features_list):
-            fixture_id = fixture["fixture_id"]
-            bookmaker_odds = odds_map.get(
-                fixture_id,
-                {
-                    "home": 2.40,
-                    "draw": 3.10,
-                    "away": 2.95,
-                },
-            )
-
-            fixture_results = self._build_1x2_results(
-                fixture=fixture,
-                features=features,
-                bookmaker_odds=bookmaker_odds,
-            )
-            all_results.extend(fixture_results)
-
-        ranked = self.ranker.rank(all_results)
-        return ranked
-EOF
-
-############################################
-SERIALIZER
-############################################
-
-CREA_FILE quant/services/result_serializer.py
-def to_records(results):
-    records = []
-
-    for item in results:
-        records.append(
-            {
-                "fixture_id": item.fixture_id,
-                "home_team": item.home_team,
-                "away_team": item.away_team,
-                "market": item.market,
-                "probability": item.probability,
-                "fair_odds": item.fair_odds,
-                "bookmaker_odds": item.bookmaker_odds,
-                "market_edge": item.market_edge,
-                "model_edge": item.model_edge,
-                "confidence": item.confidence,
-                "agreement": item.agreement,
-                "decision": item.decision,
-            }
-        )
-
-    return records
-EOF
-
-############################################
-QUANT CONTROLLER
-############################################
-
-CREA_FILE quant/services/quant_controller.py
-from quant.providers.api_football_provider import APIFootballProvider
-from quant.providers.understat_provider import UnderstatProvider
-from quant.services.quant_engine import QuantEngine
-from quant.services.result_serializer import to_records
-
-
-class QuantController:
-
-    def __init__(self, api_client=None, understat_client=None):
-        self.fixtures_provider = APIFootballProvider(api_client)
-        self.odds_provider = APIFootballProvider(api_client)
-        self.advanced_provider = UnderstatProvider(understat_client)
-
-        self.engine = QuantEngine(
-            fixtures_provider=self.fixtures_provider,
-            odds_provider=self.odds_provider,
-            advanced_provider=self.advanced_provider,
-        )
-
-    def run(self, league=None, season=None):
-        self.engine.fit(league=league, season=season)
-        results = self.engine.predict(league=league, season=season)
-        return to_records(results)
-EOF
-
-############################################
-SAMPLE CLIENTS FOR LOCAL DEV
-############################################
-
-CREA_FILE quant/providers/sample_clients.py
-class SampleAPIFootballClient:
-
-    def get_completed_matches(self, league=None, season=None):
-        return [
-            {
-                "fixture_id": "m1",
-                "home_team": "Inter",
-                "away_team": "Milan",
-                "home_goals": 2,
-                "away_goals": 1,
-            },
-            {
-                "fixture_id": "m2",
-                "home_team": "Juventus",
-                "away_team": "Roma",
-                "home_goals": 1,
-                "away_goals": 1,
-            },
-            {
-                "fixture_id": "m3",
-                "home_team": "Napoli",
-                "away_team": "Lazio",
-                "home_goals": 3,
-                "away_goals": 0,
-            },
-            {
-                "fixture_id": "m4",
-                "home_team": "Milan",
-                "away_team": "Juventus",
-                "home_goals": 0,
-                "away_goals": 1,
-            },
-            {
-                "fixture_id": "m5",
-                "home_team": "Roma",
-                "away_team": "Inter",
-                "home_goals": 1,
-                "away_goals": 2,
-            },
-            {
-                "fixture_id": "m6",
-                "home_team": "Lazio",
-                "away_team": "Napoli",
-                "home_goals": 1,
-                "away_goals": 2,
-            },
-            {
-                "fixture_id": "m7",
-                "home_team": "Inter",
-                "away_team": "Juventus",
-                "home_goals": 2,
-                "away_goals": 0,
-            },
-            {
-                "fixture_id": "m8",
-                "home_team": "Milan",
-                "away_team": "Roma",
-                "home_goals": 2,
-                "away_goals": 2,
-            },
-            {
-                "fixture_id": "m9",
-                "home_team": "Napoli",
-                "away_team": "Inter",
-                "home_goals": 1,
-                "away_goals": 1,
-            },
-            {
-                "fixture_id": "m10",
-                "home_team": "Lazio",
-                "away_team": "Milan",
-                "home_goals": 0,
-                "away_goals": 1,
-            },
-        ]
-
-    def get_upcoming_matches(self, league=None, season=None):
-        return [
-            {
-                "fixture_id": "u1",
-                "home_team": "Inter",
-                "away_team": "Roma",
-            },
-            {
-                "fixture_id": "u2",
-                "home_team": "Napoli",
-                "away_team": "Milan",
-            },
-            {
-                "fixture_id": "u3",
-                "home_team": "Juventus",
-                "away_team": "Lazio",
-            },
-        ]
-
-    def get_prematch_odds(self, fixture_ids):
-        return {
-            "u1": {"home": 1.88, "draw": 3.55, "away": 4.40},
-            "u2": {"home": 2.25, "draw": 3.25, "away": 3.05},
-            "u3": {"home": 2.05, "draw": 3.15, "away": 3.75},
-        }
-
-
-class SampleUnderstatClient:
-
-    def get_team_advanced_stats(self, league=None, season=None):
-        return {
-            "Inter": {
-                "xg_for": 1.85,
-                "xg_against": 0.90,
-                "xpts": 2.10,
-                "shots": 14.0,
-                "shots_on_target": 5.3,
-            },
-            "Roma": {
-                "xg_for": 1.30,
-                "xg_against": 1.20,
-                "xpts": 1.50,
-                "shots": 11.0,
-                "shots_on_target": 4.1,
-            },
-            "Napoli": {
-                "xg_for": 1.70,
-                "xg_against": 1.00,
-                "xpts": 1.95,
-                "shots": 13.2,
-                "shots_on_target": 4.8,
-            },
-            "Milan": {
-                "xg_for": 1.48,
-                "xg_against": 1.08,
-                "xpts": 1.72,
-                "shots": 12.0,
-                "shots_on_target": 4.4,
-            },
-            "Juventus": {
-                "xg_for": 1.42,
-                "xg_against": 0.94,
-                "xpts": 1.80,
-                "shots": 11.5,
-                "shots_on_target": 4.0,
-            },
-            "Lazio": {
-                "xg_for": 1.18,
-                "xg_against": 1.16,
-                "xpts": 1.35,
-                "shots": 10.4,
-                "shots_on_target": 3.7,
-            },
-        }
-EOF
-
-############################################
-JOB RUNNER QUANT MODE
-############################################
-
-CREA_FILE quant/services/quant_job_runner.py
-from quant.providers.sample_clients import SampleAPIFootballClient
-from quant.providers.sample_clients import SampleUnderstatClient
-from quant.services.quant_controller import QuantController
-
-
-class QuantJobRunner:
-
-    def __init__(self):
-        self.controller = QuantController(
-            api_client=SampleAPIFootballClient(),
-            understat_client=SampleUnderstatClient(),
-        )
-
-    def run_cycle(self, league="Serie A", season=2024):
-        return self.controller.run(league=league, season=season)
-EOF
-
-############################################
-TESTS
-############################################
-
-CREA_FILE quant/tests/test_elo_engine.py
-from quant.models.elo_engine import EloEngine
-
-
-def test_elo_engine_updates():
-    engine = EloEngine()
-
-    engine.update_match("A", "B", 2, 0)
-
-    assert engine.get_rating("A") != 1500.0
-    assert engine.get_rating("B") != 1500.0
-EOF
-
-CREA_FILE quant/tests/test_poisson_engine.py
-from quant.models.poisson_engine import PoissonEngine
-
-
-def test_poisson_engine_probabilities():
-    engine = PoissonEngine()
-
-    engine.fit(
-        [
-            {"home_team": "A", "away_team": "B", "home_goals": 2, "away_goals": 1},
-            {"home_team": "B", "away_team": "A", "home_goals": 0, "away_goals": 1},
-            {"home_team": "A", "away_team": "C", "home_goals": 3, "away_goals": 1},
-            {"home_team": "C", "away_team": "B", "home_goals": 1, "away_goals": 1},
-        ]
-    )
-
-    probs = engine.probabilities_1x2("A", "B")
-
-    total = probs["home_win"] + probs["draw"] + probs["away_win"]
-
-    assert 0.999 <= total <= 1.001
-EOF
-
-CREA_FILE quant/tests/test_manual_blend_model.py
-from quant.models.manual_blend_model import ManualBlendModel
-
-
-def test_manual_blend_model_runs():
-    model = ManualBlendModel()
-
-    result = model.combine(
-        poisson_probs={"home_win": 0.50, "draw": 0.25, "away_win": 0.25},
-        elo_diff=55,
-        form_diff=0.20,
-        xg_diff=0.30,
-        market_probs={"home_win": 0.48, "draw": 0.27, "away_win": 0.25},
-    )
-
-    total = result["home_win"] + result["draw"] + result["away_win"]
-
-    assert 0.999 <= total <= 1.001
-EOF
-
-CREA_FILE quant/tests/test_quant_engine.py
-from quant.providers.sample_clients import SampleAPIFootballClient
-from quant.providers.sample_clients import SampleUnderstatClient
-from quant.services.quant_engine import QuantEngine
-
-
-def test_quant_engine_predicts():
-    engine = QuantEngine(
-        fixtures_provider=SampleAPIFootballClient(),
-        odds_provider=SampleAPIFootballClient(),
-        advanced_provider=SampleUnderstatClient(),
-    )
-
-    engine.fit(league="Serie A", season=2024)
-    results = engine.predict(league="Serie A", season=2024)
-
-    assert isinstance(results, list)
-    assert len(results) > 0
-    assert results[0].decision in ("BET", "WATCHLIST", "NO_BET")
-EOF
-
-CREA_FILE quant/tests/test_quant_controller.py
-from quant.providers.sample_clients import SampleAPIFootballClient
-from quant.providers.sample_clients import SampleUnderstatClient
-from quant.services.quant_controller import QuantController
-
-
-def test_quant_controller_returns_records():
-    controller = QuantController(
-        api_client=SampleAPIFootballClient(),
-        understat_client=SampleUnderstatClient(),
-    )
-
-    records = controller.run(league="Serie A", season=2024)
-
-    assert isinstance(records, list)
-    assert len(records) > 0
-    assert "fixture_id" in records[0]
-    assert "decision" in records[0]
-EOF
-
-############################################
-APP LEVEL BRIDGE
-############################################
-
-CREA_FILE app/quant_controller.py
+CREA_FILE engine/job_runner.py
 from quant.services.quant_job_runner import QuantJobRunner
 
 
-class AppQuantController:
+class JobRunner:
 
     def __init__(self):
-        self.runner = QuantJobRunner()
+        self.quant_runner = QuantJobRunner()
+
+    def run_cycle(self):
+        return self.quant_runner.run_cycle()
+EOF
+
+CREA_FILE app/controller.py
+from engine.job_runner import JobRunner
+
+
+class AppController:
+
+    def __init__(self):
+        self.runner = JobRunner()
+
+    def run_once(self):
+        return self.runner.run_cycle()
+
+    def run_predictions(self):
+        return self.runner.run_cycle()
 
     def run_quant_cycle(self):
         return self.runner.run_cycle()
 EOF
 
-############################################
-ROOT TESTS
-############################################
+CREA_FILE ui/main_window.py
+from PySide6.QtWidgets import (
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QToolBar,
+)
 
-CREA_FILE tests/test_quant_engine_bridge.py
-from app.quant_controller import AppQuantController
+from ui.about_dialog import AboutDialog
+from ui.backtest_runner_window import BacktestRunnerWindow
+from ui.dashboard_view import DashboardView
+from ui.final_check_window import FinalCheckWindow
+from ui.manual_context_window import ManualContextWindow
+from ui.offline_import_window import OfflineImportWindow
+from ui.outputs_view import OutputsView
+from ui.project_summary_window import ProjectSummaryWindow
+from ui.settings_window import SettingsWindow
 
 
-def test_app_quant_controller_runs():
-    controller = AppQuantController()
+class MainWindow(QMainWindow):
 
-    results = controller.run_quant_cycle()
+    def __init__(self, controller):
+
+        super().__init__()
+
+        self.controller = controller
+
+        self.setWindowTitle("Football Quant Engine")
+        self.resize(1320, 860)
+
+        self.dashboard = DashboardView()
+        self.setCentralWidget(self.dashboard)
+
+        self.status_label = QLabel("Ready")
+        self.statusBar().addPermanentWidget(self.status_label)
+
+        toolbar = QToolBar("Main")
+        self.addToolBar(toolbar)
+
+        self.run_button = QPushButton("Run Cycle")
+        self.run_button.clicked.connect(self.run_cycle)
+        toolbar.addWidget(self.run_button)
+
+        self.backtest_button = QPushButton("Backtest")
+        self.backtest_button.clicked.connect(self.open_backtest)
+        toolbar.addWidget(self.backtest_button)
+
+        self.settings_button = QPushButton("Settings")
+        self.settings_button.clicked.connect(self.open_settings)
+        toolbar.addWidget(self.settings_button)
+
+        self.offline_import_button = QPushButton("Import CSV")
+        self.offline_import_button.clicked.connect(self.open_offline_import)
+        toolbar.addWidget(self.offline_import_button)
+
+        self.manual_context_button = QPushButton("Manual Context")
+        self.manual_context_button.clicked.connect(self.open_manual_context)
+        toolbar.addWidget(self.manual_context_button)
+
+        self.outputs_button = QPushButton("Outputs")
+        self.outputs_button.clicked.connect(self.open_outputs)
+        toolbar.addWidget(self.outputs_button)
+
+        self.final_check_button = QPushButton("Final Check")
+        self.final_check_button.clicked.connect(self.open_final_check)
+        toolbar.addWidget(self.final_check_button)
+
+        self.project_summary_button = QPushButton("Project Summary")
+        self.project_summary_button.clicked.connect(self.open_project_summary)
+        toolbar.addWidget(self.project_summary_button)
+
+        self.about_button = QPushButton("About")
+        self.about_button.clicked.connect(self.open_about)
+        toolbar.addWidget(self.about_button)
+
+        self.settings_window = None
+        self.about_dialog = None
+        self.offline_import_window = None
+        self.manual_context_window = None
+        self.outputs_view = None
+        self.final_check_window = None
+        self.project_summary_window = None
+        self.backtest_window = None
+
+        self.dashboard.set_status("Ready")
+        self.dashboard.append_log("Application started.")
+        self.dashboard.add_history_message("Application started.")
+
+    def open_settings(self):
+
+        self.settings_window = SettingsWindow()
+        self.settings_window.show()
+
+    def open_about(self):
+
+        self.about_dialog = AboutDialog()
+        self.about_dialog.show()
+
+    def open_offline_import(self):
+
+        self.offline_import_window = OfflineImportWindow()
+        self.offline_import_window.show()
+
+    def open_manual_context(self):
+
+        self.manual_context_window = ManualContextWindow()
+        self.manual_context_window.show()
+
+    def open_outputs(self):
+
+        self.outputs_view = OutputsView()
+        self.outputs_view.show()
+
+    def open_final_check(self):
+
+        self.final_check_window = FinalCheckWindow()
+        self.final_check_window.show()
+
+    def open_project_summary(self):
+
+        self.project_summary_window = ProjectSummaryWindow()
+        self.project_summary_window.show()
+
+    def open_backtest(self):
+
+        self.backtest_window = BacktestRunnerWindow(
+            on_metrics_ready=self.dashboard.set_metrics,
+            on_log_message=self.dashboard.append_log,
+        )
+        self.backtest_window.show()
+
+    def run_cycle(self):
+
+        self.dashboard.set_status("Running")
+        self.status_label.setText("Running")
+        self.dashboard.append_log("Quant prediction pipeline started.")
+        self.dashboard.add_history_message("Quant prediction pipeline started.")
+
+        try:
+            ranked = self.controller.run_predictions()
+
+            if ranked is None:
+                self.dashboard.clear_table()
+                self.dashboard.set_log_text("No prediction results returned.")
+                self.dashboard.set_status("Completed")
+                self.status_label.setText("Completed")
+                self.dashboard.add_history_message("Prediction run completed: no results")
+                return
+
+            if isinstance(ranked, list):
+                self.dashboard.set_results_from_records(ranked)
+                self.dashboard.set_log_text(str(ranked))
+                self.dashboard.set_status("Completed")
+                self.status_label.setText("Completed")
+                self.dashboard.add_history_message(
+                    f"Prediction run completed: rows={len(ranked)}"
+                )
+                self.dashboard.append_log(
+                    f"Quant prediction run completed successfully with {len(ranked)} rows."
+                )
+                return
+
+            if getattr(ranked, "empty", False):
+                self.dashboard.clear_table()
+                self.dashboard.set_log_text("No prediction rows found.")
+                self.dashboard.set_status("Completed")
+                self.status_label.setText("Completed")
+                self.dashboard.add_history_message("Prediction run completed: empty dataframe")
+                return
+
+            self.dashboard.set_results_dataframe(ranked)
+            self.dashboard.set_log_text(ranked.to_string(index=False))
+            self.dashboard.set_status("Completed")
+            self.status_label.setText("Completed")
+            self.dashboard.add_history_message(
+                f"Prediction run completed: rows={len(ranked.index)}"
+            )
+            self.dashboard.append_log("Quant prediction run completed successfully.")
+
+        except Exception as exc:
+            self.dashboard.set_status("Error")
+            self.dashboard.append_log(f"Error: {exc}")
+            self.dashboard.add_history_message(f"Prediction run failed: {exc}")
+            QMessageBox.critical(
+                self,
+                "Run Error",
+                str(exc),
+            )
+            self.status_label.setText("Error")
+EOF
+
+CREA_FILE tests/test_job_runner_quant.py
+from engine.job_runner import JobRunner
+
+
+def test_job_runner_returns_quant_results():
+
+    runner = JobRunner()
+
+    results = runner.run_cycle()
 
     assert isinstance(results, list)
     assert len(results) > 0
+    assert "fixture_id" in results[0]
+    assert "market" in results[0]
+    assert "decision" in results[0]
+EOF
+
+CREA_FILE tests/test_app_controller_quant.py
+from app.controller import AppController
+
+
+def test_app_controller_quant_flow():
+
+    controller = AppController()
+
+    results = controller.run_predictions()
+
+    assert isinstance(results, list)
+    assert len(results) > 0
+    assert "home_team" in results[0]
+    assert "away_team" in results[0]
+    assert "confidence" in results[0]
+EOF
+
+CREA_FILE tests/test_quant_records_shape.py
+from quant.services.quant_job_runner import QuantJobRunner
+
+
+def test_quant_records_have_expected_fields():
+
+    runner = QuantJobRunner()
+
+    results = runner.run_cycle()
+
+    first = results[0]
+
+    expected = {
+        "fixture_id",
+        "home_team",
+        "away_team",
+        "market",
+        "probability",
+        "fair_odds",
+        "bookmaker_odds",
+        "market_edge",
+        "model_edge",
+        "confidence",
+        "agreement",
+        "decision",
+    }
+
+    assert expected.issubset(set(first.keys()))
 EOF
 
 FIX_WHITESPACE
-

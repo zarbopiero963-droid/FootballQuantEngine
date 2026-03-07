@@ -1,11 +1,3 @@
-############################################
-CI QUANT ENGINE GUARD
-############################################
-
-CREA_CARTELLA quant/guard
-CREA_CARTELLA outputs/ci
-
-CREA_FILE quant/guard/quant_guard.py
 from __future__ import annotations
 
 import json
@@ -221,7 +213,9 @@ class QuantEngineGuard:
             "bet_count": decision_counts["BET"],
             "watchlist_count": decision_counts["WATCHLIST"],
             "no_bet_count": decision_counts["NO_BET"],
-            "avg_probability": round(sum(probabilities) / max(len(probabilities), 1), 6),
+            "avg_probability": round(
+                sum(probabilities) / max(len(probabilities), 1), 6
+            ),
             "avg_confidence": round(sum(confidences) / max(len(confidences), 1), 6),
             "avg_agreement": round(sum(agreements) / max(len(agreements), 1), 6),
             "max_market_edge": round(max(market_edges) if market_edges else 0.0, 6),
@@ -233,7 +227,9 @@ class QuantEngineGuard:
             summary=summary,
         )
 
-    def save_report(self, result: GuardResult, path: str = "outputs/ci/quant_guard_report.json") -> str:
+    def save_report(
+        self, result: GuardResult, path: str = "outputs/ci/quant_guard_report.json"
+    ) -> str:
         os.makedirs(os.path.dirname(path), exist_ok=True)
 
         payload = {
@@ -246,180 +242,3 @@ class QuantEngineGuard:
             json.dump(payload, handle, indent=2)
 
         return path
-EOF
-
-CREA_FILE quant/guard/quant_snapshot.py
-from __future__ import annotations
-
-import json
-import os
-
-
-class QuantSnapshotManager:
-
-    def __init__(self, path: str = "outputs/ci/quant_snapshot.json"):
-        self.path = path
-
-    def save(self, summary: dict) -> str:
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
-
-        with open(self.path, "w", encoding="utf-8") as handle:
-            json.dump(summary, handle, indent=2)
-
-        return self.path
-
-    def load(self) -> dict | None:
-        if not os.path.exists(self.path):
-            return None
-
-        with open(self.path, "r", encoding="utf-8") as handle:
-            return json.load(handle)
-EOF
-
-CREA_FILE quant/guard/quant_guard_runner.py
-from __future__ import annotations
-
-from quant.guard.quant_guard import QuantEngineGuard
-from quant.guard.quant_snapshot import QuantSnapshotManager
-from quant.services.quant_job_runner import QuantJobRunner
-
-
-class QuantGuardRunner:
-
-    def __init__(self):
-        self.runner = QuantJobRunner()
-        self.guard = QuantEngineGuard()
-        self.snapshot = QuantSnapshotManager()
-
-    def run(self) -> dict:
-        records = self.runner.run_cycle()
-
-        result = self.guard.validate_records(records)
-        report_path = self.guard.save_report(result)
-        snapshot_path = self.snapshot.save(result.summary)
-
-        return {
-            "passed": result.passed,
-            "checks": result.checks,
-            "summary": result.summary,
-            "report_path": report_path,
-            "snapshot_path": snapshot_path,
-        }
-EOF
-
-CREA_FILE tests/test_quant_guard.py
-from quant.guard.quant_guard import QuantEngineGuard
-
-
-def test_quant_guard_accepts_valid_records():
-    records = [
-        {
-            "fixture_id": "1",
-            "home_team": "TeamA",
-            "away_team": "TeamB",
-            "market": "home",
-            "probability": 0.58,
-            "fair_odds": 1.72,
-            "bookmaker_odds": 2.05,
-            "market_edge": 0.06,
-            "model_edge": 0.18,
-            "confidence": 0.72,
-            "agreement": 0.68,
-            "decision": "BET",
-        }
-    ]
-
-    guard = QuantEngineGuard()
-    result = guard.validate_records(records)
-
-    assert result.passed is True
-    assert result.summary["record_count"] == 1
-    assert result.summary["bet_count"] == 1
-EOF
-
-CREA_FILE tests/test_quant_guard_runner.py
-from quant.guard.quant_guard_runner import QuantGuardRunner
-
-
-def test_quant_guard_runner_runs():
-    runner = QuantGuardRunner()
-    result = runner.run()
-
-    assert isinstance(result, dict)
-    assert "passed" in result
-    assert "summary" in result
-    assert "report_path" in result
-    assert "snapshot_path" in result
-EOF
-
-CREA_FILE tests/test_quant_guard_report_file.py
-import json
-import os
-
-from quant.guard.quant_guard import QuantEngineGuard
-
-
-def test_quant_guard_saves_report(tmp_path):
-    records = [
-        {
-            "fixture_id": "1",
-            "home_team": "TeamA",
-            "away_team": "TeamB",
-            "market": "home",
-            "probability": 0.55,
-            "fair_odds": 1.81,
-            "bookmaker_odds": 2.00,
-            "market_edge": 0.05,
-            "model_edge": 0.10,
-            "confidence": 0.70,
-            "agreement": 0.66,
-            "decision": "BET",
-        }
-    ]
-
-    guard = QuantEngineGuard()
-    result = guard.validate_records(records)
-
-    report_path = tmp_path / "quant_guard_report.json"
-    saved_path = guard.save_report(result, str(report_path))
-
-    assert os.path.exists(saved_path)
-
-    with open(saved_path, "r", encoding="utf-8") as handle:
-        payload = json.load(handle)
-
-    assert "passed" in payload
-    assert "checks" in payload
-    assert "summary" in payload
-EOF
-
-CREA_FILE app/quant_guard.py
-from quant.guard.quant_guard_runner import QuantGuardRunner
-
-
-class AppQuantGuard:
-
-    def __init__(self):
-        self.runner = QuantGuardRunner()
-
-    def run(self):
-        return self.runner.run()
-EOF
-
-CREA_FILE tests/test_app_quant_guard.py
-from app.quant_guard import AppQuantGuard
-
-
-def test_app_quant_guard_runs():
-    app_guard = AppQuantGuard()
-    result = app_guard.run()
-
-    assert isinstance(result, dict)
-    assert "passed" in result
-    assert "summary" in result
-EOF
-
-CREA_FILE outputs/ci/.gitkeep
-
-FIX_WHITESPACE
-

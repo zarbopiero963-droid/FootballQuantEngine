@@ -1355,3 +1355,23 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-07_23-52-38.zip
+Backup created backups/backup_2026-03-07_23-52-38.zip
+[WARN] Unknown command: CI QUANT ENGINE GUARD
+[CREATE] folder quant/guard
+[CREATE] folder outputs/ci
+[CREATE] file quant/guard/quant_guard.py
+[CREATE] file quant/guard/quant_snapshot.py
+[CREATE] file quant/guard/quant_guard_runner.py
+[CREATE] file tests/test_quant_guard.py
+[CREATE] file tests/test_quant_guard_runner.py
+[CREATE] file tests/test_quant_guard_report_file.py
+[CREATE] file app/quant_guard.py
+[CREATE] file tests/test_app_quant_guard.py
+[CREATE] file outputs/ci/.gitkeep
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

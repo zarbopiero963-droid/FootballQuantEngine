@@ -1,0 +1,87 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "name": "records_is_list",
+      "passed": true,
+      "value": "list"
+    },
+    {
+      "name": "records_not_empty",
+      "passed": true,
+      "value": 9
+    },
+    {
+      "name": "required_fields_present",
+      "passed": true,
+      "value": [
+        "agreement",
+        "away_team",
+        "bookmaker_odds",
+        "confidence",
+        "decision",
+        "fair_odds",
+        "fixture_id",
+        "home_team",
+        "market",
+        "market_edge",
+        "model_edge",
+        "probability"
+      ]
+    },
+    {
+      "name": "all_required_fields_present_in_all_records",
+      "passed": true,
+      "value": true
+    },
+    {
+      "name": "valid_decisions",
+      "passed": true,
+      "value": 0
+    },
+    {
+      "name": "valid_markets",
+      "passed": true,
+      "value": 0
+    },
+    {
+      "name": "probabilities_in_range",
+      "passed": true,
+      "value": 0
+    },
+    {
+      "name": "confidences_in_range",
+      "passed": true,
+      "value": 0
+    },
+    {
+      "name": "agreements_in_range",
+      "passed": true,
+      "value": 0
+    },
+    {
+      "name": "odds_positive",
+      "passed": true,
+      "value": 0
+    },
+    {
+      "name": "has_any_decision_bucket",
+      "passed": true,
+      "value": {
+        "BET": 2,
+        "WATCHLIST": 1,
+        "NO_BET": 6
+      }
+    }
+  ],
+  "summary": {
+    "record_count": 9,
+    "bet_count": 2,
+    "watchlist_count": 1,
+    "no_bet_count": 6,
+    "avg_probability": 0.333333,
+    "avg_confidence": 0.479459,
+    "avg_agreement": 0.791195,
+    "max_market_edge": 0.162716
+  }
+}

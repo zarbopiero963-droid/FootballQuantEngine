@@ -68,7 +68,7 @@ jobs:
         run: |
           git remote set-url origin https://x-access-token:${{ secrets.REPO_PUSH_TOKEN }}@github.com/${{ github.repository }}.git
 
-      - name: Commit changes
+      - name: Commit and push safely
         shell: bash
         run: |
           set -e
@@ -85,7 +85,18 @@ jobs:
 
           git commit -m "[skip ci] Automated DevOps Engine Update"
 
+          # Primo tentativo push normale
+          if git push origin HEAD:main; then
+            echo "Push OK"
+            exit 0
+          fi
+
+          echo "Push rejected, retry with fetch/reset/cherry-pick"
+
+          LAST_COMMIT="$(git rev-parse HEAD)"
+
           git fetch origin main
-          git rebase origin/main
+          git reset --hard origin/main
+          git cherry-pick "$LAST_COMMIT"
 
           git push --force-with-lease origin HEAD:main

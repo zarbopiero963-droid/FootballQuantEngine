@@ -59,7 +59,7 @@ class DashboardView(QWidget):
         self.title = QLabel("Football Quant Engine Dashboard")
 
         self.total_rows_card = DashboardCard("Rows", "0")
-        self.status_card = DashboardCard("Last Status", "Ready")
+        self.status_card = DashboardCard("Status", "Ready")
         self.columns_card = DashboardCard("Columns", "0")
         self.filtered_rows_card = DashboardCard("Filtered", "0")
 
@@ -73,14 +73,14 @@ class DashboardView(QWidget):
 
         self.confidence_avg_card = DashboardCard("Avg Confidence", "0.00")
         self.agreement_avg_card = DashboardCard("Avg Agreement", "0.00")
-        self.max_edge_card = DashboardCard("Max Market Edge", "0.00")
+        self.max_edge_card = DashboardCard("Max Edge", "0.00")
 
         self.bankroll_card = DashboardCard("Bankroll", "100.00")
         self.roi_card = DashboardCard("ROI", "0.00")
         self.yield_card = DashboardCard("Yield", "0.00")
         self.hit_rate_card = DashboardCard("Hit Rate", "0.00")
         self.backtest_bets_card = DashboardCard("Backtest Bets", "0")
-        self.max_dd_card = DashboardCard("Max Drawdown", "0.00")
+        self.max_dd_card = DashboardCard("Max DD", "0.00")
 
         cards_row_1 = QHBoxLayout()
         cards_row_1.addWidget(self.total_rows_card)

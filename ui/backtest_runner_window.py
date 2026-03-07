@@ -30,6 +30,10 @@ class BacktestRunnerWindow(QWidget):
         self.date_to_input = QLineEdit()
         self.league_input = QLineEdit()
 
+        self.date_from_input.setPlaceholderText("YYYY-MM-DD")
+        self.date_to_input.setPlaceholderText("YYYY-MM-DD")
+        self.league_input.setPlaceholderText("Example: Serie A")
+
         self.run_button = QPushButton("Run Backtest")
         self.run_button.clicked.connect(self.run_backtest)
 
@@ -37,17 +41,18 @@ class BacktestRunnerWindow(QWidget):
         self.output.setReadOnly(True)
 
         layout = QGridLayout()
-        layout.addWidget(QLabel("Date From (YYYY-MM-DD)"), 0, 0)
+        layout.addWidget(QLabel("Date From"), 0, 0)
         layout.addWidget(self.date_from_input, 0, 1)
 
-        layout.addWidget(QLabel("Date To (YYYY-MM-DD)"), 1, 0)
+        layout.addWidget(QLabel("Date To"), 1, 0)
         layout.addWidget(self.date_to_input, 1, 1)
 
         layout.addWidget(QLabel("League"), 2, 0)
         layout.addWidget(self.league_input, 2, 1)
 
         layout.addWidget(self.run_button, 3, 0, 1, 2)
-        layout.addWidget(self.output, 4, 0, 1, 2)
+        layout.addWidget(QLabel("Backtest Summary"), 4, 0, 1, 2)
+        layout.addWidget(self.output, 5, 0, 1, 2)
 
         self.setLayout(layout)
 
@@ -66,13 +71,29 @@ class BacktestRunnerWindow(QWidget):
 
             metrics = self.metrics_engine.calculate(df)
 
-            self.output.setPlainText(str(metrics))
+            pretty_lines = [
+                f"Total Bets: {metrics.get('total_bets', 0)}",
+                f"ROI: {metrics.get('roi', 0):.2%}",
+                f"Yield: {metrics.get('yield', 0):.2%}",
+                f"Hit Rate: {metrics.get('hit_rate', 0):.2%}",
+                f"Total Profit: {metrics.get('total_profit', 0):.2f}",
+                f"Max Drawdown: {metrics.get('max_drawdown', 0):.2%}",
+                f"Brier Score: {metrics.get('brier_score', 0):.4f}",
+                f"Log Loss: {metrics.get('log_loss', 0):.4f}",
+            ]
+            self.output.setPlainText("\n".join(pretty_lines))
 
             if callable(self.on_metrics_ready):
                 self.on_metrics_ready(metrics)
 
             if callable(self.on_log_message):
                 self.on_log_message("Backtest completed successfully.")
+
+            QMessageBox.information(
+                self,
+                "Backtest",
+                "Backtest completed and dashboard updated.",
+            )
 
         except Exception as exc:
             if callable(self.on_log_message):

@@ -739,3 +739,4 @@ def test_product_polish_dashboard_ui_import():
 EOF
 
 FIX_WHITESPACE
+

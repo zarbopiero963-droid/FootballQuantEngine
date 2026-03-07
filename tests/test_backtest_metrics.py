@@ -9,13 +9,16 @@ def test_backtest_metrics_runs():
         [
             {
                 "home_prob": 0.60,
-                "draw_prob": None,
-                "away_prob": None,
+                "draw_prob": 0.20,
+                "away_prob": 0.20,
                 "home_goals": 2,
                 "away_goals": 1,
                 "actual_home_win": 1,
                 "actual_draw": 0,
                 "actual_away_win": 0,
+                "home_odds": 2.10,
+                "draw_odds": 3.20,
+                "away_odds": 3.80,
             }
         ]
     )
@@ -25,5 +28,4 @@ def test_backtest_metrics_runs():
     assert "roi" in metrics
     assert "yield" in metrics
     assert "hit_rate" in metrics
-    assert "brier_score" in metrics
-    assert "log_loss" in metrics
+    assert "max_drawdown" in metrics

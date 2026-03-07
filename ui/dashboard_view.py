@@ -52,12 +52,6 @@ class DashboardView(QWidget):
         self.sort_ascending = True
         self.last_csv_path = "outputs/dashboard_export.csv"
         self.last_excel_path = "outputs/dashboard_export.xlsx"
-        self.run_history = []
-        self.bankroll = 100.0
-        self.total_profit = 0.0
-        self.total_staked = 0.0
-        self.total_bets = 0
-        self.total_wins = 0
 
         self.title = QLabel("Football Quant Engine Dashboard")
 
@@ -72,6 +66,7 @@ class DashboardView(QWidget):
         self.yield_card = DashboardCard("Yield", "0.00")
         self.hit_rate_card = DashboardCard("Hit Rate", "0.00")
         self.runs_card = DashboardCard("Runs", "0")
+        self.max_dd_card = DashboardCard("Max Drawdown", "0.00")
 
         cards_row_1 = QHBoxLayout()
         cards_row_1.addWidget(self.total_bets_card)
@@ -86,6 +81,7 @@ class DashboardView(QWidget):
         cards_row_2.addWidget(self.yield_card)
         cards_row_2.addWidget(self.hit_rate_card)
         cards_row_2.addWidget(self.runs_card)
+        cards_row_2.addWidget(self.max_dd_card)
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search...")
@@ -132,6 +128,9 @@ class DashboardView(QWidget):
         self.metrics_output = QTextEdit()
         self.metrics_output.setReadOnly(True)
 
+        self.charts_output = QTextEdit()
+        self.charts_output.setReadOnly(True)
+
         self.inline_status = QLabel("Dashboard ready.")
 
         self.tabs = QTabWidget()
@@ -160,10 +159,17 @@ class DashboardView(QWidget):
         metrics_layout.addWidget(self.metrics_output)
         metrics_tab.setLayout(metrics_layout)
 
+        charts_tab = QWidget()
+        charts_layout = QVBoxLayout()
+        charts_layout.addWidget(QLabel("Charts / Equity"))
+        charts_layout.addWidget(self.charts_output)
+        charts_tab.setLayout(charts_layout)
+
         self.tabs.addTab(results_tab, "Results")
         self.tabs.addTab(log_tab, "Log")
         self.tabs.addTab(history_tab, "History")
         self.tabs.addTab(metrics_tab, "Metrics")
+        self.tabs.addTab(charts_tab, "Charts")
 
         main_layout = QVBoxLayout()
         main_layout.addWidget(self.title)
@@ -174,8 +180,6 @@ class DashboardView(QWidget):
         main_layout.addWidget(self.inline_status)
 
         self.setLayout(main_layout)
-
-        self.refresh_metrics_panel()
 
     def set_status(self, text):
 
@@ -202,6 +206,47 @@ class DashboardView(QWidget):
         self.filter_card.set_value(0)
         self.inline_status.setText("Dashboard cleared.")
 
+    def set_metrics(self, metrics):
+
+        if not metrics:
+            self.metrics_output.setPlainText("No metrics available.")
+            return
+
+        self.bankroll_card.set_value(
+            f"{(metrics.get('bankroll_history') or [100])[-1]:.2f}"
+        )
+        self.roi_card.set_value(f"{metrics.get('roi', 0):.2%}")
+        self.yield_card.set_value(f"{metrics.get('yield', 0):.2%}")
+        self.hit_rate_card.set_value(f"{metrics.get('hit_rate', 0):.2%}")
+        self.runs_card.set_value(metrics.get("total_bets", 0))
+        self.max_dd_card.set_value(f"{metrics.get('max_drawdown', 0):.2%}")
+
+        text = []
+        text.append(f"Bankroll: {(metrics.get('bankroll_history') or [100])[-1]:.2f}")
+        text.append(f"Total Profit: {metrics.get('total_profit', 0):.2f}")
+        text.append(f"Total Staked: {metrics.get('total_staked', 0):.2f}")
+        text.append(f"ROI: {metrics.get('roi', 0):.2%}")
+        text.append(f"Yield: {metrics.get('yield', 0):.2%}")
+        text.append(f"Hit Rate: {metrics.get('hit_rate', 0):.2%}")
+        text.append(f"Total Bets: {metrics.get('total_bets', 0)}")
+        text.append(f"Max Drawdown: {metrics.get('max_drawdown', 0):.2%}")
+        text.append(f"Brier Score: {metrics.get('brier_score', 0):.4f}")
+        text.append(f"Log Loss: {metrics.get('log_loss', 0):.4f}")
+
+        self.metrics_output.setPlainText("\n".join(text))
+
+        chart_lines = []
+        chart_lines.append("Bankroll History:")
+        chart_lines.append(str(metrics.get("bankroll_history", [])))
+        chart_lines.append("")
+        chart_lines.append("Accuracy History:")
+        chart_lines.append(str(metrics.get("accuracy_history", [])))
+        chart_lines.append("")
+        chart_lines.append("Drawdown History:")
+        chart_lines.append(str(metrics.get("drawdown_history", [])))
+
+        self.charts_output.setPlainText("\n".join(chart_lines))
+
     def set_results_dataframe(self, df):
 
         if df is None or getattr(df, "empty", False):
@@ -211,7 +256,6 @@ class DashboardView(QWidget):
         self.current_df = df.copy()
         self.filtered_df = df.copy()
         self.render_dataframe(self.filtered_df)
-        self.register_run(df)
 
     def set_results_from_records(self, records):
 
@@ -356,58 +400,3 @@ class DashboardView(QWidget):
         webbrowser.open(f"file://{path.resolve()}")
         self.append_log(f"Excel opened: {path}")
         self.inline_status.setText(f"Excel opened: {path}")
-
-    def register_run(self, df):
-
-        rows = len(df.index)
-
-        self.total_bets += rows
-        self.total_staked += float(rows)
-
-        simulated_hit_rate = 0.55
-        wins = int(round(rows * simulated_hit_rate))
-        losses = rows - wins
-        profit = wins - losses
-
-        self.total_wins += wins
-        self.total_profit += profit
-        self.bankroll += profit
-
-        run_summary = (
-            f"Run #{len(self.run_history) + 1}: "
-            f"rows={rows}, wins={wins}, losses={losses}, profit={profit:.2f}"
-        )
-        self.run_history.append(run_summary)
-
-        self.runs_card.set_value(len(self.run_history))
-        self.bankroll_card.set_value(f"{self.bankroll:.2f}")
-
-        roi = self.total_profit / self.total_staked if self.total_staked else 0.0
-        yield_value = roi
-        hit_rate = self.total_wins / self.total_bets if self.total_bets else 0.0
-
-        self.roi_card.set_value(f"{roi:.2%}")
-        self.yield_card.set_value(f"{yield_value:.2%}")
-        self.hit_rate_card.set_value(f"{hit_rate:.2%}")
-
-        self.history_output.setPlainText("\n".join(self.run_history))
-        self.refresh_metrics_panel()
-
-    def refresh_metrics_panel(self):
-
-        roi = self.total_profit / self.total_staked if self.total_staked else 0.0
-        yield_value = roi
-        hit_rate = self.total_wins / self.total_bets if self.total_bets else 0.0
-
-        text = []
-        text.append(f"Bankroll: {self.bankroll:.2f}")
-        text.append(f"Total Profit: {self.total_profit:.2f}")
-        text.append(f"Total Staked: {self.total_staked:.2f}")
-        text.append(f"ROI: {roi:.2%}")
-        text.append(f"Yield: {yield_value:.2%}")
-        text.append(f"Hit Rate: {hit_rate:.2%}")
-        text.append(f"Runs: {len(self.run_history)}")
-        text.append(f"Total Bets: {self.total_bets}")
-        text.append(f"Total Wins: {self.total_wins}")
-
-        self.metrics_output.setPlainText("\n".join(text))

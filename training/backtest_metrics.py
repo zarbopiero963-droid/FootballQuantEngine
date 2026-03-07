@@ -1,7 +1,5 @@
 import math
 
-import pandas as pd
-
 
 class BacktestMetrics:
 
@@ -15,13 +13,17 @@ class BacktestMetrics:
         df["selected_market"] = None
 
         for index, row in df.iterrows():
-
             probs = {
-                "home": row["home_prob"] if pd.notna(row["home_prob"]) else -1,
-                "draw": row["draw_prob"] if pd.notna(row["draw_prob"]) else -1,
-                "away": row["away_prob"] if pd.notna(row["away_prob"]) else -1,
+                "home": (
+                    row["home_prob"] if row["home_prob"] == row["home_prob"] else -1
+                ),
+                "draw": (
+                    row["draw_prob"] if row["draw_prob"] == row["draw_prob"] else -1
+                ),
+                "away": (
+                    row["away_prob"] if row["away_prob"] == row["away_prob"] else -1
+                ),
             }
-
             selected_market = max(probs, key=probs.get)
             df.at[index, "selected_market"] = selected_market
 
@@ -70,11 +72,16 @@ class BacktestMetrics:
         log_losses = []
 
         for _, row in df.iterrows():
-
             probs = {
-                "home": row["home_prob"] if pd.notna(row["home_prob"]) else 0.0,
-                "draw": row["draw_prob"] if pd.notna(row["draw_prob"]) else 0.0,
-                "away": row["away_prob"] if pd.notna(row["away_prob"]) else 0.0,
+                "home": (
+                    row["home_prob"] if row["home_prob"] == row["home_prob"] else 0.0
+                ),
+                "draw": (
+                    row["draw_prob"] if row["draw_prob"] == row["draw_prob"] else 0.0
+                ),
+                "away": (
+                    row["away_prob"] if row["away_prob"] == row["away_prob"] else 0.0
+                ),
             }
 
             actual = {
@@ -84,10 +91,8 @@ class BacktestMetrics:
             }
 
             brier = 0.0
-
             for key in ("home", "draw", "away"):
                 brier += (probs[key] - actual[key]) ** 2
-
             brier_scores.append(brier)
 
             selected_prob = max(
@@ -95,7 +100,6 @@ class BacktestMetrics:
                 probs["draw"],
                 probs["away"],
             )
-
             selected_prob = min(max(selected_prob, 1e-15), 1 - 1e-15)
 
             actual_selected = int(row["won"])
@@ -121,15 +125,15 @@ class BacktestMetrics:
             cumulative_correct += won
             accuracy_history.append(cumulative_correct / index)
 
-        max_bankroll = bankroll_history[0] if bankroll_history else 100.0
-        drawdowns = []
+        drawdown_history = []
+        peak = 100.0
 
         for value in bankroll_history:
-            max_bankroll = max(max_bankroll, value)
-            drawdown = (value - max_bankroll) / max_bankroll if max_bankroll else 0.0
-            drawdowns.append(drawdown)
+            peak = max(peak, value)
+            drawdown = (value - peak) / peak if peak else 0.0
+            drawdown_history.append(drawdown)
 
-        max_drawdown = min(drawdowns) if drawdowns else 0.0
+        max_drawdown = min(drawdown_history) if drawdown_history else 0.0
 
         return {
             "roi": roi,
@@ -139,6 +143,7 @@ class BacktestMetrics:
             "log_loss": sum(log_losses) / len(log_losses),
             "bankroll_history": bankroll_history,
             "accuracy_history": accuracy_history,
+            "drawdown_history": drawdown_history,
             "max_drawdown": max_drawdown,
             "total_profit": total_profit,
             "total_staked": total_staked,

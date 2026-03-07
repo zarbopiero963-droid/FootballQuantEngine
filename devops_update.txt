@@ -19,10 +19,12 @@ class OfflineEngine:
         )
 
     def run_offline_analysis(self, fixtures_df: pd.DataFrame):
+
         if fixtures_df is None or fixtures_df.empty:
             return {
                 "features": pd.DataFrame(),
                 "predictions": pd.DataFrame(),
+                "market_inefficiency": pd.DataFrame(),
                 "rows": 0,
             }
 
@@ -52,9 +54,18 @@ class OfflineEngine:
             }
         )
 
+        market_inefficiency = pd.DataFrame(
+            {
+                "home_team": features["home_team"],
+                "away_team": features["away_team"],
+                "inefficiency_score": 0.0,
+            }
+        )
+
         return {
             "features": features,
             "predictions": predictions,
+            "market_inefficiency": market_inefficiency,
             "rows": len(features.index),
         }
 

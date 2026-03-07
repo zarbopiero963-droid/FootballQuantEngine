@@ -376,3 +376,4 @@ def test_installed_exe_has_main_buttons():
 EOF
 
 FIX_WHITESPACE
+

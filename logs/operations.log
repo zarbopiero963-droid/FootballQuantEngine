@@ -1047,3 +1047,15 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-07_13-04-58.zip
+Backup created backups/backup_2026-03-07_13-04-58.zip
+[CREATE] file tests/ui/test_main_window_qt.py
+[CREATE] file tests/logic/test_metrics_and_filters.py
+[CREATE] file tests/exe/test_installed_exe_smoke.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

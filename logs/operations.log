@@ -557,3 +557,14 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-07_08-34-44.zip
+Backup created backups/backup_2026-03-07_08-34-44.zip
+[SKIP] folder exists ui
+[SKIP] file identical ui/main_window.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

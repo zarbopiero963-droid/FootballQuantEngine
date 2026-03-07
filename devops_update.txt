@@ -1,3 +1,89 @@
+CREA_FILE ui/backtest_runner_window.py
+from PySide6.QtWidgets import (
+    QGridLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QTextEdit,
+    QWidget,
+)
+
+from training.backtest_engine import BacktestEngine
+from training.backtest_metrics import BacktestMetrics
+
+
+class BacktestRunnerWindow(QWidget):
+
+    def __init__(self, on_metrics_ready=None, on_log_message=None):
+
+        super().__init__()
+
+        self.setWindowTitle("Backtest Runner")
+
+        self.engine = BacktestEngine()
+        self.metrics_engine = BacktestMetrics()
+
+        self.on_metrics_ready = on_metrics_ready
+        self.on_log_message = on_log_message
+
+        self.date_from_input = QLineEdit()
+        self.date_to_input = QLineEdit()
+        self.league_input = QLineEdit()
+
+        self.run_button = QPushButton("Run Backtest")
+        self.run_button.clicked.connect(self.run_backtest)
+
+        self.output = QTextEdit()
+        self.output.setReadOnly(True)
+
+        layout = QGridLayout()
+        layout.addWidget(QLabel("Date From (YYYY-MM-DD)"), 0, 0)
+        layout.addWidget(self.date_from_input, 0, 1)
+
+        layout.addWidget(QLabel("Date To (YYYY-MM-DD)"), 1, 0)
+        layout.addWidget(self.date_to_input, 1, 1)
+
+        layout.addWidget(QLabel("League"), 2, 0)
+        layout.addWidget(self.league_input, 2, 1)
+
+        layout.addWidget(self.run_button, 3, 0, 1, 2)
+        layout.addWidget(self.output, 4, 0, 1, 2)
+
+        self.setLayout(layout)
+
+    def run_backtest(self):
+
+        try:
+            date_from = self.date_from_input.text().strip() or None
+            date_to = self.date_to_input.text().strip() or None
+            league = self.league_input.text().strip() or None
+
+            df = self.engine.run(
+                date_from=date_from,
+                date_to=date_to,
+                league=league,
+            )
+
+            metrics = self.metrics_engine.calculate(df)
+
+            self.output.setPlainText(str(metrics))
+
+            if callable(self.on_metrics_ready):
+                self.on_metrics_ready(metrics)
+
+            if callable(self.on_log_message):
+                self.on_log_message(
+                    "Backtest completed successfully."
+                )
+
+        except Exception as exc:
+            if callable(self.on_log_message):
+                self.on_log_message(f"Backtest error: {exc}")
+
+            QMessageBox.critical(self, "Backtest Error", str(exc))
+EOF
+
 CREA_FILE ui/dashboard_view.py
 from pathlib import Path
 
@@ -55,6 +141,7 @@ class DashboardView(QWidget):
         self.sort_ascending = True
         self.last_csv_path = "outputs/dashboard_export.csv"
         self.last_excel_path = "outputs/dashboard_export.xlsx"
+        self.history_messages = []
 
         self.title = QLabel("Football Quant Engine Dashboard")
 
@@ -71,6 +158,13 @@ class DashboardView(QWidget):
         self.agreement_avg_card = DashboardCard("Avg Agreement", "0.00")
         self.max_edge_card = DashboardCard("Max Market Edge", "0.00")
 
+        self.bankroll_card = DashboardCard("Bankroll", "100.00")
+        self.roi_card = DashboardCard("ROI", "0.00")
+        self.yield_card = DashboardCard("Yield", "0.00")
+        self.hit_rate_card = DashboardCard("Hit Rate", "0.00")
+        self.runs_card = DashboardCard("Backtest Bets", "0")
+        self.max_dd_card = DashboardCard("Max Drawdown", "0.00")
+
         cards_row_1 = QHBoxLayout()
         cards_row_1.addWidget(self.total_bets_card)
         cards_row_1.addWidget(self.status_card)
@@ -86,6 +180,14 @@ class DashboardView(QWidget):
         cards_row_3.addWidget(self.confidence_avg_card)
         cards_row_3.addWidget(self.agreement_avg_card)
         cards_row_3.addWidget(self.max_edge_card)
+
+        cards_row_4 = QHBoxLayout()
+        cards_row_4.addWidget(self.bankroll_card)
+        cards_row_4.addWidget(self.roi_card)
+        cards_row_4.addWidget(self.yield_card)
+        cards_row_4.addWidget(self.hit_rate_card)
+        cards_row_4.addWidget(self.runs_card)
+        cards_row_4.addWidget(self.max_dd_card)
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search...")
@@ -180,6 +282,7 @@ class DashboardView(QWidget):
         layout.addLayout(cards_row_1)
         layout.addLayout(cards_row_2)
         layout.addLayout(cards_row_3)
+        layout.addLayout(cards_row_4)
         layout.addLayout(controls_layout)
         layout.addWidget(self.tabs)
         layout.addWidget(self.inline_status)
@@ -194,6 +297,11 @@ class DashboardView(QWidget):
     def append_log(self, text):
 
         self.log_output.append(str(text))
+
+    def add_history_message(self, text):
+
+        self.history_messages.append(str(text))
+        self.history_output.setPlainText("\n".join(self.history_messages))
 
     def set_log_text(self, text):
 
@@ -413,6 +521,13 @@ class DashboardView(QWidget):
 
         bankroll = (metrics.get("bankroll_history") or [100])[-1]
 
+        self.bankroll_card.set_value(f"{bankroll:.2f}")
+        self.roi_card.set_value(f"{metrics.get('roi', 0):.2%}")
+        self.yield_card.set_value(f"{metrics.get('yield', 0):.2%}")
+        self.hit_rate_card.set_value(f"{metrics.get('hit_rate', 0):.2%}")
+        self.runs_card.set_value(metrics.get("total_bets", 0))
+        self.max_dd_card.set_value(f"{metrics.get('max_drawdown', 0):.2%}")
+
         lines = [
             f"Bankroll: {bankroll:.2f}",
             f"Total Profit: {metrics.get('total_profit', 0):.2f}",
@@ -446,6 +561,9 @@ class DashboardView(QWidget):
         ))
 
         self.charts_output.setHtml("".join(chart_html))
+        self.add_history_message(
+            f"Backtest loaded: bets={metrics.get('total_bets', 0)}, roi={metrics.get('roi', 0):.2%}, yield={metrics.get('yield', 0):.2%}"
+        )
 EOF
 
 CREA_FILE ui/main_window.py
@@ -573,7 +691,10 @@ class MainWindow(QMainWindow):
 
     def open_backtest(self):
 
-        self.backtest_window = BacktestRunnerWindow()
+        self.backtest_window = BacktestRunnerWindow(
+            on_metrics_ready=self.dashboard.set_metrics,
+            on_log_message=self.dashboard.append_log,
+        )
         self.backtest_window.show()
 
     def run_cycle(self):
@@ -596,6 +717,9 @@ class MainWindow(QMainWindow):
                 self.dashboard.set_log_text(str(ranked))
                 self.dashboard.set_status("Completed")
                 self.status_label.setText("Completed")
+                self.dashboard.add_history_message(
+                    f"Prediction run completed: rows={len(ranked)}"
+                )
                 return
 
             if getattr(ranked, "empty", False):
@@ -609,6 +733,9 @@ class MainWindow(QMainWindow):
             self.dashboard.set_log_text(ranked.to_string(index=False))
             self.dashboard.set_status("Completed")
             self.status_label.setText("Completed")
+            self.dashboard.add_history_message(
+                f"Prediction run completed: rows={len(ranked.index)}"
+            )
 
         except Exception as exc:
             self.dashboard.set_status("Error")
@@ -621,19 +748,18 @@ class MainWindow(QMainWindow):
             self.status_label.setText("Error")
 EOF
 
-CREA_FILE tests/test_decision_dashboard_ui.py
+CREA_FILE tests/test_backtest_dashboard_link.py
 import pytest
 
 
-def test_dashboard_view_decision_ui_import():
+def test_backtest_runner_window_import():
 
     try:
-        from ui.dashboard_view import DashboardView
+        from ui.backtest_runner_window import BacktestRunnerWindow
     except (ModuleNotFoundError, ImportError) as exc:
         pytest.skip(f"UI dependencies not available in CI: {exc}")
 
-    assert DashboardView is not None
+    assert BacktestRunnerWindow is not None
 EOF
 
 FIX_WHITESPACE
-

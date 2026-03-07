@@ -26,3 +26,13 @@ ruff check .
 black --check .
 isort --check-only .
 
+## Suggested contribution areas
+
+- mathematical models
+- offline engine improvements
+- CSV import/export
+- UI improvements
+- reporting
+- testing
+- documentation
+

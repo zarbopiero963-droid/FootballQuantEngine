@@ -1,236 +1,162 @@
-CREA_CARTELLA ui
+CREA_FILE engine/final_integrity_check.py
+from pathlib import Path
 
-CREA_FILE ui/final_check_window.py
-import json
 
-from PySide6.QtWidgets import (
-    QPushButton,
-    QTextEdit,
-    QVBoxLayout,
-    QWidget,
-)
+class FinalIntegrityCheck:
 
+    def required_paths(self):
+
+        return [
+            "README.md",
+            "requirements.txt",
+            "football_quant_engine.spec",
+            "database/schema.sql",
+            "app/main.py",
+            "app/controller.py",
+            "engine/job_runner.py",
+            "engine/offline_engine.py",
+            "engine/plugin_loader.py",
+            "engine/prediction_pipeline.py",
+            "analysis/probability_markets.py",
+            "analysis/report_generator.py",
+            "features/feature_engine.py",
+            "features/offline_features.py",
+            "models/poisson_model.py",
+            "models/bivariate_poisson.py",
+            "models/elo_model.py",
+            "models/bayesian_model.py",
+            "training/dataset_builder.py",
+            "training/backtest_engine.py",
+            "training/backtest_metrics.py",
+            "ui/main_window.py",
+        ]
+
+    def missing_paths(self):
+
+        missing = []
+
+        for item in self.required_paths():
+            if not Path(item).exists():
+                missing.append(item)
+
+        return missing
+
+    def run(self):
+
+        missing = self.missing_paths()
+
+        return {
+            "ok": len(missing) == 0,
+            "missing": missing,
+            "checked_count": len(self.required_paths()),
+        }
+EOF
+
+CREA_FILE app/final_check.py
+from engine.final_integrity_check import FinalIntegrityCheck
+
+
+def run_final_check():
+
+    checker = FinalIntegrityCheck()
+
+    return checker.run()
+EOF
+
+CREA_FILE engine/project_summary.py
+from pathlib import Path
+
+from app.version_info import get_version_info
+
+
+class ProjectSummary:
+
+    def build(self):
+
+        info = get_version_info()
+
+        return {
+            "name": info["name"],
+            "version": info["version"],
+            "author": info["author"],
+            "description": info["description"],
+            "has_readme": Path("README.md").exists(),
+            "has_spec": Path("football_quant_engine.spec").exists(),
+            "has_license": Path("LICENSE").exists(),
+            "has_contributing": Path("CONTRIBUTING.md").exists(),
+            "has_requirements": Path("requirements.txt").exists(),
+            "has_outputs_dir": Path("outputs").exists(),
+            "core_modules": {
+                "analysis": Path("analysis").exists(),
+                "app": Path("app").exists(),
+                "config": Path("config").exists(),
+                "data": Path("data").exists(),
+                "database": Path("database").exists(),
+                "engine": Path("engine").exists(),
+                "export": Path("export").exists(),
+                "features": Path("features").exists(),
+                "models": Path("models").exists(),
+                "notifications": Path("notifications").exists(),
+                "plugins": Path("plugins").exists(),
+                "simulation": Path("simulation").exists(),
+                "strategies": Path("strategies").exists(),
+                "training": Path("training").exists(),
+                "ui": Path("ui").exists(),
+                "tests": Path("tests").exists(),
+            },
+        }
+EOF
+
+CREA_FILE app/project_summary.py
+from engine.project_summary import ProjectSummary
+
+
+def get_project_summary():
+
+    return ProjectSummary().build()
+EOF
+
+CREA_FILE tests/test_final_integrity_check.py
+from engine.final_integrity_check import FinalIntegrityCheck
+
+
+def test_final_integrity_check_runs():
+
+    checker = FinalIntegrityCheck()
+
+    result = checker.run()
+
+    assert isinstance(result, dict)
+    assert "ok" in result
+    assert "missing" in result
+    assert "checked_count" in result
+EOF
+
+CREA_FILE tests/test_final_check.py
 from app.final_check import run_final_check
 
 
-class FinalCheckWindow(QWidget):
+def test_app_final_check_runs():
 
-    def __init__(self):
+    result = run_final_check()
 
-        super().__init__()
-
-        self.setWindowTitle("Final Project Check")
-
-        self.run_button = QPushButton("Run Final Check")
-        self.output = QTextEdit()
-        self.output.setReadOnly(True)
-
-        self.run_button.clicked.connect(self.run_check)
-
-        layout = QVBoxLayout()
-        layout.addWidget(self.run_button)
-        layout.addWidget(self.output)
-
-        self.setLayout(layout)
-
-    def run_check(self):
-
-        result = run_final_check()
-
-        self.output.setPlainText(
-            json.dumps(result, indent=2)
-        )
+    assert isinstance(result, dict)
+    assert "ok" in result
+    assert "missing" in result
 EOF
 
-CREA_FILE ui/project_summary_window.py
-import json
-
-from PySide6.QtWidgets import (
-    QPushButton,
-    QTextEdit,
-    QVBoxLayout,
-    QWidget,
-)
-
+CREA_FILE tests/test_project_summary.py
 from app.project_summary import get_project_summary
 
 
-class ProjectSummaryWindow(QWidget):
+def test_project_summary_runs():
 
-    def __init__(self):
+    summary = get_project_summary()
 
-        super().__init__()
-
-        self.setWindowTitle("Project Summary")
-
-        self.refresh_button = QPushButton("Refresh Summary")
-        self.output = QTextEdit()
-        self.output.setReadOnly(True)
-
-        self.refresh_button.clicked.connect(self.refresh)
-
-        layout = QVBoxLayout()
-        layout.addWidget(self.refresh_button)
-        layout.addWidget(self.output)
-
-        self.setLayout(layout)
-
-        self.refresh()
-
-    def refresh(self):
-
-        summary = get_project_summary()
-
-        self.output.setPlainText(
-            json.dumps(summary, indent=2)
-        )
-EOF
-
-CREA_FILE ui/about_dialog.py
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
-
-
-class AboutDialog(QWidget):
-
-    def __init__(self):
-
-        super().__init__()
-
-        self.setWindowTitle("About")
-
-        label = QLabel(
-            "Football Quant Engine\n"
-            "Quantitative football analysis engine\n"
-            "Poisson + Monte Carlo + Value Betting"
-        )
-
-        layout = QVBoxLayout()
-        layout.addWidget(label)
-
-        self.setLayout(layout)
-EOF
-
-CREA_FILE ui/dashboard_view.py
-from PySide6.QtWidgets import QLabel, QTextEdit, QVBoxLayout, QWidget
-
-
-class DashboardView(QWidget):
-
-    def __init__(self):
-
-        super().__init__()
-
-        self.title = QLabel("Football Quant Engine Dashboard")
-        self.output = QTextEdit()
-        self.output.setReadOnly(True)
-
-        layout = QVBoxLayout()
-        layout.addWidget(self.title)
-        layout.addWidget(self.output)
-
-        self.setLayout(layout)
-
-    def set_text(self, text):
-
-        self.output.setPlainText(text)
-EOF
-
-CREA_FILE ui/settings_window.py
-from PySide6.QtWidgets import (
-    QFormLayout,
-    QLineEdit,
-    QMessageBox,
-    QPushButton,
-    QVBoxLayout,
-    QWidget,
-)
-
-from config.settings_manager import Settings, load_settings, save_settings
-
-
-class SettingsWindow(QWidget):
-
-    def __init__(self):
-
-        super().__init__()
-
-        self.setWindowTitle("Settings")
-
-        self.api_football_input = QLineEdit()
-        self.odds_api_input = QLineEdit()
-        self.telegram_token_input = QLineEdit()
-        self.telegram_chat_id_input = QLineEdit()
-
-        self.save_button = QPushButton("Save")
-        self.save_button.clicked.connect(self.save)
-
-        form = QFormLayout()
-        form.addRow("API-Football Key", self.api_football_input)
-        form.addRow("Odds API Key", self.odds_api_input)
-        form.addRow("Telegram Token", self.telegram_token_input)
-        form.addRow("Telegram Chat ID", self.telegram_chat_id_input)
-
-        layout = QVBoxLayout()
-        layout.addLayout(form)
-        layout.addWidget(self.save_button)
-
-        self.setLayout(layout)
-
-        self.load_values()
-
-    def load_values(self):
-
-        settings = load_settings()
-
-        self.api_football_input.setText(settings.api_football_key)
-        self.odds_api_input.setText(settings.odds_api_key)
-        self.telegram_token_input.setText(settings.telegram_token)
-        self.telegram_chat_id_input.setText(settings.telegram_chat_id)
-
-    def save(self):
-
-        settings = Settings()
-        settings.api_football_key = self.api_football_input.text().strip()
-        settings.odds_api_key = self.odds_api_input.text().strip()
-        settings.telegram_token = self.telegram_token_input.text().strip()
-        settings.telegram_chat_id = self.telegram_chat_id_input.text().strip()
-
-        save_settings(settings)
-
-        QMessageBox.information(
-            self,
-            "Settings",
-            "Settings saved successfully.",
-        )
-EOF
-
-CREA_FILE tests/test_final_check_window.py
-import pytest
-
-
-def test_final_check_window_import():
-
-    try:
-        from ui.final_check_window import FinalCheckWindow
-    except (ModuleNotFoundError, ImportError) as exc:
-        pytest.skip(f"UI dependencies not available in CI: {exc}")
-
-    assert FinalCheckWindow is not None
-EOF
-
-CREA_FILE tests/test_project_summary_window.py
-import pytest
-
-
-def test_project_summary_window_import():
-
-    try:
-        from ui.project_summary_window import ProjectSummaryWindow
-    except (ModuleNotFoundError, ImportError) as exc:
-        pytest.skip(f"UI dependencies not available in CI: {exc}")
-
-    assert ProjectSummaryWindow is not None
+    assert isinstance(summary, dict)
+    assert "name" in summary
+    assert "version" in summary
+    assert "core_modules" in summary
 EOF
 
 FIX_WHITESPACE
-

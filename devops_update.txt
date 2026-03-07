@@ -1,165 +1,118 @@
-CREA_FILE engine/offline_controller.py
-from engine.offline_engine import OfflineEngine
+CREA_FILE tests/test_offline_controller.py
+from engine.offline_controller import OfflineController
 
 
-class OfflineController:
+def test_offline_controller_class_exists():
 
-    def __init__(self):
+    controller = OfflineController()
 
-        self.engine = OfflineEngine()
-
-    def import_csv_data(self, matches_csv=None, odds_csv=None):
-
-        self.engine.import_csv_data(
-            matches_csv=matches_csv,
-            odds_csv=odds_csv,
-        )
-
-    def run_reports(self, ranked_df=None):
-
-        return self.engine.run_reports(ranked_df=ranked_df)
+    assert isinstance(controller, OfflineController)
 EOF
 
-CREA_FILE analysis/report_viewer_helper.py
-import os
-import webbrowser
+CREA_FILE tests/test_report_viewer_helper.py
+from analysis.report_viewer_helper import ReportViewerHelper
 
 
-class ReportViewerHelper:
+def test_report_viewer_helper_class_exists():
 
-    def open_file(self, filepath):
+    helper = ReportViewerHelper()
 
-        if not os.path.exists(filepath):
-            return False
-
-        return webbrowser.open(f"file://{os.path.abspath(filepath)}")
-
-    def open_dashboard(self):
-
-        return self.open_file("outputs/dashboard.html")
-
-    def open_advanced_report(self):
-
-        return self.open_file("outputs/advanced_report.html")
+    assert isinstance(helper, ReportViewerHelper)
 EOF
 
-CREA_FILE engine/final_integrity_check.py
-from pathlib import Path
-
-
-class FinalIntegrityCheck:
-
-    def required_paths(self):
-
-        return [
-            "README.md",
-            "requirements.txt",
-            "football_quant_engine.spec",
-            "database/schema.sql",
-            "app/main.py",
-            "app/controller.py",
-            "engine/job_runner.py",
-            "engine/offline_engine.py",
-            "engine/plugin_loader.py",
-            "engine/prediction_pipeline.py",
-            "analysis/probability_markets.py",
-            "analysis/report_generator.py",
-            "features/feature_engine.py",
-            "features/offline_features.py",
-            "models/poisson_model.py",
-            "models/bivariate_poisson.py",
-            "models/elo_model.py",
-            "models/bayesian_model.py",
-            "training/dataset_builder.py",
-            "training/backtest_engine.py",
-            "training/backtest_metrics.py",
-            "ui/main_window.py",
-        ]
-
-    def missing_paths(self):
-
-        missing = []
-
-        for item in self.required_paths():
-            if not Path(item).exists():
-                missing.append(item)
-
-        return missing
-
-    def run(self):
-
-        missing = self.missing_paths()
-
-        return {
-            "ok": len(missing) == 0,
-            "missing": missing,
-            "checked_count": len(self.required_paths()),
-        }
-EOF
-
-CREA_FILE app/final_check.py
+CREA_FILE tests/test_final_integrity_check.py
 from engine.final_integrity_check import FinalIntegrityCheck
 
 
-def run_final_check():
+def test_final_integrity_check_runs():
 
     checker = FinalIntegrityCheck()
 
-    return checker.run()
+    result = checker.run()
+
+    assert isinstance(result, dict)
+    assert "ok" in result
+    assert "missing" in result
+    assert "checked_count" in result
 EOF
 
-CREA_FILE engine/project_summary.py
+CREA_FILE tests/test_final_check.py
+from app.final_check import run_final_check
+
+
+def test_app_final_check_runs():
+
+    result = run_final_check()
+
+    assert isinstance(result, dict)
+    assert "ok" in result
+    assert "missing" in result
+EOF
+
+CREA_FILE tests/test_project_summary.py
+from app.project_summary import get_project_summary
+
+
+def test_project_summary_runs():
+
+    summary = get_project_summary()
+
+    assert isinstance(summary, dict)
+    assert "name" in summary
+    assert "version" in summary
+    assert "core_modules" in summary
+EOF
+
+CREA_FILE tests/test_final_check_window.py
+import pytest
+
+
+def test_final_check_window_import():
+
+    try:
+        from ui.final_check_window import FinalCheckWindow
+    except (ModuleNotFoundError, ImportError) as exc:
+        pytest.skip(f"UI dependencies not available in CI: {exc}")
+
+    assert FinalCheckWindow is not None
+EOF
+
+CREA_FILE tests/test_project_summary_window.py
+import pytest
+
+
+def test_project_summary_window_import():
+
+    try:
+        from ui.project_summary_window import ProjectSummaryWindow
+    except (ModuleNotFoundError, ImportError) as exc:
+        pytest.skip(f"UI dependencies not available in CI: {exc}")
+
+    assert ProjectSummaryWindow is not None
+EOF
+
+CREA_FILE tests/test_final_check_button_in_main_window.py
 from pathlib import Path
 
-from app.version_info import get_version_info
 
+def test_main_window_contains_final_check_button():
 
-class ProjectSummary:
+    content = Path("ui/main_window.py").read_text(encoding="utf-8")
 
-    def build(self):
-
-        info = get_version_info()
-
-        return {
-            "name": info["name"],
-            "version": info["version"],
-            "author": info["author"],
-            "description": info["description"],
-            "has_readme": Path("README.md").exists(),
-            "has_spec": Path("football_quant_engine.spec").exists(),
-            "has_license": Path("LICENSE").exists(),
-            "has_contributing": Path("CONTRIBUTING.md").exists(),
-            "has_requirements": Path("requirements.txt").exists(),
-            "has_outputs_dir": Path("outputs").exists(),
-            "core_modules": {
-                "analysis": Path("analysis").exists(),
-                "app": Path("app").exists(),
-                "config": Path("config").exists(),
-                "data": Path("data").exists(),
-                "database": Path("database").exists(),
-                "engine": Path("engine").exists(),
-                "export": Path("export").exists(),
-                "features": Path("features").exists(),
-                "models": Path("models").exists(),
-                "notifications": Path("notifications").exists(),
-                "plugins": Path("plugins").exists(),
-                "simulation": Path("simulation").exists(),
-                "strategies": Path("strategies").exists(),
-                "training": Path("training").exists(),
-                "ui": Path("ui").exists(),
-                "tests": Path("tests").exists(),
-            },
-        }
+    assert "Final Check" in content
+    assert "open_final_check" in content
 EOF
 
-CREA_FILE app/project_summary.py
-from engine.project_summary import ProjectSummary
+CREA_FILE tests/test_project_summary_button_in_main_window.py
+from pathlib import Path
 
 
-def get_project_summary():
+def test_main_window_contains_project_summary_button():
 
-    return ProjectSummary().build()
+    content = Path("ui/main_window.py").read_text(encoding="utf-8")
+
+    assert "Project Summary" in content
+    assert "open_project_summary" in content
 EOF
 
 FIX_WHITESPACE
-

@@ -84,6 +84,7 @@ class MainWindow(QMainWindow):
 
         self.dashboard.set_status("Ready")
         self.dashboard.append_log("Application started.")
+        self.dashboard.add_history_message("Application started.")
 
     def open_settings(self):
 
@@ -131,7 +132,9 @@ class MainWindow(QMainWindow):
     def run_cycle(self):
 
         self.dashboard.set_status("Running")
-        self.dashboard.append_log("Prediction pipeline started.")
+        self.status_label.setText("Running")
+        self.dashboard.append_log("Quant prediction pipeline started.")
+        self.dashboard.add_history_message("Quant prediction pipeline started.")
 
         try:
             ranked = self.controller.run_predictions()
@@ -141,6 +144,9 @@ class MainWindow(QMainWindow):
                 self.dashboard.set_log_text("No prediction results returned.")
                 self.dashboard.set_status("Completed")
                 self.status_label.setText("Completed")
+                self.dashboard.add_history_message(
+                    "Prediction run completed: no results"
+                )
                 return
 
             if isinstance(ranked, list):
@@ -151,6 +157,9 @@ class MainWindow(QMainWindow):
                 self.dashboard.add_history_message(
                     f"Prediction run completed: rows={len(ranked)}"
                 )
+                self.dashboard.append_log(
+                    f"Quant prediction run completed successfully with {len(ranked)} rows."
+                )
                 return
 
             if getattr(ranked, "empty", False):
@@ -158,6 +167,9 @@ class MainWindow(QMainWindow):
                 self.dashboard.set_log_text("No prediction rows found.")
                 self.dashboard.set_status("Completed")
                 self.status_label.setText("Completed")
+                self.dashboard.add_history_message(
+                    "Prediction run completed: empty dataframe"
+                )
                 return
 
             self.dashboard.set_results_dataframe(ranked)
@@ -167,10 +179,12 @@ class MainWindow(QMainWindow):
             self.dashboard.add_history_message(
                 f"Prediction run completed: rows={len(ranked.index)}"
             )
+            self.dashboard.append_log("Quant prediction run completed successfully.")
 
         except Exception as exc:
             self.dashboard.set_status("Error")
             self.dashboard.append_log(f"Error: {exc}")
+            self.dashboard.add_history_message(f"Prediction run failed: {exc}")
             QMessageBox.critical(
                 self,
                 "Run Error",

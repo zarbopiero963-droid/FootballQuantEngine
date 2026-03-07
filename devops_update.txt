@@ -1,118 +1,144 @@
-CREA_FILE tests/test_offline_controller.py
-from engine.offline_controller import OfflineController
+CREA_CARTELLA ui
+
+CREA_FILE ui/main_window.py
+from PySide6.QtWidgets import (
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QToolBar,
+)
+
+from ui.about_dialog import AboutDialog
+from ui.dashboard_view import DashboardView
+from ui.final_check_window import FinalCheckWindow
+from ui.manual_context_window import ManualContextWindow
+from ui.offline_import_window import OfflineImportWindow
+from ui.outputs_view import OutputsView
+from ui.project_summary_window import ProjectSummaryWindow
+from ui.settings_window import SettingsWindow
 
 
-def test_offline_controller_class_exists():
+class MainWindow(QMainWindow):
 
-    controller = OfflineController()
+    def __init__(self, controller):
 
-    assert isinstance(controller, OfflineController)
-EOF
+        super().__init__()
 
-CREA_FILE tests/test_report_viewer_helper.py
-from analysis.report_viewer_helper import ReportViewerHelper
+        self.controller = controller
 
+        self.setWindowTitle("Football Quant Engine")
+        self.resize(1000, 700)
 
-def test_report_viewer_helper_class_exists():
+        self.dashboard = DashboardView()
+        self.setCentralWidget(self.dashboard)
 
-    helper = ReportViewerHelper()
+        self.status_label = QLabel("Ready")
+        self.statusBar().addPermanentWidget(self.status_label)
 
-    assert isinstance(helper, ReportViewerHelper)
-EOF
+        toolbar = QToolBar("Main")
+        self.addToolBar(toolbar)
 
-CREA_FILE tests/test_final_integrity_check.py
-from engine.final_integrity_check import FinalIntegrityCheck
+        self.run_button = QPushButton("Run Cycle")
+        self.run_button.clicked.connect(self.run_cycle)
+        toolbar.addWidget(self.run_button)
 
+        self.settings_button = QPushButton("Settings")
+        self.settings_button.clicked.connect(self.open_settings)
+        toolbar.addWidget(self.settings_button)
 
-def test_final_integrity_check_runs():
+        self.offline_import_button = QPushButton("Import CSV")
+        self.offline_import_button.clicked.connect(self.open_offline_import)
+        toolbar.addWidget(self.offline_import_button)
 
-    checker = FinalIntegrityCheck()
+        self.manual_context_button = QPushButton("Manual Context")
+        self.manual_context_button.clicked.connect(self.open_manual_context)
+        toolbar.addWidget(self.manual_context_button)
 
-    result = checker.run()
+        self.outputs_button = QPushButton("Outputs")
+        self.outputs_button.clicked.connect(self.open_outputs)
+        toolbar.addWidget(self.outputs_button)
 
-    assert isinstance(result, dict)
-    assert "ok" in result
-    assert "missing" in result
-    assert "checked_count" in result
-EOF
+        self.final_check_button = QPushButton("Final Check")
+        self.final_check_button.clicked.connect(self.open_final_check)
+        toolbar.addWidget(self.final_check_button)
 
-CREA_FILE tests/test_final_check.py
-from app.final_check import run_final_check
+        self.project_summary_button = QPushButton("Project Summary")
+        self.project_summary_button.clicked.connect(self.open_project_summary)
+        toolbar.addWidget(self.project_summary_button)
 
+        self.about_button = QPushButton("About")
+        self.about_button.clicked.connect(self.open_about)
+        toolbar.addWidget(self.about_button)
 
-def test_app_final_check_runs():
+        self.settings_window = None
+        self.about_dialog = None
+        self.offline_import_window = None
+        self.manual_context_window = None
+        self.outputs_view = None
+        self.final_check_window = None
+        self.project_summary_window = None
 
-    result = run_final_check()
+    def open_settings(self):
 
-    assert isinstance(result, dict)
-    assert "ok" in result
-    assert "missing" in result
-EOF
+        self.settings_window = SettingsWindow()
+        self.settings_window.show()
 
-CREA_FILE tests/test_project_summary.py
-from app.project_summary import get_project_summary
+    def open_about(self):
 
+        self.about_dialog = AboutDialog()
+        self.about_dialog.show()
 
-def test_project_summary_runs():
+    def open_offline_import(self):
 
-    summary = get_project_summary()
+        self.offline_import_window = OfflineImportWindow()
+        self.offline_import_window.show()
 
-    assert isinstance(summary, dict)
-    assert "name" in summary
-    assert "version" in summary
-    assert "core_modules" in summary
-EOF
+    def open_manual_context(self):
 
-CREA_FILE tests/test_final_check_window.py
-import pytest
+        self.manual_context_window = ManualContextWindow()
+        self.manual_context_window.show()
 
+    def open_outputs(self):
 
-def test_final_check_window_import():
+        self.outputs_view = OutputsView()
+        self.outputs_view.show()
 
-    try:
-        from ui.final_check_window import FinalCheckWindow
-    except (ModuleNotFoundError, ImportError) as exc:
-        pytest.skip(f"UI dependencies not available in CI: {exc}")
+    def open_final_check(self):
 
-    assert FinalCheckWindow is not None
-EOF
+        self.final_check_window = FinalCheckWindow()
+        self.final_check_window.show()
 
-CREA_FILE tests/test_project_summary_window.py
-import pytest
+    def open_project_summary(self):
 
+        self.project_summary_window = ProjectSummaryWindow()
+        self.project_summary_window.show()
 
-def test_project_summary_window_import():
+    def run_cycle(self):
 
-    try:
-        from ui.project_summary_window import ProjectSummaryWindow
-    except (ModuleNotFoundError, ImportError) as exc:
-        pytest.skip(f"UI dependencies not available in CI: {exc}")
+        try:
+            ranked = self.controller.run_once()
 
-    assert ProjectSummaryWindow is not None
-EOF
+            if ranked is None:
+                self.dashboard.set_text("No results returned.")
+                self.status_label.setText("Completed")
+                return
 
-CREA_FILE tests/test_final_check_button_in_main_window.py
-from pathlib import Path
+            if getattr(ranked, "empty", False):
+                self.dashboard.set_text("No value bets found.")
+                self.status_label.setText("Completed")
+                return
 
+            self.dashboard.set_text(ranked.to_string(index=False))
+            self.status_label.setText("Completed")
 
-def test_main_window_contains_final_check_button():
-
-    content = Path("ui/main_window.py").read_text(encoding="utf-8")
-
-    assert "Final Check" in content
-    assert "open_final_check" in content
-EOF
-
-CREA_FILE tests/test_project_summary_button_in_main_window.py
-from pathlib import Path
-
-
-def test_main_window_contains_project_summary_button():
-
-    content = Path("ui/main_window.py").read_text(encoding="utf-8")
-
-    assert "Project Summary" in content
-    assert "open_project_summary" in content
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Run Error",
+                str(exc),
+            )
+            self.status_label.setText("Error")
 EOF
 
 FIX_WHITESPACE

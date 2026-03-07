@@ -1,0 +1,19 @@
+from quant.providers.sample_clients import (
+    SampleAPIFootballClient,
+    SampleUnderstatClient,
+)
+from quant.services.quant_controller import QuantController
+
+
+def test_quant_controller_returns_records():
+    controller = QuantController(
+        api_client=SampleAPIFootballClient(),
+        understat_client=SampleUnderstatClient(),
+    )
+
+    records = controller.run(league="Serie A", season=2024)
+
+    assert isinstance(records, list)
+    assert len(records) > 0
+    assert "fixture_id" in records[0]
+    assert "decision" in records[0]

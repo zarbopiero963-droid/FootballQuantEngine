@@ -1228,3 +1228,71 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-07_16-38-38.zip
+Backup created backups/backup_2026-03-07_16-38-38.zip
+[WARN] Unknown command: QUANT ENGINE 2
+[CREATE] folder quant
+[CREATE] folder quant/models
+[CREATE] folder quant/features
+[CREATE] folder quant/providers
+[CREATE] folder quant/services
+[CREATE] folder quant/tests
+[WARN] Unknown command: PROVIDER INTERFACES
+[CREATE] file quant/providers/base_provider.py
+[CREATE] file quant/providers/api_football_provider.py
+[CREATE] file quant/providers/understat_provider.py
+[WARN] Unknown command: DOMAIN HELPERS
+[CREATE] file quant/models/team_strength.py
+[CREATE] file quant/models/prediction_result.py
+[WARN] Unknown command: ELO ENGINE
+[CREATE] file quant/models/elo_engine.py
+[WARN] Unknown command: POISSON ENGINE
+[CREATE] file quant/models/poisson_engine.py
+[WARN] Unknown command: FORM ENGINE
+[CREATE] file quant/models/form_engine.py
+[WARN] Unknown command: ADVANCED STATS MERGER
+[CREATE] file quant/features/advanced_stats_features.py
+[WARN] Unknown command: FEATURE ENGINEERING
+[CREATE] file quant/features/feature_builder.py
+[WARN] Unknown command: MANUAL BLEND MODEL
+[CREATE] file quant/models/manual_blend_model.py
+[WARN] Unknown command: CALIBRATION
+[CREATE] file quant/models/calibration.py
+[WARN] Unknown command: ODDS / MARKET HELPERS
+[CREATE] file quant/services/market_tools.py
+[WARN] Unknown command: AGREEMENT + CONFIDENCE
+[CREATE] file quant/services/agreement_engine.py
+[CREATE] file quant/services/confidence_engine.py
+[WARN] Unknown command: NO BET FILTER
+[CREATE] file quant/services/no_bet_filter.py
+[WARN] Unknown command: RANKER
+[CREATE] file quant/services/ranker.py
+[WARN] Unknown command: DATASET BUILDER
+[CREATE] file quant/features/dataset_builder.py
+[WARN] Unknown command: QUANT PIPELINE
+[CREATE] file quant/services/quant_engine.py
+[WARN] Unknown command: SERIALIZER
+[CREATE] file quant/services/result_serializer.py
+[WARN] Unknown command: QUANT CONTROLLER
+[CREATE] file quant/services/quant_controller.py
+[WARN] Unknown command: SAMPLE CLIENTS FOR LOCAL DEV
+[CREATE] file quant/providers/sample_clients.py
+[WARN] Unknown command: JOB RUNNER QUANT MODE
+[CREATE] file quant/services/quant_job_runner.py
+[WARN] Unknown command: TESTS
+[CREATE] file quant/tests/test_elo_engine.py
+[CREATE] file quant/tests/test_poisson_engine.py
+[CREATE] file quant/tests/test_manual_blend_model.py
+[CREATE] file quant/tests/test_quant_engine.py
+[CREATE] file quant/tests/test_quant_controller.py
+[WARN] Unknown command: APP LEVEL BRIDGE
+[CREATE] file app/quant_controller.py
+[WARN] Unknown command: ROOT TESTS
+[CREATE] file tests/test_quant_engine_bridge.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

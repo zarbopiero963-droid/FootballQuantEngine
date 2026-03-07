@@ -1,5 +1,3 @@
-
-
 def compute_dashboard_metrics(df):
 
     if df.empty:

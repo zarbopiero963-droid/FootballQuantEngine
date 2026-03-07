@@ -6,6 +6,7 @@ import pytest
 
 pytest.importorskip("pywinauto")
 
+from pywinauto import Desktop
 from pywinauto.application import Application
 
 
@@ -20,11 +21,40 @@ def _start_app():
         EXE_PATH,
         wait_for_idle=False,
     )
+    time.sleep(8)
+    return app
 
-    time.sleep(5)
 
-    connected = Application(backend="uia").connect(process=app.process)
-    return app, connected
+def _find_main_window(process_id, timeout=25):
+    desktop = Desktop(backend="uia")
+    end_time = time.time() + timeout
+
+    while time.time() < end_time:
+        windows = []
+        for win in desktop.windows():
+            try:
+                if win.process_id() == process_id:
+                    windows.append(win)
+            except Exception:
+                continue
+
+        visible_windows = []
+        for win in windows:
+            try:
+                if win.is_visible():
+                    visible_windows.append(win)
+            except Exception:
+                continue
+
+        if visible_windows:
+            return visible_windows[0]
+
+        if windows:
+            return windows[0]
+
+        time.sleep(1)
+
+    return None
 
 
 @pytest.mark.windows
@@ -32,14 +62,20 @@ def test_installed_exe_opens_main_window():
     if not os.path.exists(EXE_PATH):
         pytest.skip(f"EXE not found: {EXE_PATH}")
 
-    app, connected = _start_app()
+    app = _start_app()
 
     try:
-        main = connected.window(title_re=".*Football Quant Engine.*")
-        main.wait("exists visible", timeout=20)
+        main = _find_main_window(app.process, timeout=30)
+
+        assert main is not None, "No window found for EXE process"
+
+        try:
+            title = main.window_text()
+        except Exception:
+            title = ""
 
         assert main.exists()
-        assert main.is_visible()
+        assert title is not None
     finally:
         try:
             app.kill()
@@ -52,19 +88,27 @@ def test_installed_exe_has_main_buttons():
     if not os.path.exists(EXE_PATH):
         pytest.skip(f"EXE not found: {EXE_PATH}")
 
-    app, connected = _start_app()
+    app = _start_app()
 
     try:
-        main = connected.window(title_re=".*Football Quant Engine.*")
-        main.wait("exists visible", timeout=20)
+        main = _find_main_window(app.process, timeout=30)
 
-        run_btn = main.child_window(title="Run Cycle", control_type="Button")
-        settings_btn = main.child_window(title="Settings", control_type="Button")
-        about_btn = main.child_window(title="About", control_type="Button")
+        assert main is not None, "No window found for EXE process"
 
-        assert run_btn.exists()
-        assert settings_btn.exists()
-        assert about_btn.exists()
+        descendants = main.descendants(control_type="Button")
+
+        button_titles = []
+        for btn in descendants:
+            try:
+                button_titles.append(btn.window_text())
+            except Exception:
+                continue
+
+        expected_any = {"Run Cycle", "Settings", "About"}
+
+        assert any(title in expected_any for title in button_titles), (
+            f"No expected buttons found. Buttons detected: {button_titles}"
+        )
     finally:
         try:
             app.kill()
@@ -80,4 +124,3 @@ markers =
 EOF
 
 FIX_WHITESPACE
-

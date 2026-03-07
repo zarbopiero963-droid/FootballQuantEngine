@@ -160,3 +160,4 @@ def test_project_summary_runs():
 EOF
 
 FIX_WHITESPACE
+

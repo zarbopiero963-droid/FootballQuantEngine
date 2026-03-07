@@ -1,263 +1,216 @@
-CREA_FILE engine/final_integrity_check.py
-from pathlib import Path
+CREA_CARTELLA outputs
 
+CREA_FILE README.md
+# ⚽ Football Quant Engine
 
-class FinalIntegrityCheck:
+Football Quant Engine è un motore quantitativo per analisi e predizione delle partite di calcio, costruito in Python con architettura modulare, modelli matematici, dataset locale e supporto a workflow desktop/offline-first.
 
-    def required_paths(self):
+## Caratteristiche principali
 
-        return [
-            "README.md",
-            "requirements.txt",
-            "football_quant_engine.spec",
-            "database/schema.sql",
-            "app/main.py",
-            "app/controller.py",
-            "engine/job_runner.py",
-            "engine/offline_engine.py",
-            "engine/plugin_loader.py",
-            "engine/prediction_pipeline.py",
-            "analysis/probability_markets.py",
-            "analysis/report_generator.py",
-            "features/feature_engine.py",
-            "features/offline_features.py",
-            "models/poisson_model.py",
-            "models/bivariate_poisson.py",
-            "models/elo_model.py",
-            "models/bayesian_model.py",
-            "training/dataset_builder.py",
-            "training/backtest_engine.py",
-            "training/backtest_metrics.py",
-            "ui/main_window.py",
-        ]
+- Motore di analisi modulare
+- Sistema plugin per modelli predittivi
+- Analisi probabilistica delle partite
+- Monte Carlo simulation
+- Edge detection
+- Ranking automatico
+- Dataset builder
+- Backtest engine
+- Export CSV / Excel
+- Report HTML
+- Dashboard HTML locale
+- UI desktop PySide6
+- Modalità offline-first con import CSV
+- Build automatica EXE con GitHub Actions
 
-    def missing_paths(self):
+## Modelli inclusi
 
-        missing = []
+- Poisson Model
+- Bivariate Poisson
+- Elo Model
+- Bayesian Model
+- Probability Markets (Over/Under 2.5, BTTS)
+- Monte Carlo
 
-        for item in self.required_paths():
-            if not Path(item).exists():
-                missing.append(item)
+## Avvio
 
-        return missing
+UI desktop:
 
-    def run(self):
+python app/main.py
 
-        missing = self.missing_paths()
+CLI:
 
-        return {
-            "ok": len(missing) == 0,
-            "missing": missing,
-            "checked_count": len(self.required_paths()),
-        }
+python app/cli.py
+
+## Build locale
+
+python -m PyInstaller football_quant_engine.spec
+
+## Build GitHub
+
+Workflow:
+
+.github/workflows/build.yml
+
+Artifact atteso:
+
+FootballQuantEngine-Windows.zip
 EOF
 
-CREA_FILE app/final_check.py
-from engine.final_integrity_check import FinalIntegrityCheck
-
-
-def run_final_check():
-
-    checker = FinalIntegrityCheck()
-
-    return checker.run()
+CREA_FILE requirements.txt
+requests
+pandas
+numpy
+scipy
+scikit-learn
+matplotlib
+PySide6
+openpyxl
+sqlalchemy
+pytest
+black
+isort
+ruff
+pyinstaller
 EOF
 
-CREA_FILE engine/project_summary.py
-from pathlib import Path
+CREA_FILE football_quant_engine.spec
+# -*- mode: python ; coding: utf-8 -*-
 
-from app.version_info import get_version_info
+from PyInstaller.utils.hooks import collect_all
 
+block_cipher = None
 
-class ProjectSummary:
+datas = []
+binaries = []
+hiddenimports = []
 
-    def build(self):
+for pkg in ("numpy", "pandas", "scipy", "PySide6"):
+    pkg_datas, pkg_binaries, pkg_hidden = collect_all(pkg)
+    datas += pkg_datas
+    binaries += pkg_binaries
+    hiddenimports += pkg_hidden
 
-        info = get_version_info()
-
-        return {
-            "name": info["name"],
-            "version": info["version"],
-            "author": info["author"],
-            "description": info["description"],
-            "has_readme": Path("README.md").exists(),
-            "has_spec": Path("football_quant_engine.spec").exists(),
-            "has_license": Path("LICENSE").exists(),
-            "has_contributing": Path("CONTRIBUTING.md").exists(),
-            "has_requirements": Path("requirements.txt").exists(),
-            "has_outputs_dir": Path("outputs").exists(),
-            "core_modules": {
-                "analysis": Path("analysis").exists(),
-                "app": Path("app").exists(),
-                "config": Path("config").exists(),
-                "data": Path("data").exists(),
-                "database": Path("database").exists(),
-                "engine": Path("engine").exists(),
-                "export": Path("export").exists(),
-                "features": Path("features").exists(),
-                "models": Path("models").exists(),
-                "notifications": Path("notifications").exists(),
-                "plugins": Path("plugins").exists(),
-                "simulation": Path("simulation").exists(),
-                "strategies": Path("strategies").exists(),
-                "training": Path("training").exists(),
-                "ui": Path("ui").exists(),
-                "tests": Path("tests").exists(),
-            },
-        }
-EOF
-
-CREA_FILE app/project_summary.py
-from engine.project_summary import ProjectSummary
-
-
-def get_project_summary():
-
-    return ProjectSummary().build()
-EOF
-
-CREA_FILE ui/final_check_window.py
-import json
-
-from PySide6.QtWidgets import (
-    QPushButton,
-    QTextEdit,
-    QVBoxLayout,
-    QWidget,
+a = Analysis(
+    ["app/desktop_launcher.py"],
+    pathex=["."],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
+    hookspath=[],
+    runtime_hooks=[],
+    excludes=[],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
 )
 
-from app.final_check import run_final_check
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-
-class FinalCheckWindow(QWidget):
-
-    def __init__(self):
-
-        super().__init__()
-
-        self.setWindowTitle("Final Project Check")
-
-        self.run_button = QPushButton("Run Final Check")
-        self.output = QTextEdit()
-        self.output.setReadOnly(True)
-
-        self.run_button.clicked.connect(self.run_check)
-
-        layout = QVBoxLayout()
-        layout.addWidget(self.run_button)
-        layout.addWidget(self.output)
-
-        self.setLayout(layout)
-
-    def run_check(self):
-
-        result = run_final_check()
-
-        self.output.setPlainText(
-            json.dumps(result, indent=2)
-        )
-EOF
-
-CREA_FILE ui/project_summary_window.py
-import json
-
-from PySide6.QtWidgets import (
-    QPushButton,
-    QTextEdit,
-    QVBoxLayout,
-    QWidget,
+exe = EXE(
+    pyz,
+    a.scripts,
+    [],
+    exclude_binaries=True,
+    name="FootballQuantEngine",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    console=True,
 )
 
-from app.project_summary import get_project_summary
-
-
-class ProjectSummaryWindow(QWidget):
-
-    def __init__(self):
-
-        super().__init__()
-
-        self.setWindowTitle("Project Summary")
-
-        self.refresh_button = QPushButton("Refresh Summary")
-        self.output = QTextEdit()
-        self.output.setReadOnly(True)
-
-        self.refresh_button.clicked.connect(self.refresh)
-
-        layout = QVBoxLayout()
-        layout.addWidget(self.refresh_button)
-        layout.addWidget(self.output)
-
-        self.setLayout(layout)
-
-        self.refresh()
-
-    def refresh(self):
-
-        summary = get_project_summary()
-
-        self.output.setPlainText(
-            json.dumps(summary, indent=2)
-        )
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
+    name="FootballQuantEngine",
+)
 EOF
 
-CREA_FILE tests/test_final_integrity_check.py
-from engine.final_integrity_check import FinalIntegrityCheck
+CREA_FILE LICENSE
+MIT License
 
+Copyright (c) 2026
 
-def test_final_integrity_check_runs():
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-    checker = FinalIntegrityCheck()
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-    result = checker.run()
-
-    assert isinstance(result, dict)
-    assert "ok" in result
-    assert "missing" in result
-    assert "checked_count" in result
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 EOF
 
-CREA_FILE tests/test_final_check.py
-from app.final_check import run_final_check
+CREA_FILE CONTRIBUTING.md
+# Contributing to Football Quant Engine
 
+Thanks for your interest in contributing.
 
-def test_app_final_check_runs():
+## Recommended workflow
 
-    result = run_final_check()
+1. Fork the repository
+2. Create a new branch
+3. Make your changes
+4. Run lint and tests
+5. Open a pull request
 
-    assert isinstance(result, dict)
-    assert "ok" in result
-    assert "missing" in result
+## Code style
+
+This project uses:
+
+- black
+- isort
+- ruff
+- pytest
+
+Before submitting changes, run:
+
+python -m pytest -q
+ruff check .
+black --check .
+isort --check-only .
+
+## Suggested contribution areas
+
+- mathematical models
+- offline engine improvements
+- CSV import/export
+- UI improvements
+- reporting
+- testing
+- documentation
 EOF
 
-CREA_FILE tests/test_project_summary.py
-from app.project_summary import get_project_summary
+CREA_FILE .editorconfig
+root = true
 
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
 
-def test_project_summary_runs():
-
-    summary = get_project_summary()
-
-    assert isinstance(summary, dict)
-    assert "name" in summary
-    assert "version" in summary
-    assert "core_modules" in summary
+[*.md]
+trim_trailing_whitespace = false
 EOF
 
-CREA_FILE tests/test_project_summary_window.py
-import pytest
+CREA_FILE outputs/.gitkeep
 
-
-def test_project_summary_window_import():
-
-    try:
-        from ui.project_summary_window import ProjectSummaryWindow
-    except (ModuleNotFoundError, ImportError) as exc:
-        pytest.skip(f"UI dependencies not available in CI: {exc}")
-
-    assert ProjectSummaryWindow is not None
 EOF
 
 FIX_WHITESPACE
-

@@ -1,294 +1,270 @@
 ############################################
-CONNECT QUANT ENGINE 2 TO APP
+LIVE API FOOTBALL PROVIDER
 ############################################
 
-CREA_FILE engine/job_runner.py
-from quant.services.quant_job_runner import QuantJobRunner
+CREA_FILE quant/providers/api_football_client.py
+import requests
+import os
 
 
-class JobRunner:
-
-    def __init__(self):
-        self.quant_runner = QuantJobRunner()
-
-    def run_cycle(self):
-        return self.quant_runner.run_cycle()
-EOF
-
-CREA_FILE app/controller.py
-from engine.job_runner import JobRunner
+BASE_URL = "https://v3.football.api-sports.io"
 
 
-class AppController:
+class APIFootballClient:
 
-    def __init__(self):
-        self.runner = JobRunner()
+    def __init__(self, api_key=None):
 
-    def run_once(self):
-        return self.runner.run_cycle()
+        self.api_key = api_key or os.getenv("API_FOOTBALL_KEY")
 
-    def run_predictions(self):
-        return self.runner.run_cycle()
+        if not self.api_key:
+            raise RuntimeError("API_FOOTBALL_KEY missing")
 
-    def run_quant_cycle(self):
-        return self.runner.run_cycle()
-EOF
+        self.headers = {
+            "x-apisports-key": self.api_key
+        }
 
-CREA_FILE ui/main_window.py
-from PySide6.QtWidgets import (
-    QLabel,
-    QMainWindow,
-    QMessageBox,
-    QPushButton,
-    QToolBar,
-)
+    def _get(self, path, params=None):
 
-from ui.about_dialog import AboutDialog
-from ui.backtest_runner_window import BacktestRunnerWindow
-from ui.dashboard_view import DashboardView
-from ui.final_check_window import FinalCheckWindow
-from ui.manual_context_window import ManualContextWindow
-from ui.offline_import_window import OfflineImportWindow
-from ui.outputs_view import OutputsView
-from ui.project_summary_window import ProjectSummaryWindow
-from ui.settings_window import SettingsWindow
+        url = BASE_URL + path
 
-
-class MainWindow(QMainWindow):
-
-    def __init__(self, controller):
-
-        super().__init__()
-
-        self.controller = controller
-
-        self.setWindowTitle("Football Quant Engine")
-        self.resize(1320, 860)
-
-        self.dashboard = DashboardView()
-        self.setCentralWidget(self.dashboard)
-
-        self.status_label = QLabel("Ready")
-        self.statusBar().addPermanentWidget(self.status_label)
-
-        toolbar = QToolBar("Main")
-        self.addToolBar(toolbar)
-
-        self.run_button = QPushButton("Run Cycle")
-        self.run_button.clicked.connect(self.run_cycle)
-        toolbar.addWidget(self.run_button)
-
-        self.backtest_button = QPushButton("Backtest")
-        self.backtest_button.clicked.connect(self.open_backtest)
-        toolbar.addWidget(self.backtest_button)
-
-        self.settings_button = QPushButton("Settings")
-        self.settings_button.clicked.connect(self.open_settings)
-        toolbar.addWidget(self.settings_button)
-
-        self.offline_import_button = QPushButton("Import CSV")
-        self.offline_import_button.clicked.connect(self.open_offline_import)
-        toolbar.addWidget(self.offline_import_button)
-
-        self.manual_context_button = QPushButton("Manual Context")
-        self.manual_context_button.clicked.connect(self.open_manual_context)
-        toolbar.addWidget(self.manual_context_button)
-
-        self.outputs_button = QPushButton("Outputs")
-        self.outputs_button.clicked.connect(self.open_outputs)
-        toolbar.addWidget(self.outputs_button)
-
-        self.final_check_button = QPushButton("Final Check")
-        self.final_check_button.clicked.connect(self.open_final_check)
-        toolbar.addWidget(self.final_check_button)
-
-        self.project_summary_button = QPushButton("Project Summary")
-        self.project_summary_button.clicked.connect(self.open_project_summary)
-        toolbar.addWidget(self.project_summary_button)
-
-        self.about_button = QPushButton("About")
-        self.about_button.clicked.connect(self.open_about)
-        toolbar.addWidget(self.about_button)
-
-        self.settings_window = None
-        self.about_dialog = None
-        self.offline_import_window = None
-        self.manual_context_window = None
-        self.outputs_view = None
-        self.final_check_window = None
-        self.project_summary_window = None
-        self.backtest_window = None
-
-        self.dashboard.set_status("Ready")
-        self.dashboard.append_log("Application started.")
-        self.dashboard.add_history_message("Application started.")
-
-    def open_settings(self):
-
-        self.settings_window = SettingsWindow()
-        self.settings_window.show()
-
-    def open_about(self):
-
-        self.about_dialog = AboutDialog()
-        self.about_dialog.show()
-
-    def open_offline_import(self):
-
-        self.offline_import_window = OfflineImportWindow()
-        self.offline_import_window.show()
-
-    def open_manual_context(self):
-
-        self.manual_context_window = ManualContextWindow()
-        self.manual_context_window.show()
-
-    def open_outputs(self):
-
-        self.outputs_view = OutputsView()
-        self.outputs_view.show()
-
-    def open_final_check(self):
-
-        self.final_check_window = FinalCheckWindow()
-        self.final_check_window.show()
-
-    def open_project_summary(self):
-
-        self.project_summary_window = ProjectSummaryWindow()
-        self.project_summary_window.show()
-
-    def open_backtest(self):
-
-        self.backtest_window = BacktestRunnerWindow(
-            on_metrics_ready=self.dashboard.set_metrics,
-            on_log_message=self.dashboard.append_log,
+        r = requests.get(
+            url,
+            headers=self.headers,
+            params=params,
+            timeout=30
         )
-        self.backtest_window.show()
 
-    def run_cycle(self):
+        r.raise_for_status()
 
-        self.dashboard.set_status("Running")
-        self.status_label.setText("Running")
-        self.dashboard.append_log("Quant prediction pipeline started.")
-        self.dashboard.add_history_message("Quant prediction pipeline started.")
+        return r.json()["response"]
 
-        try:
-            ranked = self.controller.run_predictions()
 
-            if ranked is None:
-                self.dashboard.clear_table()
-                self.dashboard.set_log_text("No prediction results returned.")
-                self.dashboard.set_status("Completed")
-                self.status_label.setText("Completed")
-                self.dashboard.add_history_message("Prediction run completed: no results")
-                return
+############################################
+LEAGUES
+############################################
 
-            if isinstance(ranked, list):
-                self.dashboard.set_results_from_records(ranked)
-                self.dashboard.set_log_text(str(ranked))
-                self.dashboard.set_status("Completed")
-                self.status_label.setText("Completed")
-                self.dashboard.add_history_message(
-                    f"Prediction run completed: rows={len(ranked)}"
-                )
-                self.dashboard.append_log(
-                    f"Quant prediction run completed successfully with {len(ranked)} rows."
-                )
-                return
+    def get_leagues(self):
 
-            if getattr(ranked, "empty", False):
-                self.dashboard.clear_table()
-                self.dashboard.set_log_text("No prediction rows found.")
-                self.dashboard.set_status("Completed")
-                self.status_label.setText("Completed")
-                self.dashboard.add_history_message("Prediction run completed: empty dataframe")
-                return
+        data = self._get("/leagues")
 
-            self.dashboard.set_results_dataframe(ranked)
-            self.dashboard.set_log_text(ranked.to_string(index=False))
-            self.dashboard.set_status("Completed")
-            self.status_label.setText("Completed")
-            self.dashboard.add_history_message(
-                f"Prediction run completed: rows={len(ranked.index)}"
+        return data
+
+
+############################################
+FIXTURES
+############################################
+
+    def get_fixtures(self, league, season):
+
+        data = self._get(
+            "/fixtures",
+            {
+                "league": league,
+                "season": season
+            }
+        )
+
+        fixtures = []
+
+        for item in data:
+
+            fixtures.append({
+                "fixture_id": item["fixture"]["id"],
+                "home_team": item["teams"]["home"]["name"],
+                "away_team": item["teams"]["away"]["name"]
+            })
+
+        return fixtures
+
+
+############################################
+COMPLETED MATCHES
+############################################
+
+    def get_completed_matches(self, league, season):
+
+        data = self._get(
+            "/fixtures",
+            {
+                "league": league,
+                "season": season,
+                "status": "FT"
+            }
+        )
+
+        matches = []
+
+        for item in data:
+
+            matches.append({
+                "fixture_id": item["fixture"]["id"],
+                "home_team": item["teams"]["home"]["name"],
+                "away_team": item["teams"]["away"]["name"],
+                "home_goals": item["goals"]["home"],
+                "away_goals": item["goals"]["away"]
+            })
+
+        return matches
+
+
+############################################
+PREMATCH ODDS
+############################################
+
+    def get_odds(self, fixture_ids):
+
+        odds_map = {}
+
+        for fid in fixture_ids:
+
+            data = self._get(
+                "/odds",
+                {
+                    "fixture": fid
+                }
             )
-            self.dashboard.append_log("Quant prediction run completed successfully.")
 
-        except Exception as exc:
-            self.dashboard.set_status("Error")
-            self.dashboard.append_log(f"Error: {exc}")
-            self.dashboard.add_history_message(f"Prediction run failed: {exc}")
-            QMessageBox.critical(
-                self,
-                "Run Error",
-                str(exc),
-            )
-            self.status_label.setText("Error")
+            if not data:
+                continue
+
+            try:
+
+                bookmakers = data[0]["bookmakers"]
+
+                markets = bookmakers[0]["bets"]
+
+                odds = {}
+
+                for m in markets:
+
+                    if m["name"] == "Match Winner":
+
+                        for v in m["values"]:
+
+                            if v["value"] == "Home":
+                                odds["home"] = float(v["odd"])
+
+                            if v["value"] == "Draw":
+                                odds["draw"] = float(v["odd"])
+
+                            if v["value"] == "Away":
+                                odds["away"] = float(v["odd"])
+
+                odds_map[fid] = odds
+
+            except Exception:
+                continue
+
+        return odds_map
 EOF
 
-CREA_FILE tests/test_job_runner_quant.py
-from engine.job_runner import JobRunner
+
+############################################
+QUANT PROVIDER WRAPPER
+############################################
+
+CREA_FILE quant/providers/api_football_provider.py
+from quant.providers.api_football_client import APIFootballClient
 
 
-def test_job_runner_returns_quant_results():
+class APIFootballProvider:
 
-    runner = JobRunner()
+    def __init__(self, api_key=None):
 
-    results = runner.run_cycle()
+        self.client = APIFootballClient(api_key)
 
-    assert isinstance(results, list)
-    assert len(results) > 0
-    assert "fixture_id" in results[0]
-    assert "market" in results[0]
-    assert "decision" in results[0]
+    def get_completed_matches(self, league=None, season=None):
+
+        return self.client.get_completed_matches(
+            league=league,
+            season=season
+        )
+
+    def get_upcoming_matches(self, league=None, season=None):
+
+        return self.client.get_fixtures(
+            league=league,
+            season=season
+        )
+
+    def get_prematch_odds(self, fixture_ids):
+
+        return self.client.get_odds(
+            fixture_ids
+        )
 EOF
 
-CREA_FILE tests/test_app_controller_quant.py
-from app.controller import AppController
+
+############################################
+UNDERSTAT LIVE PROVIDER
+############################################
+
+CREA_FILE quant/providers/understat_provider.py
+import requests
 
 
-def test_app_controller_quant_flow():
+class UnderstatProvider:
 
-    controller = AppController()
+    def get_team_advanced_stats(self, league=None, season=None):
 
-    results = controller.run_predictions()
+        # placeholder until scraping layer added
 
-    assert isinstance(results, list)
-    assert len(results) > 0
-    assert "home_team" in results[0]
-    assert "away_team" in results[0]
-    assert "confidence" in results[0]
+        return {}
 EOF
 
-CREA_FILE tests/test_quant_records_shape.py
-from quant.services.quant_job_runner import QuantJobRunner
+
+############################################
+UPDATE QUANT CONTROLLER
+############################################
+
+MODIFICA_FILE quant/services/quant_controller.py
+
+from quant.providers.api_football_provider import APIFootballProvider
+from quant.providers.understat_provider import UnderstatProvider
+from quant.services.quant_engine import QuantEngine
 
 
-def test_quant_records_have_expected_fields():
+class QuantController:
 
-    runner = QuantJobRunner()
+    def __init__(self):
 
-    results = runner.run_cycle()
+        self.fixtures_provider = APIFootballProvider()
+        self.odds_provider = self.fixtures_provider
+        self.advanced_provider = UnderstatProvider()
 
-    first = results[0]
+        self.engine = QuantEngine(
+            fixtures_provider=self.fixtures_provider,
+            odds_provider=self.odds_provider,
+            advanced_provider=self.advanced_provider
+        )
 
-    expected = {
-        "fixture_id",
-        "home_team",
-        "away_team",
-        "market",
-        "probability",
-        "fair_odds",
-        "bookmaker_odds",
-        "market_edge",
-        "model_edge",
-        "confidence",
-        "agreement",
-        "decision",
-    }
+    def run(self, league=135, season=2024):
 
-    assert expected.issubset(set(first.keys()))
+        self.engine.fit(
+            league=league,
+            season=season
+        )
+
+        return self.engine.predict(
+            league=league,
+            season=season
+        )
 EOF
 
-FIX_WHITESPACE
 
+############################################
+TEST LIVE API
+############################################
+
+CREA_FILE tests/test_api_football_live.py
+from quant.providers.api_football_client import APIFootballClient
+
+
+def test_api_connection():
+
+    client = APIFootballClient()
+
+    leagues = client.get_leagues()
+
+    assert isinstance(leagues, list)
+EOF

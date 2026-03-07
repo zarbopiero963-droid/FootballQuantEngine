@@ -1,63 +1,71 @@
-CREA_CARTELLA outputs
+CREA_FILE tests/test_readme_alignment.py
+from pathlib import Path
 
-CREA_FILE CONTRIBUTING.md
-# Contributing to Football Quant Engine
 
-Thanks for your interest in contributing.
+def test_readme_exists_and_not_empty():
 
-## Recommended workflow
+    readme = Path("README.md")
 
-1. Fork the repository
-2. Create a new branch
-3. Make your changes
-4. Run lint and tests
-5. Open a pull request
+    assert readme.exists()
 
-## Code style
+    content = readme.read_text(encoding="utf-8")
 
-This project uses:
-
-- black
-- isort
-- ruff
-- pytest
-
-Before submitting changes, run:
-
-python -m pytest -q
-ruff check .
-black --check .
-isort --check-only .
-
-## Suggested contribution areas
-
-- mathematical models
-- offline engine improvements
-- CSV import/export
-- UI improvements
-- reporting
-- testing
-- documentation
+    assert len(content.strip()) > 0
+    assert "Football Quant Engine" in content
 EOF
 
-CREA_FILE .editorconfig
-root = true
+CREA_FILE tests/test_requirements_alignment.py
+from pathlib import Path
 
-[*]
-charset = utf-8
-end_of_line = lf
-insert_final_newline = true
-indent_style = space
-indent_size = 4
-trim_trailing_whitespace = true
 
-[*.md]
-trim_trailing_whitespace = false
+def test_requirements_contains_core_dependencies():
+
+    requirements = Path("requirements.txt")
+
+    assert requirements.exists()
+
+    content = requirements.read_text(encoding="utf-8")
+
+    required = [
+        "requests",
+        "pandas",
+        "numpy",
+        "scipy",
+        "scikit-learn",
+        "matplotlib",
+        "PySide6",
+        "openpyxl",
+        "pytest",
+        "black",
+        "isort",
+        "ruff",
+        "pyinstaller",
+    ]
+
+    for item in required:
+        assert item in content
 EOF
 
-CREA_FILE outputs/.gitkeep
+CREA_FILE tests/test_spec_file.py
+from pathlib import Path
 
+
+def test_spec_file_exists():
+
+    spec = Path("football_quant_engine.spec")
+
+    assert spec.exists()
+EOF
+
+CREA_FILE tests/test_repo_files.py
+from pathlib import Path
+
+
+def test_repository_files_exist():
+
+    assert Path("LICENSE").exists()
+    assert Path("CONTRIBUTING.md").exists()
+    assert Path(".editorconfig").exists()
 EOF
 
 FIX_WHITESPACE
-

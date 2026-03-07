@@ -542,3 +542,18 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-07_08-30-21.zip
+Backup created backups/backup_2026-03-07_08-30-21.zip
+[SKIP] file identical engine/offline_controller.py
+[SKIP] file identical analysis/report_viewer_helper.py
+[SKIP] file identical engine/final_integrity_check.py
+[SKIP] file identical app/final_check.py
+[SKIP] file identical engine/project_summary.py
+[SKIP] file identical app/project_summary.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

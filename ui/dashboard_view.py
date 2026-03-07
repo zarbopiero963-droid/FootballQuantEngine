@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from analysis.svg_chart_builder import SvgChartBuilder
 from export.csv_exporter import CsvExporter
 from export.excel_exporter import ExcelExporter
 
@@ -116,17 +117,14 @@ class DashboardView(QWidget):
         controls_layout.addWidget(self.open_excel_button)
 
         self.results_table = QTableWidget()
-        self.results_table.setColumnCount(0)
-        self.results_table.setRowCount(0)
-
         self.log_output = QTextEdit()
         self.log_output.setReadOnly(True)
 
-        self.history_output = QTextEdit()
-        self.history_output.setReadOnly(True)
-
         self.metrics_output = QTextEdit()
         self.metrics_output.setReadOnly(True)
+
+        self.history_output = QTextEdit()
+        self.history_output.setReadOnly(True)
 
         self.charts_output = QTextEdit()
         self.charts_output.setReadOnly(True)
@@ -137,31 +135,26 @@ class DashboardView(QWidget):
 
         results_tab = QWidget()
         results_layout = QVBoxLayout()
-        results_layout.addWidget(QLabel("Results"))
         results_layout.addWidget(self.results_table)
         results_tab.setLayout(results_layout)
 
         log_tab = QWidget()
         log_layout = QVBoxLayout()
-        log_layout.addWidget(QLabel("Output Log"))
         log_layout.addWidget(self.log_output)
         log_tab.setLayout(log_layout)
 
         history_tab = QWidget()
         history_layout = QVBoxLayout()
-        history_layout.addWidget(QLabel("Run History"))
         history_layout.addWidget(self.history_output)
         history_tab.setLayout(history_layout)
 
         metrics_tab = QWidget()
         metrics_layout = QVBoxLayout()
-        metrics_layout.addWidget(QLabel("Metrics Panel"))
         metrics_layout.addWidget(self.metrics_output)
         metrics_tab.setLayout(metrics_layout)
 
         charts_tab = QWidget()
         charts_layout = QVBoxLayout()
-        charts_layout.addWidget(QLabel("Charts / Equity"))
         charts_layout.addWidget(self.charts_output)
         charts_tab.setLayout(charts_layout)
 
@@ -171,15 +164,15 @@ class DashboardView(QWidget):
         self.tabs.addTab(metrics_tab, "Metrics")
         self.tabs.addTab(charts_tab, "Charts")
 
-        main_layout = QVBoxLayout()
-        main_layout.addWidget(self.title)
-        main_layout.addLayout(cards_row_1)
-        main_layout.addLayout(cards_row_2)
-        main_layout.addLayout(controls_layout)
-        main_layout.addWidget(self.tabs)
-        main_layout.addWidget(self.inline_status)
+        layout = QVBoxLayout()
+        layout.addWidget(self.title)
+        layout.addLayout(cards_row_1)
+        layout.addLayout(cards_row_2)
+        layout.addLayout(controls_layout)
+        layout.addWidget(self.tabs)
+        layout.addWidget(self.inline_status)
 
-        self.setLayout(main_layout)
+        self.setLayout(layout)
 
     def set_status(self, text):
 
@@ -200,52 +193,6 @@ class DashboardView(QWidget):
         self.filtered_df = pd.DataFrame()
         self.results_table.setRowCount(0)
         self.results_table.setColumnCount(0)
-        self.rows_card.set_value(0)
-        self.total_bets_card.set_value(0)
-        self.columns_card.set_value(0)
-        self.filter_card.set_value(0)
-        self.inline_status.setText("Dashboard cleared.")
-
-    def set_metrics(self, metrics):
-
-        if not metrics:
-            self.metrics_output.setPlainText("No metrics available.")
-            return
-
-        self.bankroll_card.set_value(
-            f"{(metrics.get('bankroll_history') or [100])[-1]:.2f}"
-        )
-        self.roi_card.set_value(f"{metrics.get('roi', 0):.2%}")
-        self.yield_card.set_value(f"{metrics.get('yield', 0):.2%}")
-        self.hit_rate_card.set_value(f"{metrics.get('hit_rate', 0):.2%}")
-        self.runs_card.set_value(metrics.get("total_bets", 0))
-        self.max_dd_card.set_value(f"{metrics.get('max_drawdown', 0):.2%}")
-
-        text = []
-        text.append(f"Bankroll: {(metrics.get('bankroll_history') or [100])[-1]:.2f}")
-        text.append(f"Total Profit: {metrics.get('total_profit', 0):.2f}")
-        text.append(f"Total Staked: {metrics.get('total_staked', 0):.2f}")
-        text.append(f"ROI: {metrics.get('roi', 0):.2%}")
-        text.append(f"Yield: {metrics.get('yield', 0):.2%}")
-        text.append(f"Hit Rate: {metrics.get('hit_rate', 0):.2%}")
-        text.append(f"Total Bets: {metrics.get('total_bets', 0)}")
-        text.append(f"Max Drawdown: {metrics.get('max_drawdown', 0):.2%}")
-        text.append(f"Brier Score: {metrics.get('brier_score', 0):.4f}")
-        text.append(f"Log Loss: {metrics.get('log_loss', 0):.4f}")
-
-        self.metrics_output.setPlainText("\n".join(text))
-
-        chart_lines = []
-        chart_lines.append("Bankroll History:")
-        chart_lines.append(str(metrics.get("bankroll_history", [])))
-        chart_lines.append("")
-        chart_lines.append("Accuracy History:")
-        chart_lines.append(str(metrics.get("accuracy_history", [])))
-        chart_lines.append("")
-        chart_lines.append("Drawdown History:")
-        chart_lines.append(str(metrics.get("drawdown_history", [])))
-
-        self.charts_output.setPlainText("\n".join(chart_lines))
 
     def set_results_dataframe(self, df):
 
@@ -257,25 +204,11 @@ class DashboardView(QWidget):
         self.filtered_df = df.copy()
         self.render_dataframe(self.filtered_df)
 
-    def set_results_from_records(self, records):
-
-        if not records:
-            self.clear_table()
-            return
-
-        df = pd.DataFrame(records)
-        self.set_results_dataframe(df)
-
     def render_dataframe(self, df):
 
         if df is None or df.empty:
             self.results_table.setRowCount(0)
             self.results_table.setColumnCount(0)
-            self.rows_card.set_value(0)
-            self.total_bets_card.set_value(0)
-            self.columns_card.set_value(0)
-            self.filter_card.set_value(0)
-            self.inline_status.setText("No rows to display.")
             return
 
         columns = list(df.columns)
@@ -288,17 +221,17 @@ class DashboardView(QWidget):
         for row_index in range(rows):
             for col_index, col_name in enumerate(columns):
                 value = df.iloc[row_index][col_name]
-                item = QTableWidgetItem(str(value))
-                self.results_table.setItem(row_index, col_index, item)
+                self.results_table.setItem(
+                    row_index,
+                    col_index,
+                    QTableWidgetItem(str(value)),
+                )
 
         self.results_table.resizeColumnsToContents()
-        self.results_table.resizeRowsToContents()
-
         self.rows_card.set_value(rows)
         self.total_bets_card.set_value(rows)
         self.columns_card.set_value(len(columns))
         self.filter_card.set_value(rows)
-        self.inline_status.setText(f"Showing {rows} rows and {len(columns)} columns.")
 
     def apply_filters(self):
 
@@ -324,7 +257,6 @@ class DashboardView(QWidget):
 
         self.apply_filters()
         self.append_log("Dashboard refreshed.")
-        self.inline_status.setText("Dashboard refreshed.")
 
     def toggle_sort(self):
 
@@ -338,65 +270,98 @@ class DashboardView(QWidget):
         )
         self.sort_ascending = not self.sort_ascending
         self.render_dataframe(self.filtered_df)
-        self.append_log("Sort toggled.")
-        self.inline_status.setText(f"Sorted by {first_column}.")
 
     def export_csv(self):
 
         if self.filtered_df is None or self.filtered_df.empty:
-            self.append_log("CSV export skipped: no data.")
-            self.inline_status.setText("CSV export skipped.")
             return
 
         Path("outputs").mkdir(parents=True, exist_ok=True)
-
         CsvExporter().export_value_bets(
             self.last_csv_path,
             self.filtered_df.to_dict("records"),
         )
-        self.append_log(f"CSV exported: {self.last_csv_path}")
-        self.inline_status.setText(f"CSV exported: {self.last_csv_path}")
 
     def export_excel(self):
 
         if self.filtered_df is None or self.filtered_df.empty:
-            self.append_log("Excel export skipped: no data.")
-            self.inline_status.setText("Excel export skipped.")
             return
 
         Path("outputs").mkdir(parents=True, exist_ok=True)
-
         ExcelExporter().export_value_bets(
             self.last_excel_path,
             self.filtered_df.to_dict("records"),
         )
-        self.append_log(f"Excel exported: {self.last_excel_path}")
-        self.inline_status.setText(f"Excel exported: {self.last_excel_path}")
 
     def open_csv(self):
 
         path = Path(self.last_csv_path)
         if not path.exists():
-            self.append_log("Open CSV skipped: file not found.")
-            self.inline_status.setText("CSV file not found.")
             return
-
         import webbrowser
 
         webbrowser.open(f"file://{path.resolve()}")
-        self.append_log(f"CSV opened: {path}")
-        self.inline_status.setText(f"CSV opened: {path}")
 
     def open_excel(self):
 
         path = Path(self.last_excel_path)
         if not path.exists():
-            self.append_log("Open Excel skipped: file not found.")
-            self.inline_status.setText("Excel file not found.")
             return
-
         import webbrowser
 
         webbrowser.open(f"file://{path.resolve()}")
-        self.append_log(f"Excel opened: {path}")
-        self.inline_status.setText(f"Excel opened: {path}")
+
+    def set_metrics(self, metrics):
+
+        if not metrics:
+            self.metrics_output.setPlainText("No metrics available.")
+            return
+
+        bankroll = (metrics.get("bankroll_history") or [100])[-1]
+
+        self.bankroll_card.set_value(f"{bankroll:.2f}")
+        self.roi_card.set_value(f"{metrics.get('roi', 0):.2%}")
+        self.yield_card.set_value(f"{metrics.get('yield', 0):.2%}")
+        self.hit_rate_card.set_value(f"{metrics.get('hit_rate', 0):.2%}")
+        self.runs_card.set_value(metrics.get("total_bets", 0))
+        self.max_dd_card.set_value(f"{metrics.get('max_drawdown', 0):.2%}")
+
+        lines = [
+            f"Bankroll: {bankroll:.2f}",
+            f"Total Profit: {metrics.get('total_profit', 0):.2f}",
+            f"Total Staked: {metrics.get('total_staked', 0):.2f}",
+            f"ROI: {metrics.get('roi', 0):.2%}",
+            f"Yield: {metrics.get('yield', 0):.2%}",
+            f"Hit Rate: {metrics.get('hit_rate', 0):.2%}",
+            f"Total Bets: {metrics.get('total_bets', 0)}",
+            f"Max Drawdown: {metrics.get('max_drawdown', 0):.2%}",
+            f"Brier Score: {metrics.get('brier_score', 0):.4f}",
+            f"Log Loss: {metrics.get('log_loss', 0):.4f}",
+        ]
+        self.metrics_output.setPlainText("\n".join(lines))
+
+        chart_builder = SvgChartBuilder()
+        chart_html = []
+        chart_html.append(
+            chart_builder.line_chart(
+                metrics.get("bankroll_history", []),
+                "Bankroll / Equity Curve",
+                "#2c7be5",
+            )
+        )
+        chart_html.append(
+            chart_builder.line_chart(
+                metrics.get("accuracy_history", []),
+                "Accuracy Curve",
+                "#28a745",
+            )
+        )
+        chart_html.append(
+            chart_builder.line_chart(
+                metrics.get("drawdown_history", []),
+                "Drawdown Curve",
+                "#dc3545",
+            )
+        )
+
+        self.charts_output.setHtml("".join(chart_html))

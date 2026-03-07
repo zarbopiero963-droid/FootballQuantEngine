@@ -5,7 +5,7 @@ from database.db_manager import connect
 
 class BacktestEngine:
 
-    def load_predictions_with_results(self):
+    def load_predictions_with_results(self, date_from=None, date_to=None, league=None):
 
         conn = connect()
 
@@ -15,6 +15,8 @@ class BacktestEngine:
             p.home_prob,
             p.draw_prob,
             p.away_prob,
+            f.league,
+            f.match_date,
             f.home_goals,
             f.away_goals,
             oh.home_odds,
@@ -35,12 +37,24 @@ class BacktestEngine:
                AND o1.timestamp = o2.max_ts
         ) oh
             ON p.fixture_id = oh.fixture_id
-        WHERE
-            f.status = 'FT'
+        WHERE f.status = 'FT'
         """
 
-        df = pd.read_sql_query(query, conn)
+        params = []
 
+        if date_from:
+            query += " AND f.match_date >= ?"
+            params.append(date_from)
+
+        if date_to:
+            query += " AND f.match_date <= ?"
+            params.append(date_to)
+
+        if league:
+            query += " AND f.league = ?"
+            params.append(league)
+
+        df = pd.read_sql_query(query, conn, params=params)
         conn.close()
 
         if df.empty:
@@ -56,6 +70,10 @@ class BacktestEngine:
 
         return df
 
-    def run(self):
+    def run(self, date_from=None, date_to=None, league=None):
 
-        return self.load_predictions_with_results()
+        return self.load_predictions_with_results(
+            date_from=date_from,
+            date_to=date_to,
+            league=league,
+        )

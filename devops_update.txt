@@ -906,3 +906,4 @@ def test_dashboard_view_import():
 EOF
 
 FIX_WHITESPACE
+

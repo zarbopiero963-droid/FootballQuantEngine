@@ -1,3 +1,4 @@
+import pandas as pd
 from PySide6.QtWidgets import (
     QFileDialog,
     QGridLayout,
@@ -34,6 +35,9 @@ class OfflineImportWindow(QWidget):
         self.preview_button = QPushButton("Preview CSV")
         self.import_button = QPushButton("Validate + Import")
 
+        self.matches_mapping_input = QLineEdit()
+        self.odds_mapping_input = QLineEdit()
+
         self.output = QTextEdit()
         self.output.setReadOnly(True)
 
@@ -55,14 +59,20 @@ class OfflineImportWindow(QWidget):
         layout.addWidget(self.odds_path, 1, 1)
         layout.addWidget(self.odds_browse, 1, 2)
 
-        layout.addWidget(self.preview_button, 2, 0, 1, 1)
-        layout.addWidget(self.import_button, 2, 1, 1, 2)
+        layout.addWidget(QLabel("Matches Mapping"), 2, 0)
+        layout.addWidget(self.matches_mapping_input, 2, 1, 1, 2)
 
-        layout.addWidget(QLabel("Preview"), 3, 0, 1, 3)
-        layout.addWidget(self.preview_table, 4, 0, 1, 3)
+        layout.addWidget(QLabel("Odds Mapping"), 3, 0)
+        layout.addWidget(self.odds_mapping_input, 3, 1, 1, 2)
 
-        layout.addWidget(QLabel("Wizard Log"), 5, 0, 1, 3)
-        layout.addWidget(self.output, 6, 0, 1, 3)
+        layout.addWidget(self.preview_button, 4, 0, 1, 1)
+        layout.addWidget(self.import_button, 4, 1, 1, 2)
+
+        layout.addWidget(QLabel("Preview"), 5, 0, 1, 3)
+        layout.addWidget(self.preview_table, 6, 0, 1, 3)
+
+        layout.addWidget(QLabel("Wizard Log"), 7, 0, 1, 3)
+        layout.addWidget(self.output, 8, 0, 1, 3)
 
         self.setLayout(layout)
 
@@ -74,7 +84,6 @@ class OfflineImportWindow(QWidget):
             "",
             "CSV Files (*.csv)",
         )
-
         if path:
             self.matches_path.setText(path)
 
@@ -86,9 +95,32 @@ class OfflineImportWindow(QWidget):
             "",
             "CSV Files (*.csv)",
         )
-
         if path:
             self.odds_path.setText(path)
+
+    def _parse_mapping(self, text):
+
+        mapping = {}
+        raw = text.strip()
+
+        if not raw:
+            return mapping
+
+        pairs = [item.strip() for item in raw.split(",") if item.strip()]
+        for pair in pairs:
+            if ":" not in pair:
+                continue
+            src, dst = pair.split(":", 1)
+            mapping[src.strip()] = dst.strip()
+
+        return mapping
+
+    def _apply_mapping(self, df, mapping):
+
+        if not mapping:
+            return df
+
+        return df.rename(columns=mapping)
 
     def _render_preview(self, df):
 
@@ -123,24 +155,34 @@ class OfflineImportWindow(QWidget):
             odds_csv = self.odds_path.text().strip() or None
 
             if matches_csv:
-                result = self.validator.load_and_validate_matches_csv(matches_csv)
+                df = pd.read_csv(matches_csv)
+                df = self._apply_mapping(
+                    df,
+                    self._parse_mapping(self.matches_mapping_input.text()),
+                )
+                result = self.validator.validate_matches_df(df)
                 messages.append(f"Matches validation: {result['ok']}")
                 messages.append(f"Matches rows: {result['row_count']}")
                 if result["missing_columns"]:
                     messages.append(
                         f"Missing matches columns: {result['missing_columns']}"
                     )
-                self._render_preview(result["dataframe"])
+                self._render_preview(df)
 
             if odds_csv and not matches_csv:
-                result = self.validator.load_and_validate_odds_csv(odds_csv)
+                df = pd.read_csv(odds_csv)
+                df = self._apply_mapping(
+                    df,
+                    self._parse_mapping(self.odds_mapping_input.text()),
+                )
+                result = self.validator.validate_odds_df(df)
                 messages.append(f"Odds validation: {result['ok']}")
                 messages.append(f"Odds rows: {result['row_count']}")
                 if result["missing_columns"]:
                     messages.append(
                         f"Missing odds columns: {result['missing_columns']}"
                     )
-                self._render_preview(result["dataframe"])
+                self._render_preview(df)
 
             self.output.setPlainText(
                 "\n".join(messages) if messages else "No file selected."
@@ -170,8 +212,4 @@ class OfflineImportWindow(QWidget):
             )
         except Exception as exc:
             self.output.setPlainText(str(exc))
-            QMessageBox.critical(
-                self,
-                "Import Error",
-                str(exc),
-            )
+            QMessageBox.critical(self, "Import Error", str(exc))

@@ -12,6 +12,7 @@ from ui.final_check_window import FinalCheckWindow
 from ui.manual_context_window import ManualContextWindow
 from ui.offline_import_window import OfflineImportWindow
 from ui.outputs_view import OutputsView
+from ui.project_summary_window import ProjectSummaryWindow
 from ui.settings_window import SettingsWindow
 
 
@@ -59,6 +60,10 @@ class MainWindow(QMainWindow):
         self.final_check_button.clicked.connect(self.open_final_check)
         toolbar.addWidget(self.final_check_button)
 
+        self.project_summary_button = QPushButton("Project Summary")
+        self.project_summary_button.clicked.connect(self.open_project_summary)
+        toolbar.addWidget(self.project_summary_button)
+
         self.about_button = QPushButton("About")
         self.about_button.clicked.connect(self.open_about)
         toolbar.addWidget(self.about_button)
@@ -69,6 +74,7 @@ class MainWindow(QMainWindow):
         self.manual_context_window = None
         self.outputs_view = None
         self.final_check_window = None
+        self.project_summary_window = None
 
     def open_settings(self):
 
@@ -99,6 +105,11 @@ class MainWindow(QMainWindow):
 
         self.final_check_window = FinalCheckWindow()
         self.final_check_window.show()
+
+    def open_project_summary(self):
+
+        self.project_summary_window = ProjectSummaryWindow()
+        self.project_summary_window.show()
 
     def run_cycle(self):
 

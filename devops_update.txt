@@ -142,3 +142,4 @@ class MainWindow(QMainWindow):
 EOF
 
 FIX_WHITESPACE
+

@@ -601,3 +601,18 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-07_08-44-03.zip
+Backup created backups/backup_2026-03-07_08-44-03.zip
+[SKIP] file identical app/app_metadata.py
+[SKIP] file identical app/version_info.py
+[SKIP] file identical app/desktop_launcher.py
+[SKIP] file identical tests/test_app_metadata.py
+[CREATE] file tests/test_version_info.py
+[SKIP] file identical tests/test_desktop_launcher_import.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

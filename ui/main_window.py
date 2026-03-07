@@ -26,7 +26,7 @@ class MainWindow(QMainWindow):
         self.controller = controller
 
         self.setWindowTitle("Football Quant Engine")
-        self.resize(1280, 820)
+        self.resize(1320, 860)
 
         self.dashboard = DashboardView()
         self.setCentralWidget(self.dashboard)

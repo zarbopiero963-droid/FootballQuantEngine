@@ -58,14 +58,18 @@ class DashboardView(QWidget):
 
         self.title = QLabel("Football Quant Engine Dashboard")
 
-        self.total_bets_card = DashboardCard("Rows", "0")
+        self.total_rows_card = DashboardCard("Rows", "0")
         self.status_card = DashboardCard("Last Status", "Ready")
         self.columns_card = DashboardCard("Columns", "0")
-        self.filter_card = DashboardCard("Filtered", "0")
+        self.filtered_rows_card = DashboardCard("Filtered", "0")
 
         self.bet_card = DashboardCard("BET", "0")
         self.watchlist_card = DashboardCard("WATCHLIST", "0")
         self.no_bet_card = DashboardCard("NO_BET", "0")
+
+        self.home_card = DashboardCard("HOME", "0")
+        self.draw_card = DashboardCard("DRAW", "0")
+        self.away_card = DashboardCard("AWAY", "0")
 
         self.confidence_avg_card = DashboardCard("Avg Confidence", "0.00")
         self.agreement_avg_card = DashboardCard("Avg Agreement", "0.00")
@@ -75,14 +79,14 @@ class DashboardView(QWidget):
         self.roi_card = DashboardCard("ROI", "0.00")
         self.yield_card = DashboardCard("Yield", "0.00")
         self.hit_rate_card = DashboardCard("Hit Rate", "0.00")
-        self.runs_card = DashboardCard("Backtest Bets", "0")
+        self.backtest_bets_card = DashboardCard("Backtest Bets", "0")
         self.max_dd_card = DashboardCard("Max Drawdown", "0.00")
 
         cards_row_1 = QHBoxLayout()
-        cards_row_1.addWidget(self.total_bets_card)
+        cards_row_1.addWidget(self.total_rows_card)
         cards_row_1.addWidget(self.status_card)
         cards_row_1.addWidget(self.columns_card)
-        cards_row_1.addWidget(self.filter_card)
+        cards_row_1.addWidget(self.filtered_rows_card)
 
         cards_row_2 = QHBoxLayout()
         cards_row_2.addWidget(self.bet_card)
@@ -90,17 +94,22 @@ class DashboardView(QWidget):
         cards_row_2.addWidget(self.no_bet_card)
 
         cards_row_3 = QHBoxLayout()
-        cards_row_3.addWidget(self.confidence_avg_card)
-        cards_row_3.addWidget(self.agreement_avg_card)
-        cards_row_3.addWidget(self.max_edge_card)
+        cards_row_3.addWidget(self.home_card)
+        cards_row_3.addWidget(self.draw_card)
+        cards_row_3.addWidget(self.away_card)
 
         cards_row_4 = QHBoxLayout()
-        cards_row_4.addWidget(self.bankroll_card)
-        cards_row_4.addWidget(self.roi_card)
-        cards_row_4.addWidget(self.yield_card)
-        cards_row_4.addWidget(self.hit_rate_card)
-        cards_row_4.addWidget(self.runs_card)
-        cards_row_4.addWidget(self.max_dd_card)
+        cards_row_4.addWidget(self.confidence_avg_card)
+        cards_row_4.addWidget(self.agreement_avg_card)
+        cards_row_4.addWidget(self.max_edge_card)
+
+        cards_row_5 = QHBoxLayout()
+        cards_row_5.addWidget(self.bankroll_card)
+        cards_row_5.addWidget(self.roi_card)
+        cards_row_5.addWidget(self.yield_card)
+        cards_row_5.addWidget(self.hit_rate_card)
+        cards_row_5.addWidget(self.backtest_bets_card)
+        cards_row_5.addWidget(self.max_dd_card)
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search...")
@@ -109,6 +118,10 @@ class DashboardView(QWidget):
         self.decision_filter = QComboBox()
         self.decision_filter.addItems(["ALL", "BET", "WATCHLIST", "NO_BET"])
         self.decision_filter.currentTextChanged.connect(self.apply_filters)
+
+        self.market_filter = QComboBox()
+        self.market_filter.addItems(["ALL", "home", "draw", "away"])
+        self.market_filter.currentTextChanged.connect(self.apply_filters)
 
         self.refresh_button = QPushButton("Refresh")
         self.refresh_button.clicked.connect(self.refresh_table)
@@ -133,6 +146,8 @@ class DashboardView(QWidget):
         controls_layout.addWidget(self.search_input)
         controls_layout.addWidget(QLabel("Decision"))
         controls_layout.addWidget(self.decision_filter)
+        controls_layout.addWidget(QLabel("Market"))
+        controls_layout.addWidget(self.market_filter)
         controls_layout.addWidget(self.refresh_button)
         controls_layout.addWidget(self.sort_button)
         controls_layout.addWidget(self.export_csv_button)
@@ -194,6 +209,7 @@ class DashboardView(QWidget):
         layout.addLayout(cards_row_2)
         layout.addLayout(cards_row_3)
         layout.addLayout(cards_row_4)
+        layout.addLayout(cards_row_5)
         layout.addLayout(controls_layout)
         layout.addWidget(self.tabs)
         layout.addWidget(self.inline_status)
@@ -225,12 +241,18 @@ class DashboardView(QWidget):
         self.results_table.setRowCount(0)
         self.results_table.setColumnCount(0)
 
-        self.total_bets_card.set_value(0)
+        self.total_rows_card.set_value(0)
         self.columns_card.set_value(0)
-        self.filter_card.set_value(0)
+        self.filtered_rows_card.set_value(0)
+
         self.bet_card.set_value(0)
         self.watchlist_card.set_value(0)
         self.no_bet_card.set_value(0)
+
+        self.home_card.set_value(0)
+        self.draw_card.set_value(0)
+        self.away_card.set_value(0)
+
         self.confidence_avg_card.set_value("0.00")
         self.agreement_avg_card.set_value("0.00")
         self.max_edge_card.set_value("0.00")
@@ -259,9 +281,9 @@ class DashboardView(QWidget):
         if df is None or df.empty:
             self.results_table.setRowCount(0)
             self.results_table.setColumnCount(0)
-            self.filter_card.set_value(0)
+            self.filtered_rows_card.set_value(0)
             self.inline_status.setText("No rows to display.")
-            self._update_decision_cards(df)
+            self._update_summary_cards(df)
             return
 
         columns = list(df.columns)
@@ -282,27 +304,46 @@ class DashboardView(QWidget):
 
         self.results_table.resizeColumnsToContents()
 
-        self.total_bets_card.set_value(len(self.current_df.index))
+        self.total_rows_card.set_value(len(self.current_df.index))
         self.columns_card.set_value(len(columns))
-        self.filter_card.set_value(rows)
+        self.filtered_rows_card.set_value(rows)
         self.inline_status.setText(f"Showing {rows} rows.")
 
-        self._update_decision_cards(df)
+        self._update_summary_cards(df)
 
-    def _update_decision_cards(self, df):
+    def _update_summary_cards(self, df):
 
-        if df is None or df.empty or "decision" not in df.columns:
+        if df is None or df.empty:
             self.bet_card.set_value(0)
             self.watchlist_card.set_value(0)
             self.no_bet_card.set_value(0)
+
+            self.home_card.set_value(0)
+            self.draw_card.set_value(0)
+            self.away_card.set_value(0)
+
             self.confidence_avg_card.set_value("0.00")
             self.agreement_avg_card.set_value("0.00")
             self.max_edge_card.set_value("0.00")
             return
 
-        self.bet_card.set_value(int((df["decision"] == "BET").sum()))
-        self.watchlist_card.set_value(int((df["decision"] == "WATCHLIST").sum()))
-        self.no_bet_card.set_value(int((df["decision"] == "NO_BET").sum()))
+        if "decision" in df.columns:
+            self.bet_card.set_value(int((df["decision"] == "BET").sum()))
+            self.watchlist_card.set_value(int((df["decision"] == "WATCHLIST").sum()))
+            self.no_bet_card.set_value(int((df["decision"] == "NO_BET").sum()))
+        else:
+            self.bet_card.set_value(0)
+            self.watchlist_card.set_value(0)
+            self.no_bet_card.set_value(0)
+
+        if "market" in df.columns:
+            self.home_card.set_value(int((df["market"] == "home").sum()))
+            self.draw_card.set_value(int((df["market"] == "draw").sum()))
+            self.away_card.set_value(int((df["market"] == "away").sum()))
+        else:
+            self.home_card.set_value(0)
+            self.draw_card.set_value(0)
+            self.away_card.set_value(0)
 
         if "confidence" in df.columns and len(df.index) > 0:
             self.confidence_avg_card.set_value(f"{float(df['confidence'].mean()):.2%}")
@@ -329,6 +370,7 @@ class DashboardView(QWidget):
 
         query = self.search_input.text().strip().lower()
         decision_value = self.decision_filter.currentText().strip()
+        market_value = self.market_filter.currentText().strip()
 
         if query:
             mask = filtered.astype(str).apply(
@@ -339,6 +381,9 @@ class DashboardView(QWidget):
 
         if decision_value != "ALL" and "decision" in filtered.columns:
             filtered = filtered[filtered["decision"] == decision_value].copy()
+
+        if market_value != "ALL" and "market" in filtered.columns:
+            filtered = filtered[filtered["market"] == market_value].copy()
 
         self.filtered_df = filtered
         self.render_dataframe(self.filtered_df)
@@ -437,7 +482,7 @@ class DashboardView(QWidget):
         self.roi_card.set_value(f"{metrics.get('roi', 0):.2%}")
         self.yield_card.set_value(f"{metrics.get('yield', 0):.2%}")
         self.hit_rate_card.set_value(f"{metrics.get('hit_rate', 0):.2%}")
-        self.runs_card.set_value(metrics.get("total_bets", 0))
+        self.backtest_bets_card.set_value(metrics.get("total_bets", 0))
         self.max_dd_card.set_value(f"{metrics.get('max_drawdown', 0):.2%}")
 
         lines = [

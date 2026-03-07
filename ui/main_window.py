@@ -25,7 +25,7 @@ class MainWindow(QMainWindow):
         self.controller = controller
 
         self.setWindowTitle("Football Quant Engine")
-        self.resize(1000, 700)
+        self.resize(1200, 800)
 
         self.dashboard = DashboardView()
         self.setCentralWidget(self.dashboard)
@@ -76,6 +76,9 @@ class MainWindow(QMainWindow):
         self.final_check_window = None
         self.project_summary_window = None
 
+        self.dashboard.set_status("Ready")
+        self.dashboard.append_log("Application started.")
+
     def open_settings(self):
 
         self.settings_window = SettingsWindow()
@@ -113,23 +116,34 @@ class MainWindow(QMainWindow):
 
     def run_cycle(self):
 
+        self.dashboard.set_status("Running")
+        self.dashboard.append_log("Run cycle started.")
+
         try:
             ranked = self.controller.run_once()
 
             if ranked is None:
-                self.dashboard.set_text("No results returned.")
+                self.dashboard.clear_table()
+                self.dashboard.set_log_text("No results returned.")
+                self.dashboard.set_status("Completed")
                 self.status_label.setText("Completed")
                 return
 
             if getattr(ranked, "empty", False):
-                self.dashboard.set_text("No value bets found.")
+                self.dashboard.clear_table()
+                self.dashboard.set_log_text("No value bets found.")
+                self.dashboard.set_status("Completed")
                 self.status_label.setText("Completed")
                 return
 
-            self.dashboard.set_text(ranked.to_string(index=False))
+            self.dashboard.set_results_dataframe(ranked)
+            self.dashboard.set_log_text(ranked.to_string(index=False))
+            self.dashboard.set_status("Completed")
             self.status_label.setText("Completed")
 
         except Exception as exc:
+            self.dashboard.set_status("Error")
+            self.dashboard.append_log(f"Error: {exc}")
             QMessageBox.critical(
                 self,
                 "Run Error",

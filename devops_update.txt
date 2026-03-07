@@ -1,742 +1,487 @@
-CREA_FILE ui/outputs_view.py
-from PySide6.QtWidgets import (
-    QMessageBox,
-    QPushButton,
-    QVBoxLayout,
-    QWidget,
-)
-
-from analysis.report_viewer_helper import ReportViewerHelper
-from engine.offline_controller import OfflineController
-
-
-class OutputsView(QWidget):
-
-    def __init__(self):
-
-        super().__init__()
-
-        self.setWindowTitle("Outputs & Reports")
-
-        self.viewer = ReportViewerHelper()
-        self.offline_controller = OfflineController()
-
-        self.run_reports_button = QPushButton("Generate Reports")
-        self.open_dashboard_button = QPushButton("Open Dashboard HTML")
-        self.open_report_button = QPushButton("Open Advanced Report HTML")
-        self.open_charts_button = QPushButton("Open Charts Report HTML")
-
-        self.run_reports_button.clicked.connect(self.run_reports)
-        self.open_dashboard_button.clicked.connect(self.open_dashboard)
-        self.open_report_button.clicked.connect(self.open_report)
-        self.open_charts_button.clicked.connect(self.open_charts)
-
-        layout = QVBoxLayout()
-        layout.addWidget(self.run_reports_button)
-        layout.addWidget(self.open_dashboard_button)
-        layout.addWidget(self.open_report_button)
-        layout.addWidget(self.open_charts_button)
-
-        self.setLayout(layout)
-
-    def run_reports(self):
-
-        try:
-            self.offline_controller.run_reports()
-
-            QMessageBox.information(
-                self,
-                "Reports",
-                "Reports generated successfully.",
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                "Reports Error",
-                str(exc),
-            )
-
-    def open_dashboard(self):
-
-        ok = self.viewer.open_dashboard()
-
-        if not ok:
-            QMessageBox.warning(
-                self,
-                "Dashboard",
-                "outputs/dashboard.html not found.",
-            )
-
-    def open_report(self):
-
-        ok = self.viewer.open_advanced_report()
-
-        if not ok:
-            QMessageBox.warning(
-                self,
-                "Advanced Report",
-                "outputs/advanced_report.html not found.",
-            )
-
-    def open_charts(self):
-
-        ok = self.viewer.open_file("outputs/charts_report.html")
-
-        if not ok:
-            QMessageBox.warning(
-                self,
-                "Charts Report",
-                "outputs/charts_report.html not found.",
-            )
+CREA_FILE requirements-dev.txt
+pytest
+pytest-qt
+pywinauto
+psutil
 EOF
 
-CREA_FILE ui/backtest_runner_window.py
-from PySide6.QtWidgets import (
-    QGridLayout,
-    QLabel,
-    QLineEdit,
-    QMessageBox,
-    QPushButton,
-    QTextEdit,
-    QWidget,
-)
+CREA_FILE pytest.ini
+[pytest]
+qt_api=pyside6
+testpaths=tests
+EOF
 
-from training.backtest_engine import BacktestEngine
-from training.backtest_metrics import BacktestMetrics
+CREA_CARTELLA tests/ui
+CREA_CARTELLA tests/logic
+CREA_CARTELLA tests/exe
+
+CREA_FILE tests/conftest.py
+import os
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+EOF
+
+CREA_FILE tests/ui/test_main_window_qt.py
+import pytest
+from PySide6.QtCore import Qt
+
+pytest.importorskip("PySide6")
+
+from ui.main_window import MainWindow
 
 
-class BacktestRunnerWindow(QWidget):
+class DummyController:
+    def run_predictions(self):
+        return [
+            {
+                "match_id": "TeamA_vs_TeamB",
+                "market": "home",
+                "probability": 0.58,
+                "odds": 2.05,
+                "model_edge": 0.04,
+                "market_edge": 0.06,
+                "confidence": 0.72,
+                "agreement": 0.68,
+                "decision": "BET",
+            },
+            {
+                "match_id": "TeamC_vs_TeamD",
+                "market": "draw",
+                "probability": 0.31,
+                "odds": 3.10,
+                "model_edge": 0.01,
+                "market_edge": 0.02,
+                "confidence": 0.55,
+                "agreement": 0.52,
+                "decision": "WATCHLIST",
+            },
+            {
+                "match_id": "TeamE_vs_TeamF",
+                "market": "away",
+                "probability": 0.22,
+                "odds": 4.20,
+                "model_edge": -0.01,
+                "market_edge": -0.02,
+                "confidence": 0.34,
+                "agreement": 0.44,
+                "decision": "NO_BET",
+            },
+        ]
 
-    def __init__(self, on_metrics_ready=None, on_log_message=None):
+    def run_once(self):
+        return self.run_predictions()
 
-        super().__init__()
 
-        self.setWindowTitle("Backtest Runner")
+def build_window(qtbot):
+    controller = DummyController()
+    window = MainWindow(controller)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitUntil(lambda: window.isVisible(), timeout=5000)
+    return window
 
-        self.engine = BacktestEngine()
-        self.metrics_engine = BacktestMetrics()
 
-        self.on_metrics_ready = on_metrics_ready
-        self.on_log_message = on_log_message
+def test_main_window_opens(qtbot):
+    window = build_window(qtbot)
+    assert "Football Quant Engine" in window.windowTitle()
 
-        self.date_from_input = QLineEdit()
-        self.date_to_input = QLineEdit()
-        self.league_input = QLineEdit()
 
-        self.date_from_input.setPlaceholderText("YYYY-MM-DD")
-        self.date_to_input.setPlaceholderText("YYYY-MM-DD")
-        self.league_input.setPlaceholderText("Example: Serie A")
+def test_run_cycle_populates_dashboard(qtbot):
+    window = build_window(qtbot)
 
-        self.run_button = QPushButton("Run Backtest")
-        self.run_button.clicked.connect(self.run_backtest)
+    qtbot.mouseClick(window.run_button, Qt.LeftButton)
 
-        self.output = QTextEdit()
-        self.output.setReadOnly(True)
+    qtbot.waitUntil(
+        lambda: window.dashboard.results_table.rowCount() == 3,
+        timeout=5000,
+    )
 
-        layout = QGridLayout()
-        layout.addWidget(QLabel("Date From"), 0, 0)
-        layout.addWidget(self.date_from_input, 0, 1)
+    assert window.dashboard.results_table.rowCount() == 3
+    assert window.dashboard.bet_card.value_label.text() == "1"
+    assert window.dashboard.watchlist_card.value_label.text() == "1"
+    assert window.dashboard.no_bet_card.value_label.text() == "1"
 
-        layout.addWidget(QLabel("Date To"), 1, 0)
-        layout.addWidget(self.date_to_input, 1, 1)
 
-        layout.addWidget(QLabel("League"), 2, 0)
-        layout.addWidget(self.league_input, 2, 1)
+def test_decision_filter_works(qtbot):
+    window = build_window(qtbot)
 
-        layout.addWidget(self.run_button, 3, 0, 1, 2)
-        layout.addWidget(QLabel("Backtest Summary"), 4, 0, 1, 2)
-        layout.addWidget(self.output, 5, 0, 1, 2)
+    qtbot.mouseClick(window.run_button, Qt.LeftButton)
 
-        self.setLayout(layout)
+    qtbot.waitUntil(
+        lambda: window.dashboard.results_table.rowCount() == 3,
+        timeout=5000,
+    )
 
+    window.dashboard.decision_filter.setCurrentText("BET")
+
+    qtbot.waitUntil(
+        lambda: window.dashboard.results_table.rowCount() == 1,
+        timeout=5000,
+    )
+
+    assert window.dashboard.results_table.rowCount() == 1
+
+
+def test_market_filter_works(qtbot):
+    window = build_window(qtbot)
+
+    qtbot.mouseClick(window.run_button, Qt.LeftButton)
+
+    qtbot.waitUntil(
+        lambda: window.dashboard.results_table.rowCount() == 3,
+        timeout=5000,
+    )
+
+    window.dashboard.market_filter.setCurrentText("away")
+
+    qtbot.waitUntil(
+        lambda: window.dashboard.results_table.rowCount() == 1,
+        timeout=5000,
+    )
+
+    assert window.dashboard.results_table.rowCount() == 1
+
+
+def test_search_filter_works(qtbot):
+    window = build_window(qtbot)
+
+    qtbot.mouseClick(window.run_button, Qt.LeftButton)
+
+    qtbot.waitUntil(
+        lambda: window.dashboard.results_table.rowCount() == 3,
+        timeout=5000,
+    )
+
+    window.dashboard.search_input.setText("TeamA_vs_TeamB")
+
+    qtbot.waitUntil(
+        lambda: window.dashboard.results_table.rowCount() == 1,
+        timeout=5000,
+    )
+
+    assert window.dashboard.results_table.rowCount() == 1
+
+
+def test_open_secondary_windows(qtbot):
+    window = build_window(qtbot)
+
+    qtbot.mouseClick(window.settings_button, Qt.LeftButton)
+    qtbot.waitUntil(lambda: window.settings_window is not None, timeout=3000)
+
+    qtbot.mouseClick(window.about_button, Qt.LeftButton)
+    qtbot.waitUntil(lambda: window.about_dialog is not None, timeout=3000)
+
+    qtbot.mouseClick(window.project_summary_button, Qt.LeftButton)
+    qtbot.waitUntil(lambda: window.project_summary_window is not None, timeout=3000)
+
+    qtbot.mouseClick(window.final_check_button, Qt.LeftButton)
+    qtbot.waitUntil(lambda: window.final_check_window is not None, timeout=3000)
+
+    assert window.settings_window is not None
+    assert window.about_dialog is not None
+    assert window.project_summary_window is not None
+    assert window.final_check_window is not None
+EOF
+
+CREA_FILE tests/ui/test_backtest_runner_qt.py
+import pytest
+from PySide6.QtCore import Qt
+
+pytest.importorskip("PySide6")
+
+from ui.backtest_runner_window import BacktestRunnerWindow
+
+
+class DummyMetricsReceiver:
+    def __init__(self):
+        self.metrics = None
+        self.logs = []
+
+    def on_metrics(self, metrics):
+        self.metrics = metrics
+
+    def on_log(self, message):
+        self.logs.append(message)
+
+
+class DummyBacktestRunnerWindow(BacktestRunnerWindow):
     def run_backtest(self):
-
-        try:
-            date_from = self.date_from_input.text().strip() or None
-            date_to = self.date_to_input.text().strip() or None
-            league = self.league_input.text().strip() or None
-
-            df = self.engine.run(
-                date_from=date_from,
-                date_to=date_to,
-                league=league,
-            )
-
-            metrics = self.metrics_engine.calculate(df)
-
-            pretty_lines = [
-                f"Total Bets: {metrics.get('total_bets', 0)}",
-                f"ROI: {metrics.get('roi', 0):.2%}",
-                f"Yield: {metrics.get('yield', 0):.2%}",
-                f"Hit Rate: {metrics.get('hit_rate', 0):.2%}",
-                f"Total Profit: {metrics.get('total_profit', 0):.2f}",
-                f"Max Drawdown: {metrics.get('max_drawdown', 0):.2%}",
-                f"Brier Score: {metrics.get('brier_score', 0):.4f}",
-                f"Log Loss: {metrics.get('log_loss', 0):.4f}",
-            ]
-            self.output.setPlainText("\n".join(pretty_lines))
-
-            if callable(self.on_metrics_ready):
-                self.on_metrics_ready(metrics)
-
-            if callable(self.on_log_message):
-                self.on_log_message("Backtest completed successfully.")
-
-            QMessageBox.information(
-                self,
-                "Backtest",
-                "Backtest completed and dashboard updated.",
-            )
-
-        except Exception as exc:
-            if callable(self.on_log_message):
-                self.on_log_message(f"Backtest error: {exc}")
-
-            QMessageBox.critical(self, "Backtest Error", str(exc))
-EOF
-
-CREA_FILE ui/dashboard_view.py
-from pathlib import Path
-
-import pandas as pd
-from PySide6.QtWidgets import (
-    QComboBox,
-    QFrame,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QPushButton,
-    QTableWidget,
-    QTableWidgetItem,
-    QTextEdit,
-    QTabWidget,
-    QVBoxLayout,
-    QWidget,
-)
-
-from analysis.svg_chart_builder import SvgChartBuilder
-from export.csv_exporter import CsvExporter
-from export.excel_exporter import ExcelExporter
-
-
-class DashboardCard(QFrame):
-
-    def __init__(self, title, value="-"):
-
-        super().__init__()
-
-        self.setFrameShape(QFrame.Shape.StyledPanel)
-
-        self.title_label = QLabel(title)
-        self.value_label = QLabel(str(value))
-
-        layout = QVBoxLayout()
-        layout.addWidget(self.title_label)
-        layout.addWidget(self.value_label)
-
-        self.setLayout(layout)
-
-    def set_value(self, value):
-
-        self.value_label.setText(str(value))
-
-
-class DashboardView(QWidget):
-
-    def __init__(self):
-
-        super().__init__()
-
-        self.current_df = pd.DataFrame()
-        self.filtered_df = pd.DataFrame()
-        self.sort_ascending = True
-        self.last_csv_path = "outputs/dashboard_export.csv"
-        self.last_excel_path = "outputs/dashboard_export.xlsx"
-        self.history_messages = []
-
-        self.title = QLabel("Football Quant Engine Dashboard")
-
-        self.total_rows_card = DashboardCard("Rows", "0")
-        self.status_card = DashboardCard("Status", "Ready")
-        self.columns_card = DashboardCard("Columns", "0")
-        self.filtered_rows_card = DashboardCard("Filtered", "0")
-
-        self.bet_card = DashboardCard("BET", "0")
-        self.watchlist_card = DashboardCard("WATCHLIST", "0")
-        self.no_bet_card = DashboardCard("NO_BET", "0")
-
-        self.home_card = DashboardCard("HOME", "0")
-        self.draw_card = DashboardCard("DRAW", "0")
-        self.away_card = DashboardCard("AWAY", "0")
-
-        self.confidence_avg_card = DashboardCard("Avg Confidence", "0.00")
-        self.agreement_avg_card = DashboardCard("Avg Agreement", "0.00")
-        self.max_edge_card = DashboardCard("Max Edge", "0.00")
-
-        self.bankroll_card = DashboardCard("Bankroll", "100.00")
-        self.roi_card = DashboardCard("ROI", "0.00")
-        self.yield_card = DashboardCard("Yield", "0.00")
-        self.hit_rate_card = DashboardCard("Hit Rate", "0.00")
-        self.backtest_bets_card = DashboardCard("Backtest Bets", "0")
-        self.max_dd_card = DashboardCard("Max DD", "0.00")
-
-        cards_row_1 = QHBoxLayout()
-        cards_row_1.addWidget(self.total_rows_card)
-        cards_row_1.addWidget(self.status_card)
-        cards_row_1.addWidget(self.columns_card)
-        cards_row_1.addWidget(self.filtered_rows_card)
-
-        cards_row_2 = QHBoxLayout()
-        cards_row_2.addWidget(self.bet_card)
-        cards_row_2.addWidget(self.watchlist_card)
-        cards_row_2.addWidget(self.no_bet_card)
-
-        cards_row_3 = QHBoxLayout()
-        cards_row_3.addWidget(self.home_card)
-        cards_row_3.addWidget(self.draw_card)
-        cards_row_3.addWidget(self.away_card)
-
-        cards_row_4 = QHBoxLayout()
-        cards_row_4.addWidget(self.confidence_avg_card)
-        cards_row_4.addWidget(self.agreement_avg_card)
-        cards_row_4.addWidget(self.max_edge_card)
-
-        cards_row_5 = QHBoxLayout()
-        cards_row_5.addWidget(self.bankroll_card)
-        cards_row_5.addWidget(self.roi_card)
-        cards_row_5.addWidget(self.yield_card)
-        cards_row_5.addWidget(self.hit_rate_card)
-        cards_row_5.addWidget(self.backtest_bets_card)
-        cards_row_5.addWidget(self.max_dd_card)
-
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Search...")
-        self.search_input.textChanged.connect(self.apply_filters)
-
-        self.decision_filter = QComboBox()
-        self.decision_filter.addItems(
-            ["ALL", "BET", "WATCHLIST", "NO_BET"]
-        )
-        self.decision_filter.currentTextChanged.connect(self.apply_filters)
-
-        self.market_filter = QComboBox()
-        self.market_filter.addItems(
-            ["ALL", "home", "draw", "away"]
-        )
-        self.market_filter.currentTextChanged.connect(self.apply_filters)
-
-        self.refresh_button = QPushButton("Refresh")
-        self.refresh_button.clicked.connect(self.refresh_table)
-
-        self.sort_button = QPushButton("Toggle Sort")
-        self.sort_button.clicked.connect(self.toggle_sort)
-
-        self.export_csv_button = QPushButton("Export CSV")
-        self.export_csv_button.clicked.connect(self.export_csv)
-
-        self.export_excel_button = QPushButton("Export Excel")
-        self.export_excel_button.clicked.connect(self.export_excel)
-
-        self.open_csv_button = QPushButton("Open CSV")
-        self.open_csv_button.clicked.connect(self.open_csv)
-
-        self.open_excel_button = QPushButton("Open Excel")
-        self.open_excel_button.clicked.connect(self.open_excel)
-
-        controls_layout = QHBoxLayout()
-        controls_layout.addWidget(QLabel("Search"))
-        controls_layout.addWidget(self.search_input)
-        controls_layout.addWidget(QLabel("Decision"))
-        controls_layout.addWidget(self.decision_filter)
-        controls_layout.addWidget(QLabel("Market"))
-        controls_layout.addWidget(self.market_filter)
-        controls_layout.addWidget(self.refresh_button)
-        controls_layout.addWidget(self.sort_button)
-        controls_layout.addWidget(self.export_csv_button)
-        controls_layout.addWidget(self.export_excel_button)
-        controls_layout.addWidget(self.open_csv_button)
-        controls_layout.addWidget(self.open_excel_button)
-
-        self.results_table = QTableWidget()
-        self.log_output = QTextEdit()
-        self.log_output.setReadOnly(True)
-
-        self.metrics_output = QTextEdit()
-        self.metrics_output.setReadOnly(True)
-
-        self.history_output = QTextEdit()
-        self.history_output.setReadOnly(True)
-
-        self.charts_output = QTextEdit()
-        self.charts_output.setReadOnly(True)
-
-        self.inline_status = QLabel("Dashboard ready.")
-
-        self.tabs = QTabWidget()
-
-        results_tab = QWidget()
-        results_layout = QVBoxLayout()
-        results_layout.addWidget(self.results_table)
-        results_tab.setLayout(results_layout)
-
-        log_tab = QWidget()
-        log_layout = QVBoxLayout()
-        log_layout.addWidget(self.log_output)
-        log_tab.setLayout(log_layout)
-
-        history_tab = QWidget()
-        history_layout = QVBoxLayout()
-        history_layout.addWidget(self.history_output)
-        history_tab.setLayout(history_layout)
-
-        metrics_tab = QWidget()
-        metrics_layout = QVBoxLayout()
-        metrics_layout.addWidget(self.metrics_output)
-        metrics_tab.setLayout(metrics_layout)
-
-        charts_tab = QWidget()
-        charts_layout = QVBoxLayout()
-        charts_layout.addWidget(self.charts_output)
-        charts_tab.setLayout(charts_layout)
-
-        self.tabs.addTab(results_tab, "Results")
-        self.tabs.addTab(log_tab, "Log")
-        self.tabs.addTab(history_tab, "History")
-        self.tabs.addTab(metrics_tab, "Metrics")
-        self.tabs.addTab(charts_tab, "Charts")
-
-        layout = QVBoxLayout()
-        layout.addWidget(self.title)
-        layout.addLayout(cards_row_1)
-        layout.addLayout(cards_row_2)
-        layout.addLayout(cards_row_3)
-        layout.addLayout(cards_row_4)
-        layout.addLayout(cards_row_5)
-        layout.addLayout(controls_layout)
-        layout.addWidget(self.tabs)
-        layout.addWidget(self.inline_status)
-
-        self.setLayout(layout)
-
-    def set_status(self, text):
-
-        self.status_card.set_value(text)
-        self.inline_status.setText(f"Status: {text}")
-
-    def append_log(self, text):
-
-        self.log_output.append(str(text))
-
-    def add_history_message(self, text):
-
-        self.history_messages.append(str(text))
-        self.history_output.setPlainText("\n".join(self.history_messages))
-
-    def set_log_text(self, text):
-
-        self.log_output.setPlainText(str(text))
-
-    def clear_table(self):
-
-        self.current_df = pd.DataFrame()
-        self.filtered_df = pd.DataFrame()
-        self.results_table.setRowCount(0)
-        self.results_table.setColumnCount(0)
-
-        self.total_rows_card.set_value(0)
-        self.columns_card.set_value(0)
-        self.filtered_rows_card.set_value(0)
-
-        self.bet_card.set_value(0)
-        self.watchlist_card.set_value(0)
-        self.no_bet_card.set_value(0)
-
-        self.home_card.set_value(0)
-        self.draw_card.set_value(0)
-        self.away_card.set_value(0)
-
-        self.confidence_avg_card.set_value("0.00")
-        self.agreement_avg_card.set_value("0.00")
-        self.max_edge_card.set_value("0.00")
-
-    def set_results_dataframe(self, df):
-
-        if df is None or getattr(df, "empty", False):
-            self.clear_table()
-            return
-
-        self.current_df = df.copy()
-        self.filtered_df = df.copy()
-        self.apply_filters()
-
-    def set_results_from_records(self, records):
-
-        if not records:
-            self.clear_table()
-            return
-
-        df = pd.DataFrame(records)
-        self.set_results_dataframe(df)
-
-    def render_dataframe(self, df):
-
-        if df is None or df.empty:
-            self.results_table.setRowCount(0)
-            self.results_table.setColumnCount(0)
-            self.filtered_rows_card.set_value(0)
-            self.inline_status.setText("No rows to display.")
-            self._update_summary_cards(df)
-            return
-
-        columns = list(df.columns)
-        rows = len(df.index)
-
-        self.results_table.setColumnCount(len(columns))
-        self.results_table.setRowCount(rows)
-        self.results_table.setHorizontalHeaderLabels(columns)
-
-        for row_index in range(rows):
-            for col_index, col_name in enumerate(columns):
-                value = df.iloc[row_index][col_name]
-                self.results_table.setItem(
-                    row_index,
-                    col_index,
-                    QTableWidgetItem(str(value)),
-                )
-
-        self.results_table.resizeColumnsToContents()
-
-        self.total_rows_card.set_value(len(self.current_df.index))
-        self.columns_card.set_value(len(columns))
-        self.filtered_rows_card.set_value(rows)
-        self.inline_status.setText(f"Showing {rows} rows.")
-
-        self._update_summary_cards(df)
-
-    def _update_summary_cards(self, df):
-
-        if df is None or df.empty:
-            self.bet_card.set_value(0)
-            self.watchlist_card.set_value(0)
-            self.no_bet_card.set_value(0)
-
-            self.home_card.set_value(0)
-            self.draw_card.set_value(0)
-            self.away_card.set_value(0)
-
-            self.confidence_avg_card.set_value("0.00")
-            self.agreement_avg_card.set_value("0.00")
-            self.max_edge_card.set_value("0.00")
-            return
-
-        if "decision" in df.columns:
-            self.bet_card.set_value(int((df["decision"] == "BET").sum()))
-            self.watchlist_card.set_value(int((df["decision"] == "WATCHLIST").sum()))
-            self.no_bet_card.set_value(int((df["decision"] == "NO_BET").sum()))
-        else:
-            self.bet_card.set_value(0)
-            self.watchlist_card.set_value(0)
-            self.no_bet_card.set_value(0)
-
-        if "market" in df.columns:
-            self.home_card.set_value(int((df["market"] == "home").sum()))
-            self.draw_card.set_value(int((df["market"] == "draw").sum()))
-            self.away_card.set_value(int((df["market"] == "away").sum()))
-        else:
-            self.home_card.set_value(0)
-            self.draw_card.set_value(0)
-            self.away_card.set_value(0)
-
-        if "confidence" in df.columns and len(df.index) > 0:
-            self.confidence_avg_card.set_value(
-                f"{float(df['confidence'].mean()):.2%}"
-            )
-        else:
-            self.confidence_avg_card.set_value("0.00")
-
-        if "agreement" in df.columns and len(df.index) > 0:
-            self.agreement_avg_card.set_value(
-                f"{float(df['agreement'].mean()):.2%}"
-            )
-        else:
-            self.agreement_avg_card.set_value("0.00")
-
-        if "market_edge" in df.columns and len(df.index) > 0:
-            self.max_edge_card.set_value(
-                f"{float(df['market_edge'].max()):.4f}"
-            )
-        else:
-            self.max_edge_card.set_value("0.00")
-
-    def apply_filters(self):
-
-        if self.current_df is None or self.current_df.empty:
-            self.render_dataframe(pd.DataFrame())
-            return
-
-        filtered = self.current_df.copy()
-
-        query = self.search_input.text().strip().lower()
-        decision_value = self.decision_filter.currentText().strip()
-        market_value = self.market_filter.currentText().strip()
-
-        if query:
-            mask = filtered.astype(str).apply(
-                lambda row: row.str.lower().str.contains(query, na=False).any(),
-                axis=1,
-            )
-            filtered = filtered[mask].copy()
-
-        if decision_value != "ALL" and "decision" in filtered.columns:
-            filtered = filtered[filtered["decision"] == decision_value].copy()
-
-        if market_value != "ALL" and "market" in filtered.columns:
-            filtered = filtered[filtered["market"] == market_value].copy()
-
-        self.filtered_df = filtered
-        self.render_dataframe(self.filtered_df)
-
-    def refresh_table(self):
-
-        self.apply_filters()
-        self.append_log("Dashboard refreshed.")
-
-    def toggle_sort(self):
-
-        if self.filtered_df is None or self.filtered_df.empty:
-            return
-
-        sort_column = None
-
-        for candidate in ["confidence", "market_edge", "agreement", self.filtered_df.columns[0]]:
-            if candidate in self.filtered_df.columns:
-                sort_column = candidate
-                break
-
-        if sort_column is None:
-            return
-
-        self.filtered_df = self.filtered_df.sort_values(
-            by=sort_column,
-            ascending=self.sort_ascending,
-        )
-        self.sort_ascending = not self.sort_ascending
-        self.render_dataframe(self.filtered_df)
-
-    def export_csv(self):
-
-        if self.filtered_df is None or self.filtered_df.empty:
-            self.append_log("CSV export skipped: no data.")
-            return
-
-        Path("outputs").mkdir(parents=True, exist_ok=True)
-
-        CsvExporter().export_value_bets(
-            self.last_csv_path,
-            self.filtered_df.to_dict("records"),
-        )
-        self.append_log(f"CSV exported: {self.last_csv_path}")
-
-    def export_excel(self):
-
-        if self.filtered_df is None or self.filtered_df.empty:
-            self.append_log("Excel export skipped: no data.")
-            return
-
-        Path("outputs").mkdir(parents=True, exist_ok=True)
-
-        ExcelExporter().export_value_bets(
-            self.last_excel_path,
-            self.filtered_df.to_dict("records"),
-        )
-        self.append_log(f"Excel exported: {self.last_excel_path}")
-
-    def open_csv(self):
-
-        path = Path(self.last_csv_path)
-        if not path.exists():
-            self.append_log("CSV file not found.")
-            return
-
-        import webbrowser
-        webbrowser.open(f"file://{path.resolve()}")
-
-    def open_excel(self):
-
-        path = Path(self.last_excel_path)
-        if not path.exists():
-            self.append_log("Excel file not found.")
-            return
-
-        import webbrowser
-        webbrowser.open(f"file://{path.resolve()}")
-
-    def set_metrics(self, metrics):
-
-        if not metrics:
-            self.metrics_output.setPlainText("No metrics available.")
-            return
-
-        bankroll = (metrics.get("bankroll_history") or [100])[-1]
-
-        self.bankroll_card.set_value(f"{bankroll:.2f}")
-        self.roi_card.set_value(f"{metrics.get('roi', 0):.2%}")
-        self.yield_card.set_value(f"{metrics.get('yield', 0):.2%}")
-        self.hit_rate_card.set_value(f"{metrics.get('hit_rate', 0):.2%}")
-        self.backtest_bets_card.set_value(metrics.get("total_bets", 0))
-        self.max_dd_card.set_value(f"{metrics.get('max_drawdown', 0):.2%}")
-
-        lines = [
-            f"Bankroll: {bankroll:.2f}",
-            f"Total Profit: {metrics.get('total_profit', 0):.2f}",
-            f"Total Staked: {metrics.get('total_staked', 0):.2f}",
+        metrics = {
+            "roi": 0.12,
+            "yield": 0.12,
+            "hit_rate": 0.58,
+            "total_profit": 12.5,
+            "total_staked": 100.0,
+            "total_bets": 25,
+            "max_drawdown": -0.08,
+            "brier_score": 0.19,
+            "log_loss": 0.62,
+            "bankroll_history": [100, 102, 101, 105, 112.5],
+            "accuracy_history": [1.0, 0.5, 0.66, 0.75, 0.8],
+            "drawdown_history": [0.0, 0.0, -0.01, 0.0, 0.0],
+        }
+
+        pretty_lines = [
+            f"Total Bets: {metrics.get('total_bets', 0)}",
             f"ROI: {metrics.get('roi', 0):.2%}",
             f"Yield: {metrics.get('yield', 0):.2%}",
             f"Hit Rate: {metrics.get('hit_rate', 0):.2%}",
-            f"Total Bets: {metrics.get('total_bets', 0)}",
+            f"Total Profit: {metrics.get('total_profit', 0):.2f}",
             f"Max Drawdown: {metrics.get('max_drawdown', 0):.2%}",
             f"Brier Score: {metrics.get('brier_score', 0):.4f}",
             f"Log Loss: {metrics.get('log_loss', 0):.4f}",
         ]
-        self.metrics_output.setPlainText("\n".join(lines))
+        self.output.setPlainText("\n".join(pretty_lines))
 
-        chart_builder = SvgChartBuilder()
-        chart_html = []
-        chart_html.append(chart_builder.line_chart(
-            metrics.get("bankroll_history", []),
-            "Bankroll / Equity Curve",
-            "#2c7be5",
-        ))
-        chart_html.append(chart_builder.line_chart(
-            metrics.get("accuracy_history", []),
-            "Accuracy Curve",
-            "#28a745",
-        ))
-        chart_html.append(chart_builder.line_chart(
-            metrics.get("drawdown_history", []),
-            "Drawdown Curve",
-            "#dc3545",
-        ))
+        if callable(self.on_metrics_ready):
+            self.on_metrics_ready(metrics)
 
-        self.charts_output.setHtml("".join(chart_html))
-        self.add_history_message(
-            f"Backtest loaded: bets={metrics.get('total_bets', 0)}, roi={metrics.get('roi', 0):.2%}, yield={metrics.get('yield', 0):.2%}"
-        )
+        if callable(self.on_log_message):
+            self.on_log_message("Backtest completed successfully.")
+
+
+def test_backtest_runner_updates_receiver(qtbot):
+    receiver = DummyMetricsReceiver()
+    window = DummyBacktestRunnerWindow(
+        on_metrics_ready=receiver.on_metrics,
+        on_log_message=receiver.on_log,
+    )
+
+    qtbot.addWidget(window)
+    window.show()
+
+    qtbot.mouseClick(window.run_button, Qt.LeftButton)
+
+    qtbot.waitUntil(lambda: receiver.metrics is not None, timeout=3000)
+
+    assert receiver.metrics["total_bets"] == 25
+    assert "Backtest completed successfully." in receiver.logs
+    assert "ROI:" in window.output.toPlainText()
 EOF
 
-CREA_FILE tests/test_product_polish_dashboard_ui.py
+CREA_FILE tests/logic/test_metrics_and_filters.py
+import pandas as pd
+
+from engine.confidence_engine import ConfidenceEngine
+from engine.market_comparison import MarketComparison
+from engine.model_agreement import ModelAgreement
+from engine.probability_calibrator import ProbabilityCalibrator
+from strategies.no_bet_filter import NoBetFilter
+from training.backtest_metrics import BacktestMetrics
+
+
+def test_probability_calibrator_normalizes():
+    calibrator = ProbabilityCalibrator()
+    result = calibrator.calibrate(
+        {
+            "home_win": 0.51,
+            "draw": 0.24,
+            "away_win": 0.25,
+        }
+    )
+    total = result["home_win"] + result["draw"] + result["away_win"]
+    assert 0.999 <= total <= 1.001
+
+
+def test_model_agreement_range():
+    score = ModelAgreement().calculate(
+        [
+            {"home_win": 0.50, "draw": 0.25, "away_win": 0.25},
+            {"home_win": 0.52, "draw": 0.24, "away_win": 0.24},
+            {"home_win": 0.48, "draw": 0.27, "away_win": 0.25},
+        ]
+    )
+    assert 0.0 <= score <= 1.0
+
+
+def test_market_implied_probabilities_normalized():
+    market = MarketComparison()
+    implied = market.implied_probabilities(
+        {"home": 2.0, "draw": 3.2, "away": 3.8}
+    )
+    total = implied["home_win"] + implied["draw"] + implied["away_win"]
+    assert 0.999 <= total <= 1.001
+
+
+def test_confidence_engine_range():
+    score = ConfidenceEngine().score(
+        probability=0.58,
+        edge=0.07,
+        agreement=0.70,
+    )
+    assert 0.0 <= score <= 1.0
+
+
+def test_no_bet_filter_outputs_valid_state():
+    decision = NoBetFilter().decide(
+        probability=0.57,
+        edge=0.06,
+        confidence=0.72,
+        agreement=0.68,
+    )
+    assert decision in ("BET", "WATCHLIST", "NO_BET")
+
+
+def test_backtest_metrics_real_values():
+    df = pd.DataFrame(
+        [
+            {
+                "home_prob": 0.60,
+                "draw_prob": 0.20,
+                "away_prob": 0.20,
+                "actual_home_win": 1,
+                "actual_draw": 0,
+                "actual_away_win": 0,
+                "home_odds": 2.10,
+                "draw_odds": 3.20,
+                "away_odds": 3.80,
+                "home_goals": 2,
+                "away_goals": 1,
+            },
+            {
+                "home_prob": 0.40,
+                "draw_prob": 0.35,
+                "away_prob": 0.25,
+                "actual_home_win": 0,
+                "actual_draw": 1,
+                "actual_away_win": 0,
+                "home_odds": 2.40,
+                "draw_odds": 3.10,
+                "away_odds": 2.90,
+                "home_goals": 1,
+                "away_goals": 1,
+            },
+        ]
+    )
+
+    metrics = BacktestMetrics().calculate(df)
+
+    assert "roi" in metrics
+    assert "yield" in metrics
+    assert "hit_rate" in metrics
+    assert "max_drawdown" in metrics
+    assert "bankroll_history" in metrics
+    assert "accuracy_history" in metrics
+    assert metrics["total_bets"] == 2
+EOF
+
+CREA_FILE tests/exe/test_installed_exe_smoke.py
+import os
 import pytest
 
+pytest.importorskip("pywinauto")
 
-def test_product_polish_dashboard_ui_import():
+from pywinauto.application import Application
+
+
+EXE_PATH = os.environ.get(
+    "APP_EXE_PATH",
+    r"dist\FootballQuantEngine\FootballQuantEngine.exe",
+)
+
+
+@pytest.mark.windows
+def test_installed_exe_opens_main_window():
+    if not os.path.exists(EXE_PATH):
+        pytest.skip(f"EXE not found: {EXE_PATH}")
+
+    app = Application(backend="uia").start(EXE_PATH)
 
     try:
-        from ui.dashboard_view import DashboardView
-    except (ModuleNotFoundError, ImportError) as exc:
-        pytest.skip(f"UI dependencies not available in CI: {exc}")
+        main = app.window(title_re=".*Football Quant Engine.*")
+        main.wait("visible", timeout=20)
 
-    assert DashboardView is not None
+        assert main.exists()
+        assert main.is_visible()
+    finally:
+        try:
+            app.kill()
+        except Exception:
+            pass
+
+
+@pytest.mark.windows
+def test_installed_exe_has_main_buttons():
+    if not os.path.exists(EXE_PATH):
+        pytest.skip(f"EXE not found: {EXE_PATH}")
+
+    app = Application(backend="uia").start(EXE_PATH)
+
+    try:
+        main = app.window(title_re=".*Football Quant Engine.*")
+        main.wait("visible", timeout=20)
+
+        run_btn = main.child_window(title="Run Cycle", control_type="Button")
+        settings_btn = main.child_window(title="Settings", control_type="Button")
+        about_btn = main.child_window(title="About", control_type="Button")
+
+        assert run_btn.exists()
+        assert settings_btn.exists()
+        assert about_btn.exists()
+    finally:
+        try:
+            app.kill()
+        except Exception:
+            pass
+EOF
+
+CREA_CARTELLA .github
+CREA_CARTELLA .github/workflows
+
+CREA_FILE .github/workflows/gui-tests.yml
+name: GUI and Desktop Tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Upgrade pip
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          python -m pip install pyinstaller
+
+      - name: Run logic tests
+        shell: pwsh
+        run: |
+          pytest tests/logic -q
+
+      - name: Run Qt UI tests
+        shell: pwsh
+        run: |
+          pytest tests/ui -q
+
+      - name: Build EXE
+        shell: pwsh
+        run: |
+          python -m PyInstaller football_quant_engine.spec
+
+      - name: Run installed EXE smoke tests
+        shell: pwsh
+        env:
+          APP_EXE_PATH: dist\FootballQuantEngine\FootballQuantEngine.exe
+        run: |
+          pytest tests/exe -q
 EOF
 
 FIX_WHITESPACE
-

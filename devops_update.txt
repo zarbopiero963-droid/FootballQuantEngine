@@ -1,10 +1,15 @@
 CREA_FILE tests/exe/test_installed_exe_smoke.py
 import os
 import subprocess
+import sys
 import time
 
-import psutil
 import pytest
+
+if not sys.platform.startswith("win"):
+    pytest.skip("EXE smoke tests run only on Windows", allow_module_level=True)
+
+psutil = pytest.importorskip("psutil")
 
 
 EXE_PATH = os.environ.get(
@@ -81,19 +86,6 @@ def test_installed_exe_does_not_exit_immediately():
                 proc.kill()
             except Exception:
                 pass
-EOF
-
-CREA_FILE requirements-dev.txt
-pytest
-pytest-qt
-psutil
-EOF
-
-CREA_FILE pytest.ini
-[pytest]
-testpaths=tests
-markers =
-    windows: tests intended to run on Windows
 EOF
 
 FIX_WHITESPACE

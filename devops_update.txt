@@ -1,3 +1,200 @@
+CREA_FILE ui/outputs_view.py
+from PySide6.QtWidgets import (
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
+
+from analysis.report_viewer_helper import ReportViewerHelper
+from engine.offline_controller import OfflineController
+
+
+class OutputsView(QWidget):
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.setWindowTitle("Outputs & Reports")
+
+        self.viewer = ReportViewerHelper()
+        self.offline_controller = OfflineController()
+
+        self.run_reports_button = QPushButton("Generate Reports")
+        self.open_dashboard_button = QPushButton("Open Dashboard HTML")
+        self.open_report_button = QPushButton("Open Advanced Report HTML")
+        self.open_charts_button = QPushButton("Open Charts Report HTML")
+
+        self.run_reports_button.clicked.connect(self.run_reports)
+        self.open_dashboard_button.clicked.connect(self.open_dashboard)
+        self.open_report_button.clicked.connect(self.open_report)
+        self.open_charts_button.clicked.connect(self.open_charts)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.run_reports_button)
+        layout.addWidget(self.open_dashboard_button)
+        layout.addWidget(self.open_report_button)
+        layout.addWidget(self.open_charts_button)
+
+        self.setLayout(layout)
+
+    def run_reports(self):
+
+        try:
+            self.offline_controller.run_reports()
+
+            QMessageBox.information(
+                self,
+                "Reports",
+                "Reports generated successfully.",
+            )
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Reports Error",
+                str(exc),
+            )
+
+    def open_dashboard(self):
+
+        ok = self.viewer.open_dashboard()
+
+        if not ok:
+            QMessageBox.warning(
+                self,
+                "Dashboard",
+                "outputs/dashboard.html not found.",
+            )
+
+    def open_report(self):
+
+        ok = self.viewer.open_advanced_report()
+
+        if not ok:
+            QMessageBox.warning(
+                self,
+                "Advanced Report",
+                "outputs/advanced_report.html not found.",
+            )
+
+    def open_charts(self):
+
+        ok = self.viewer.open_file("outputs/charts_report.html")
+
+        if not ok:
+            QMessageBox.warning(
+                self,
+                "Charts Report",
+                "outputs/charts_report.html not found.",
+            )
+EOF
+
+CREA_FILE ui/backtest_runner_window.py
+from PySide6.QtWidgets import (
+    QGridLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QTextEdit,
+    QWidget,
+)
+
+from training.backtest_engine import BacktestEngine
+from training.backtest_metrics import BacktestMetrics
+
+
+class BacktestRunnerWindow(QWidget):
+
+    def __init__(self, on_metrics_ready=None, on_log_message=None):
+
+        super().__init__()
+
+        self.setWindowTitle("Backtest Runner")
+
+        self.engine = BacktestEngine()
+        self.metrics_engine = BacktestMetrics()
+
+        self.on_metrics_ready = on_metrics_ready
+        self.on_log_message = on_log_message
+
+        self.date_from_input = QLineEdit()
+        self.date_to_input = QLineEdit()
+        self.league_input = QLineEdit()
+
+        self.date_from_input.setPlaceholderText("YYYY-MM-DD")
+        self.date_to_input.setPlaceholderText("YYYY-MM-DD")
+        self.league_input.setPlaceholderText("Example: Serie A")
+
+        self.run_button = QPushButton("Run Backtest")
+        self.run_button.clicked.connect(self.run_backtest)
+
+        self.output = QTextEdit()
+        self.output.setReadOnly(True)
+
+        layout = QGridLayout()
+        layout.addWidget(QLabel("Date From"), 0, 0)
+        layout.addWidget(self.date_from_input, 0, 1)
+
+        layout.addWidget(QLabel("Date To"), 1, 0)
+        layout.addWidget(self.date_to_input, 1, 1)
+
+        layout.addWidget(QLabel("League"), 2, 0)
+        layout.addWidget(self.league_input, 2, 1)
+
+        layout.addWidget(self.run_button, 3, 0, 1, 2)
+        layout.addWidget(QLabel("Backtest Summary"), 4, 0, 1, 2)
+        layout.addWidget(self.output, 5, 0, 1, 2)
+
+        self.setLayout(layout)
+
+    def run_backtest(self):
+
+        try:
+            date_from = self.date_from_input.text().strip() or None
+            date_to = self.date_to_input.text().strip() or None
+            league = self.league_input.text().strip() or None
+
+            df = self.engine.run(
+                date_from=date_from,
+                date_to=date_to,
+                league=league,
+            )
+
+            metrics = self.metrics_engine.calculate(df)
+
+            pretty_lines = [
+                f"Total Bets: {metrics.get('total_bets', 0)}",
+                f"ROI: {metrics.get('roi', 0):.2%}",
+                f"Yield: {metrics.get('yield', 0):.2%}",
+                f"Hit Rate: {metrics.get('hit_rate', 0):.2%}",
+                f"Total Profit: {metrics.get('total_profit', 0):.2f}",
+                f"Max Drawdown: {metrics.get('max_drawdown', 0):.2%}",
+                f"Brier Score: {metrics.get('brier_score', 0):.4f}",
+                f"Log Loss: {metrics.get('log_loss', 0):.4f}",
+            ]
+            self.output.setPlainText("\n".join(pretty_lines))
+
+            if callable(self.on_metrics_ready):
+                self.on_metrics_ready(metrics)
+
+            if callable(self.on_log_message):
+                self.on_log_message("Backtest completed successfully.")
+
+            QMessageBox.information(
+                self,
+                "Backtest",
+                "Backtest completed and dashboard updated.",
+            )
+
+        except Exception as exc:
+            if callable(self.on_log_message):
+                self.on_log_message(f"Backtest error: {exc}")
+
+            QMessageBox.critical(self, "Backtest Error", str(exc))
+EOF
+
 CREA_FILE ui/dashboard_view.py
 from pathlib import Path
 
@@ -60,7 +257,7 @@ class DashboardView(QWidget):
         self.title = QLabel("Football Quant Engine Dashboard")
 
         self.total_rows_card = DashboardCard("Rows", "0")
-        self.status_card = DashboardCard("Last Status", "Ready")
+        self.status_card = DashboardCard("Status", "Ready")
         self.columns_card = DashboardCard("Columns", "0")
         self.filtered_rows_card = DashboardCard("Filtered", "0")
 
@@ -74,14 +271,14 @@ class DashboardView(QWidget):
 
         self.confidence_avg_card = DashboardCard("Avg Confidence", "0.00")
         self.agreement_avg_card = DashboardCard("Avg Agreement", "0.00")
-        self.max_edge_card = DashboardCard("Max Market Edge", "0.00")
+        self.max_edge_card = DashboardCard("Max Edge", "0.00")
 
         self.bankroll_card = DashboardCard("Bankroll", "100.00")
         self.roi_card = DashboardCard("ROI", "0.00")
         self.yield_card = DashboardCard("Yield", "0.00")
         self.hit_rate_card = DashboardCard("Hit Rate", "0.00")
         self.backtest_bets_card = DashboardCard("Backtest Bets", "0")
-        self.max_dd_card = DashboardCard("Max Drawdown", "0.00")
+        self.max_dd_card = DashboardCard("Max DD", "0.00")
 
         cards_row_1 = QHBoxLayout()
         cards_row_1.addWidget(self.total_rows_card)
@@ -527,193 +724,11 @@ class DashboardView(QWidget):
         )
 EOF
 
-CREA_FILE ui/main_window.py
-from PySide6.QtWidgets import (
-    QLabel,
-    QMainWindow,
-    QMessageBox,
-    QPushButton,
-    QToolBar,
-)
-
-from ui.about_dialog import AboutDialog
-from ui.backtest_runner_window import BacktestRunnerWindow
-from ui.dashboard_view import DashboardView
-from ui.final_check_window import FinalCheckWindow
-from ui.manual_context_window import ManualContextWindow
-from ui.offline_import_window import OfflineImportWindow
-from ui.outputs_view import OutputsView
-from ui.project_summary_window import ProjectSummaryWindow
-from ui.settings_window import SettingsWindow
-
-
-class MainWindow(QMainWindow):
-
-    def __init__(self, controller):
-
-        super().__init__()
-
-        self.controller = controller
-
-        self.setWindowTitle("Football Quant Engine")
-        self.resize(1320, 860)
-
-        self.dashboard = DashboardView()
-        self.setCentralWidget(self.dashboard)
-
-        self.status_label = QLabel("Ready")
-        self.statusBar().addPermanentWidget(self.status_label)
-
-        toolbar = QToolBar("Main")
-        self.addToolBar(toolbar)
-
-        self.run_button = QPushButton("Run Cycle")
-        self.run_button.clicked.connect(self.run_cycle)
-        toolbar.addWidget(self.run_button)
-
-        self.backtest_button = QPushButton("Backtest")
-        self.backtest_button.clicked.connect(self.open_backtest)
-        toolbar.addWidget(self.backtest_button)
-
-        self.settings_button = QPushButton("Settings")
-        self.settings_button.clicked.connect(self.open_settings)
-        toolbar.addWidget(self.settings_button)
-
-        self.offline_import_button = QPushButton("Import CSV")
-        self.offline_import_button.clicked.connect(self.open_offline_import)
-        toolbar.addWidget(self.offline_import_button)
-
-        self.manual_context_button = QPushButton("Manual Context")
-        self.manual_context_button.clicked.connect(self.open_manual_context)
-        toolbar.addWidget(self.manual_context_button)
-
-        self.outputs_button = QPushButton("Outputs")
-        self.outputs_button.clicked.connect(self.open_outputs)
-        toolbar.addWidget(self.outputs_button)
-
-        self.final_check_button = QPushButton("Final Check")
-        self.final_check_button.clicked.connect(self.open_final_check)
-        toolbar.addWidget(self.final_check_button)
-
-        self.project_summary_button = QPushButton("Project Summary")
-        self.project_summary_button.clicked.connect(self.open_project_summary)
-        toolbar.addWidget(self.project_summary_button)
-
-        self.about_button = QPushButton("About")
-        self.about_button.clicked.connect(self.open_about)
-        toolbar.addWidget(self.about_button)
-
-        self.settings_window = None
-        self.about_dialog = None
-        self.offline_import_window = None
-        self.manual_context_window = None
-        self.outputs_view = None
-        self.final_check_window = None
-        self.project_summary_window = None
-        self.backtest_window = None
-
-        self.dashboard.set_status("Ready")
-        self.dashboard.append_log("Application started.")
-
-    def open_settings(self):
-
-        self.settings_window = SettingsWindow()
-        self.settings_window.show()
-
-    def open_about(self):
-
-        self.about_dialog = AboutDialog()
-        self.about_dialog.show()
-
-    def open_offline_import(self):
-
-        self.offline_import_window = OfflineImportWindow()
-        self.offline_import_window.show()
-
-    def open_manual_context(self):
-
-        self.manual_context_window = ManualContextWindow()
-        self.manual_context_window.show()
-
-    def open_outputs(self):
-
-        self.outputs_view = OutputsView()
-        self.outputs_view.show()
-
-    def open_final_check(self):
-
-        self.final_check_window = FinalCheckWindow()
-        self.final_check_window.show()
-
-    def open_project_summary(self):
-
-        self.project_summary_window = ProjectSummaryWindow()
-        self.project_summary_window.show()
-
-    def open_backtest(self):
-
-        self.backtest_window = BacktestRunnerWindow(
-            on_metrics_ready=self.dashboard.set_metrics,
-            on_log_message=self.dashboard.append_log,
-        )
-        self.backtest_window.show()
-
-    def run_cycle(self):
-
-        self.dashboard.set_status("Running")
-        self.dashboard.append_log("Prediction pipeline started.")
-
-        try:
-            ranked = self.controller.run_predictions()
-
-            if ranked is None:
-                self.dashboard.clear_table()
-                self.dashboard.set_log_text("No prediction results returned.")
-                self.dashboard.set_status("Completed")
-                self.status_label.setText("Completed")
-                return
-
-            if isinstance(ranked, list):
-                self.dashboard.set_results_from_records(ranked)
-                self.dashboard.set_log_text(str(ranked))
-                self.dashboard.set_status("Completed")
-                self.status_label.setText("Completed")
-                self.dashboard.add_history_message(
-                    f"Prediction run completed: rows={len(ranked)}"
-                )
-                return
-
-            if getattr(ranked, "empty", False):
-                self.dashboard.clear_table()
-                self.dashboard.set_log_text("No prediction rows found.")
-                self.dashboard.set_status("Completed")
-                self.status_label.setText("Completed")
-                return
-
-            self.dashboard.set_results_dataframe(ranked)
-            self.dashboard.set_log_text(ranked.to_string(index=False))
-            self.dashboard.set_status("Completed")
-            self.status_label.setText("Completed")
-            self.dashboard.add_history_message(
-                f"Prediction run completed: rows={len(ranked.index)}"
-            )
-
-        except Exception as exc:
-            self.dashboard.set_status("Error")
-            self.dashboard.append_log(f"Error: {exc}")
-            QMessageBox.critical(
-                self,
-                "Run Error",
-                str(exc),
-            )
-            self.status_label.setText("Error")
-EOF
-
-CREA_FILE tests/test_market_summary_dashboard_ui.py
+CREA_FILE tests/test_product_polish_dashboard_ui.py
 import pytest
 
 
-def test_dashboard_market_summary_ui_import():
+def test_product_polish_dashboard_ui_import():
 
     try:
         from ui.dashboard_view import DashboardView
@@ -724,4 +739,3 @@ def test_dashboard_market_summary_ui_import():
 EOF
 
 FIX_WHITESPACE
-

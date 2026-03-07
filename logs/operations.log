@@ -1336,3 +1336,13 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-07_23-20-00.zip
+Backup created backups/backup_2026-03-07_23-20-00.zip
+[CREATE] file engine/offline_engine.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

@@ -1,123 +1,805 @@
-CREA_FILE tests/test_app_controller_quant.py
-import os
-import pytest
+############################################
+ARCHITECTURE BUG FIX PACK
+############################################
 
-if not os.getenv("API_FOOTBALL_KEY"):
-    pytest.skip("API_FOOTBALL_KEY missing", allow_module_level=True)
+CREA_FILE engine/scheduler.py
+from __future__ import annotations
 
-from app.controller import AppController
+import logging
+import threading
+import time
+from dataclasses import dataclass, field
+from typing import Callable
+
+try:
+    from PySide6.QtCore import QObject, QTimer, Signal
+except Exception:  # pragma: no cover
+    QObject = object
+    QTimer = None
+
+    class Signal:  # pragma: no cover
+        def __init__(self, *args, **kwargs):
+            pass
 
 
-def test_app_controller_quant_flow():
+LOGGER = logging.getLogger(__name__)
 
-    controller = AppController()
 
-    results = controller.run_predictions()
+@dataclass
+class SchedulerJob:
+    name: str
+    callback: Callable
+    interval_seconds: float
+    run_immediately: bool = False
+    enabled: bool = True
+    last_run: float = field(default=0.0)
 
-    assert isinstance(results, list)
-    assert len(results) > 0
-    assert "home_team" in results[0]
-    assert "away_team" in results[0]
-    assert "confidence" in results[0]
+    def due(self, now_ts: float) -> bool:
+        if not self.enabled:
+            return False
+
+        if self.run_immediately and self.last_run == 0.0:
+            return True
+
+        return (now_ts - self.last_run) >= float(self.interval_seconds)
+
+
+class Scheduler(QObject):
+    tick = Signal(str)
+    error = Signal(str)
+
+    def __init__(self, poll_interval_seconds: float = 1.0):
+        super().__init__()
+        self.poll_interval_seconds = max(0.1, float(poll_interval_seconds))
+        self.jobs: dict[str, SchedulerJob] = {}
+        self._lock = threading.RLock()
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._timer = None
+
+    def add_job(
+        self,
+        name: str,
+        callback: Callable,
+        interval_seconds: float,
+        run_immediately: bool = False,
+    ) -> None:
+        with self._lock:
+            self.jobs[name] = SchedulerJob(
+                name=name,
+                callback=callback,
+                interval_seconds=max(0.1, float(interval_seconds)),
+                run_immediately=run_immediately,
+            )
+
+    def remove_job(self, name: str) -> None:
+        with self._lock:
+            self.jobs.pop(name, None)
+
+    def enable_job(self, name: str) -> None:
+        with self._lock:
+            if name in self.jobs:
+                self.jobs[name].enabled = True
+
+    def disable_job(self, name: str) -> None:
+        with self._lock:
+            if name in self.jobs:
+                self.jobs[name].enabled = False
+
+    def run_pending(self) -> None:
+        now_ts = time.time()
+
+        with self._lock:
+            jobs = list(self.jobs.values())
+
+        for job in jobs:
+            if not job.due(now_ts):
+                continue
+
+            try:
+                job.callback()
+                job.last_run = now_ts
+
+                try:
+                    self.tick.emit(job.name)
+                except Exception:
+                    pass
+            except Exception as exc:  # pragma: no cover
+                LOGGER.exception("Scheduler job '%s' failed", job.name)
+
+                try:
+                    self.error.emit(f"{job.name}: {exc}")
+                except Exception:
+                    pass
+
+    def _background_loop(self) -> None:
+        while not self._stop_event.is_set():
+            self.run_pending()
+            self._stop_event.wait(self.poll_interval_seconds)
+
+    def start_background(self) -> None:
+        if self._thread and self._thread.is_alive():
+            return
+
+        self._stop_event.clear()
+        self._thread = threading.Thread(
+            target=self._background_loop,
+            name="SchedulerThread",
+            daemon=True,
+        )
+        self._thread.start()
+
+    def stop_background(self) -> None:
+        self._stop_event.set()
+
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=2.0)
+
+    def start_qtimer(self) -> None:
+        if QTimer is None:
+            raise RuntimeError("QTimer not available in this environment")
+
+        if self._timer is not None:
+            return
+
+        self._timer = QTimer()
+        self._timer.setInterval(int(self.poll_interval_seconds * 1000))
+        self._timer.timeout.connect(self.run_pending)
+        self._timer.start()
+
+    def stop_qtimer(self) -> None:
+        if self._timer is None:
+            return
+
+        self._timer.stop()
+        self._timer = None
+
+    def shutdown(self) -> None:
+        self.stop_background()
+        self.stop_qtimer()
 EOF
 
-CREA_FILE tests/test_job_runner_quant.py
+CREA_FILE database/db_manager.py
+from __future__ import annotations
+
 import os
-import pytest
-
-if not os.getenv("API_FOOTBALL_KEY"):
-    pytest.skip("API_FOOTBALL_KEY missing", allow_module_level=True)
-
-from engine.job_runner import JobRunner
+import sqlite3
+import threading
+from contextlib import contextmanager
 
 
-def test_job_runner_returns_quant_results():
+class DBManager:
 
-    runner = JobRunner()
+    def __init__(self, db_path: str = "data/app.db", timeout: int = 30):
+        self.db_path = db_path
+        self.timeout = int(timeout)
+        self._local = threading.local()
 
-    results = runner.run_cycle()
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
 
-    assert isinstance(results, list)
-    assert len(results) > 0
-    assert "fixture_id" in results[0]
-    assert "market" in results[0]
-    assert "decision" in results[0]
+    def _create_connection(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(
+            self.db_path,
+            timeout=self.timeout,
+            check_same_thread=False,
+            isolation_level=None,
+        )
+        conn.row_factory = sqlite3.Row
+
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+        conn.execute("PRAGMA foreign_keys=ON;")
+        conn.execute(f"PRAGMA busy_timeout={self.timeout * 1000};")
+
+        return conn
+
+    def get_connection(self) -> sqlite3.Connection:
+        conn = getattr(self._local, "connection", None)
+
+        if conn is None:
+            conn = self._create_connection()
+            self._local.connection = conn
+
+        return conn
+
+    def close_connection(self) -> None:
+        conn = getattr(self._local, "connection", None)
+
+        if conn is not None:
+            conn.close()
+            self._local.connection = None
+
+    def init_db(self) -> None:
+        self.get_connection()
+
+    @contextmanager
+    def cursor(self):
+        conn = self.get_connection()
+        cur = conn.cursor()
+        try:
+            yield cur
+        finally:
+            cur.close()
+
+    @contextmanager
+    def transaction(self):
+        conn = self.get_connection()
+        try:
+            conn.execute("BEGIN;")
+            yield conn
+            conn.execute("COMMIT;")
+        except Exception:
+            conn.execute("ROLLBACK;")
+            raise
+
+    def execute(self, query: str, params: tuple | list | None = None) -> None:
+        params = params or ()
+        with self.cursor() as cur:
+            cur.execute(query, params)
+
+    def executemany(self, query: str, params_list: list[tuple] | list[list]) -> None:
+        with self.cursor() as cur:
+            cur.executemany(query, params_list)
+
+    def query_all(self, query: str, params: tuple | list | None = None) -> list[dict]:
+        params = params or ()
+        with self.cursor() as cur:
+            cur.execute(query, params)
+            rows = cur.fetchall()
+
+        return [dict(row) for row in rows]
+
+    def query_one(self, query: str, params: tuple | list | None = None) -> dict | None:
+        params = params or ()
+        with self.cursor() as cur:
+            cur.execute(query, params)
+            row = cur.fetchone()
+
+        return dict(row) if row else None
 EOF
 
-CREA_FILE tests/test_quant_engine_bridge.py
-import os
-import pytest
+CREA_FILE data/api_client.py
+from __future__ import annotations
 
-if not os.getenv("API_FOOTBALL_KEY"):
-    pytest.skip("API_FOOTBALL_KEY missing", allow_module_level=True)
+import logging
+import time
+from typing import Any
 
-from app.quant_controller import AppQuantController
+import requests
 
 
-def test_app_quant_controller_runs():
+LOGGER = logging.getLogger(__name__)
 
-    controller = AppQuantController()
 
-    results = controller.run_quant_cycle()
+class APIClient:
 
-    assert isinstance(results, list)
-    assert len(results) > 0
+    def __init__(
+        self,
+        base_url: str,
+        headers: dict | None = None,
+        timeout: int = 10,
+        max_retries: int = 3,
+        backoff_seconds: float = 1.5,
+    ):
+        self.base_url = base_url.rstrip("/")
+        self.headers = headers or {}
+        self.timeout = int(timeout)
+        self.max_retries = int(max_retries)
+        self.backoff_seconds = float(backoff_seconds)
+        self.session = requests.Session()
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        params: dict | None = None,
+        json_payload: dict | None = None,
+    ) -> Any:
+        url = f"{self.base_url}/{path.lstrip('/')}"
+
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                response = self.session.request(
+                    method=method.upper(),
+                    url=url,
+                    params=params,
+                    json=json_payload,
+                    headers=self.headers,
+                    timeout=self.timeout,
+                )
+
+                if response.status_code == 429:
+                    wait_seconds = self.backoff_seconds * attempt
+                    LOGGER.warning(
+                        "Rate limit on %s. Backing off %.1fs (attempt %s/%s)",
+                        url,
+                        wait_seconds,
+                        attempt,
+                        self.max_retries,
+                    )
+                    time.sleep(wait_seconds)
+                    continue
+
+                if 500 <= response.status_code < 600:
+                    wait_seconds = self.backoff_seconds * attempt
+                    LOGGER.warning(
+                        "Server error %s on %s. Retrying in %.1fs",
+                        response.status_code,
+                        url,
+                        wait_seconds,
+                    )
+                    time.sleep(wait_seconds)
+                    continue
+
+                response.raise_for_status()
+
+                content_type = response.headers.get("Content-Type", "").lower()
+                if "application/json" in content_type:
+                    return response.json()
+
+                return response.text
+
+            except requests.Timeout:
+                if attempt >= self.max_retries:
+                    raise
+
+                wait_seconds = self.backoff_seconds * attempt
+                LOGGER.warning(
+                    "Timeout on %s. Retrying in %.1fs (attempt %s/%s)",
+                    url,
+                    wait_seconds,
+                    attempt,
+                    self.max_retries,
+                )
+                time.sleep(wait_seconds)
+
+            except requests.RequestException:
+                if attempt >= self.max_retries:
+                    raise
+
+                wait_seconds = self.backoff_seconds * attempt
+                LOGGER.warning(
+                    "Request failed on %s. Retrying in %.1fs (attempt %s/%s)",
+                    url,
+                    wait_seconds,
+                    attempt,
+                    self.max_retries,
+                )
+                time.sleep(wait_seconds)
+
+        raise RuntimeError(f"API request failed after retries: {url}")
+
+    def get(self, path: str, params: dict | None = None) -> Any:
+        return self._request("GET", path, params=params)
+
+    def post(self, path: str, params: dict | None = None, json_payload: dict | None = None) -> Any:
+        return self._request("POST", path, params=params, json_payload=json_payload)
 EOF
 
-CREA_FILE tests/test_quant_records_shape.py
-import os
-import pytest
+CREA_FILE models/poisson_model.py
+from __future__ import annotations
 
-if not os.getenv("API_FOOTBALL_KEY"):
-    pytest.skip("API_FOOTBALL_KEY missing", allow_module_level=True)
+import math
 
-from quant.services.quant_job_runner import QuantJobRunner
+import numpy as np
 
 
-def test_quant_records_have_expected_fields():
+class PoissonModel:
 
-    runner = QuantJobRunner()
+    def __init__(self, max_goals: int = 10):
+        self.max_goals = int(max_goals)
 
-    results = runner.run_cycle()
+    def _pmf_vector(self, lam: float) -> np.ndarray:
+        lam = max(0.01, float(lam))
+        goals = np.arange(self.max_goals + 1, dtype=float)
+        factorials = np.array([math.factorial(int(x)) for x in goals], dtype=float)
+        probs = np.exp(-lam) * np.power(lam, goals) / factorials
+        return probs / probs.sum()
 
-    first = results[0]
+    def probability_matrix(self, lambda_home: float, lambda_away: float) -> np.ndarray:
+        home_probs = self._pmf_vector(lambda_home)
+        away_probs = self._pmf_vector(lambda_away)
+        matrix = np.outer(home_probs, away_probs)
+        matrix_sum = matrix.sum()
 
-    expected = {
-        "fixture_id",
-        "home_team",
-        "away_team",
-        "market",
-        "probability",
-        "fair_odds",
-        "bookmaker_odds",
-        "market_edge",
-        "model_edge",
-        "confidence",
-        "agreement",
-        "decision",
+        if matrix_sum <= 0:
+            matrix = np.full((self.max_goals + 1, self.max_goals + 1), 0.0)
+            matrix[0, 0] = 1.0
+            return matrix
+
+        return matrix / matrix_sum
+
+    def predict_1x2(self, lambda_home: float, lambda_away: float) -> dict:
+        matrix = self.probability_matrix(lambda_home, lambda_away)
+
+        home_win = float(np.tril(matrix, k=-1).sum())
+        draw = float(np.trace(matrix))
+        away_win = float(np.triu(matrix, k=1).sum())
+
+        total = home_win + draw + away_win
+
+        return {
+            "home_win": home_win / total,
+            "draw": draw / total,
+            "away_win": away_win / total,
+        }
+
+    def predict_totals_and_btts(self, lambda_home: float, lambda_away: float) -> dict:
+        matrix = self.probability_matrix(lambda_home, lambda_away)
+
+        over_25 = 0.0
+        under_25 = 0.0
+        btts_yes = 0.0
+        btts_no = 0.0
+
+        for home_goals in range(self.max_goals + 1):
+            for away_goals in range(self.max_goals + 1):
+                prob = float(matrix[home_goals, away_goals])
+
+                if home_goals + away_goals > 2:
+                    over_25 += prob
+                else:
+                    under_25 += prob
+
+                if home_goals > 0 and away_goals > 0:
+                    btts_yes += prob
+                else:
+                    btts_no += prob
+
+        return {
+            "over_25": over_25,
+            "under_25": under_25,
+            "btts_yes": btts_yes,
+            "btts_no": btts_no,
+        }
+EOF
+
+CREA_FILE models/bivariate_poisson.py
+from __future__ import annotations
+
+import numpy as np
+
+from models.poisson_model import PoissonModel
+
+
+class BivariatePoissonModel(PoissonModel):
+
+    def __init__(self, max_goals: int = 10, rho: float = 0.0):
+        super().__init__(max_goals=max_goals)
+        self.rho = float(rho)
+
+    def probability_matrix(self, lambda_home: float, lambda_away: float) -> np.ndarray:
+        matrix = super().probability_matrix(lambda_home, lambda_away)
+
+        if abs(self.rho) < 1e-9:
+            return matrix
+
+        corrected = matrix.copy()
+
+        if corrected.shape[0] >= 2 and corrected.shape[1] >= 2:
+            corrected[0, 0] *= max(0.01, 1 - lambda_home * lambda_away * self.rho)
+            corrected[0, 1] *= max(0.01, 1 + lambda_home * self.rho)
+            corrected[1, 0] *= max(0.01, 1 + lambda_away * self.rho)
+            corrected[1, 1] *= max(0.01, 1 - self.rho)
+
+        total = corrected.sum()
+        if total <= 0:
+            return matrix
+
+        return corrected / total
+EOF
+
+CREA_FILE analysis/league_predictability.py
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+
+
+class LeaguePredictabilityAnalyzer:
+
+    REQUIRED_COLUMNS = {"league", "home_goals", "away_goals"}
+
+    def analyze(self, fixtures_df: pd.DataFrame) -> pd.DataFrame:
+        if fixtures_df is None or fixtures_df.empty:
+            return pd.DataFrame(columns=["league", "predictability"])
+
+        missing = self.REQUIRED_COLUMNS.difference(set(fixtures_df.columns))
+        if missing:
+            raise ValueError(f"Missing columns for predictability analysis: {sorted(missing)}")
+
+        df = fixtures_df.copy()
+
+        df["result"] = np.select(
+            [
+                df["home_goals"] > df["away_goals"],
+                df["home_goals"] == df["away_goals"],
+            ],
+            ["H", "D"],
+            default="A",
+        )
+
+        pivot = (
+            df.groupby("league")["result"]
+            .value_counts(normalize=True)
+            .unstack(fill_value=0.0)
+        )
+
+        predictability = pivot.max(axis=1).reset_index(name="predictability")
+
+        return predictability.sort_values("predictability", ascending=False).reset_index(drop=True)
+EOF
+
+CREA_FILE features/team_stats.py
+from __future__ import annotations
+
+import pandas as pd
+
+
+class TeamStatsBuilder:
+
+    REQUIRED_COLUMNS = {"home_team", "away_team", "home_goals", "away_goals"}
+
+    def build(self, fixtures_df: pd.DataFrame) -> pd.DataFrame:
+        if fixtures_df is None or fixtures_df.empty:
+            return pd.DataFrame()
+
+        missing = self.REQUIRED_COLUMNS.difference(set(fixtures_df.columns))
+        if missing:
+            raise ValueError(f"Missing columns for team stats: {sorted(missing)}")
+
+        df = fixtures_df.copy()
+
+        home_stats = (
+            df.groupby("home_team")
+            .agg(
+                home_matches=("home_team", "count"),
+                home_goals_for=("home_goals", "mean"),
+                home_goals_against=("away_goals", "mean"),
+            )
+            .reset_index()
+            .rename(columns={"home_team": "team"})
+        )
+
+        away_stats = (
+            df.groupby("away_team")
+            .agg(
+                away_matches=("away_team", "count"),
+                away_goals_for=("away_goals", "mean"),
+                away_goals_against=("home_goals", "mean"),
+            )
+            .reset_index()
+            .rename(columns={"away_team": "team"})
+        )
+
+        merged = home_stats.merge(away_stats, on="team", how="outer").fillna(0.0)
+
+        league_avg_home = float(df["home_goals"].mean()) if not df.empty else 1.35
+        league_avg_away = float(df["away_goals"].mean()) if not df.empty else 1.10
+
+        merged["attack_home"] = merged["home_goals_for"] / max(league_avg_home, 0.01)
+        merged["defense_home"] = merged["home_goals_against"] / max(league_avg_away, 0.01)
+        merged["attack_away"] = merged["away_goals_for"] / max(league_avg_away, 0.01)
+        merged["defense_away"] = merged["away_goals_against"] / max(league_avg_home, 0.01)
+
+        return merged
+EOF
+
+CREA_FILE engine/odds_mapper.py
+from __future__ import annotations
+
+import re
+
+
+class OddsMapper:
+
+    DEFAULT_ALIASES = {
+        "inter milan": "inter",
+        "internazionale": "inter",
+        "man city": "manchester city",
+        "man utd": "manchester united",
+        "psg": "paris saint germain",
+        "juve": "juventus",
     }
 
-    assert expected.issubset(set(first.keys()))
+    def __init__(self, aliases: dict | None = None):
+        self.aliases = dict(self.DEFAULT_ALIASES)
+        if aliases:
+            self.aliases.update({self.normalize_name(k): self.normalize_name(v) for k, v in aliases.items()})
+
+    def normalize_name(self, value: str) -> str:
+        value = str(value or "").strip().lower()
+        value = re.sub(r"[^a-z0-9\s]", " ", value)
+        value = re.sub(r"\s+", " ", value).strip()
+        return self.aliases.get(value, value)
+
+    def resolve_fixture_id(self, fixtures: list[dict], home_team: str, away_team: str) -> str | None:
+        target_home = self.normalize_name(home_team)
+        target_away = self.normalize_name(away_team)
+
+        for fixture in fixtures:
+            home = self.normalize_name(fixture.get("home_team", ""))
+            away = self.normalize_name(fixture.get("away_team", ""))
+
+            if home == target_home and away == target_away:
+                return str(fixture.get("fixture_id"))
+
+        return None
 EOF
 
-CREA_FILE tests/test_api_football_live.py
+CREA_FILE training/dataset_builder.py
+from __future__ import annotations
+
+import pandas as pd
+
+
+class DatasetBuilder:
+
+    VALID_FINISHED_STATUSES = {"FT", "AET", "PEN", "AWD"}
+
+    def filter_completed(self, fixtures_df: pd.DataFrame) -> pd.DataFrame:
+        if fixtures_df is None or fixtures_df.empty:
+            return pd.DataFrame()
+
+        if "status" not in fixtures_df.columns:
+            return fixtures_df.copy()
+
+        return fixtures_df[fixtures_df["status"].isin(self.VALID_FINISHED_STATUSES)].copy()
+
+    def build(self, fixtures_df: pd.DataFrame) -> pd.DataFrame:
+        df = self.filter_completed(fixtures_df)
+
+        if df.empty:
+            return df
+
+        required = {"home_team", "away_team", "home_goals", "away_goals"}
+        missing = required.difference(set(df.columns))
+        if missing:
+            raise ValueError(f"Missing columns for dataset building: {sorted(missing)}")
+
+        df["target_home_win"] = (df["home_goals"] > df["away_goals"]).astype(int)
+        df["target_draw"] = (df["home_goals"] == df["away_goals"]).astype(int)
+        df["target_away_win"] = (df["home_goals"] < df["away_goals"]).astype(int)
+
+        return df.reset_index(drop=True)
+EOF
+
+CREA_FILE strategies/edge_detector.py
+from __future__ import annotations
+
+
+class EdgeDetector:
+
+    def calculate_probability_edge(self, probability: float, bookmaker_odds: float) -> float:
+        probability = float(probability)
+        bookmaker_odds = float(bookmaker_odds or 0.0)
+
+        if bookmaker_odds <= 0:
+            return 0.0
+
+        implied_probability = 1.0 / bookmaker_odds
+        return probability - implied_probability
+
+    def calculate_ev(self, probability: float, bookmaker_odds: float) -> float:
+        probability = float(probability)
+        bookmaker_odds = float(bookmaker_odds or 0.0)
+
+        if bookmaker_odds <= 0:
+            return 0.0
+
+        return (probability * bookmaker_odds) - 1.0
+
+    def calculate_edge(self, probability: float, bookmaker_odds: float) -> float:
+        return self.calculate_ev(probability, bookmaker_odds)
+
+    def is_value_bet(self, probability: float, bookmaker_odds: float, min_ev: float = 0.02) -> bool:
+        return self.calculate_ev(probability, bookmaker_odds) >= float(min_ev)
+EOF
+
+CREA_FILE utils/settings_manager.py
+from __future__ import annotations
+
+import json
 import os
-import pytest
-
-if not os.getenv("API_FOOTBALL_KEY"):
-    pytest.skip("API_FOOTBALL_KEY missing", allow_module_level=True)
-
-from quant.providers.api_football_client import APIFootballClient
 
 
-def test_api_connection():
+DEFAULT_SETTINGS = {
+    "api_football_key": "",
+    "telegram_token": "",
+    "telegram_chat_id": "",
+    "database_path": "data/app.db",
+}
 
-    client = APIFootballClient()
 
-    leagues = client.get_leagues()
+class SettingsManager:
 
-    assert isinstance(leagues, list)
+    def __init__(self, settings_path: str = "settings.json"):
+        self.settings_path = settings_path
+
+    def ensure_exists(self) -> dict:
+        if not os.path.exists(self.settings_path):
+            with open(self.settings_path, "w", encoding="utf-8") as handle:
+                json.dump(DEFAULT_SETTINGS, handle, indent=2)
+
+        return self.load()
+
+    def load(self) -> dict:
+        self.ensure_exists()
+
+        with open(self.settings_path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+
+        merged = dict(DEFAULT_SETTINGS)
+        merged.update(data or {})
+        return merged
+
+    def save(self, payload: dict) -> None:
+        merged = dict(DEFAULT_SETTINGS)
+        merged.update(payload or {})
+
+        with open(self.settings_path, "w", encoding="utf-8") as handle:
+            json.dump(merged, handle, indent=2)
+EOF
+
+CREA_FILE tests/test_scheduler_safe.py
+from engine.scheduler import Scheduler
+
+
+def test_scheduler_add_remove_job():
+    scheduler = Scheduler()
+
+    scheduler.add_job("job1", lambda: None, interval_seconds=1)
+    assert "job1" in scheduler.jobs
+
+    scheduler.remove_job("job1")
+    assert "job1" not in scheduler.jobs
+EOF
+
+CREA_FILE tests/test_db_manager_wal.py
+from database.db_manager import DBManager
+
+
+def test_db_manager_init_and_query(tmp_path):
+    db_path = tmp_path / "test.db"
+
+    manager = DBManager(str(db_path))
+    manager.init_db()
+
+    manager.execute("CREATE TABLE IF NOT EXISTS sample (id INTEGER PRIMARY KEY, value TEXT)")
+    manager.execute("INSERT INTO sample (value) VALUES (?)", ("ok",))
+
+    row = manager.query_one("SELECT value FROM sample WHERE id = 1")
+
+    assert row is not None
+    assert row["value"] == "ok"
+EOF
+
+CREA_FILE tests/test_edge_detector_ev.py
+from strategies.edge_detector import EdgeDetector
+
+
+def test_edge_detector_ev_and_probability_edge():
+    detector = EdgeDetector()
+
+    ev = detector.calculate_ev(0.55, 2.10)
+    prob_edge = detector.calculate_probability_edge(0.55, 2.10)
+
+    assert isinstance(ev, float)
+    assert isinstance(prob_edge, float)
+EOF
+
+CREA_FILE tests/test_settings_manager.py
+from utils.settings_manager import SettingsManager
+
+
+def test_settings_manager_creates_file(tmp_path):
+    settings_path = tmp_path / "settings.json"
+
+    manager = SettingsManager(str(settings_path))
+    payload = manager.ensure_exists()
+
+    assert settings_path.exists()
+    assert "database_path" in payload
 EOF
 
 FIX_WHITESPACE
-

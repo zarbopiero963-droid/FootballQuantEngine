@@ -1,4 +1,5 @@
 import os
+import time
 
 import pytest
 
@@ -12,16 +13,28 @@ EXE_PATH = os.environ.get(
 )
 
 
+def _start_app():
+    app = Application(backend="uia").start(
+        EXE_PATH,
+        wait_for_idle=False,
+    )
+
+    time.sleep(5)
+
+    connected = Application(backend="uia").connect(process=app.process)
+    return app, connected
+
+
 @pytest.mark.windows
 def test_installed_exe_opens_main_window():
     if not os.path.exists(EXE_PATH):
         pytest.skip(f"EXE not found: {EXE_PATH}")
 
-    app = Application(backend="uia").start(EXE_PATH)
+    app, connected = _start_app()
 
     try:
-        main = app.window(title_re=".*Football Quant Engine.*")
-        main.wait("visible", timeout=20)
+        main = connected.window(title_re=".*Football Quant Engine.*")
+        main.wait("exists visible", timeout=20)
 
         assert main.exists()
         assert main.is_visible()
@@ -37,11 +50,11 @@ def test_installed_exe_has_main_buttons():
     if not os.path.exists(EXE_PATH):
         pytest.skip(f"EXE not found: {EXE_PATH}")
 
-    app = Application(backend="uia").start(EXE_PATH)
+    app, connected = _start_app()
 
     try:
-        main = app.window(title_re=".*Football Quant Engine.*")
-        main.wait("visible", timeout=20)
+        main = connected.window(title_re=".*Football Quant Engine.*")
+        main.wait("exists visible", timeout=20)
 
         run_btn = main.child_window(title="Run Cycle", control_type="Button")
         settings_btn = main.child_window(title="Settings", control_type="Button")

@@ -122,7 +122,10 @@ class MainWindow(QMainWindow):
 
     def open_backtest(self):
 
-        self.backtest_window = BacktestRunnerWindow()
+        self.backtest_window = BacktestRunnerWindow(
+            on_metrics_ready=self.dashboard.set_metrics,
+            on_log_message=self.dashboard.append_log,
+        )
         self.backtest_window.show()
 
     def run_cycle(self):
@@ -145,6 +148,9 @@ class MainWindow(QMainWindow):
                 self.dashboard.set_log_text(str(ranked))
                 self.dashboard.set_status("Completed")
                 self.status_label.setText("Completed")
+                self.dashboard.add_history_message(
+                    f"Prediction run completed: rows={len(ranked)}"
+                )
                 return
 
             if getattr(ranked, "empty", False):
@@ -158,6 +164,9 @@ class MainWindow(QMainWindow):
             self.dashboard.set_log_text(ranked.to_string(index=False))
             self.dashboard.set_status("Completed")
             self.status_label.setText("Completed")
+            self.dashboard.add_history_message(
+                f"Prediction run completed: rows={len(ranked.index)}"
+            )
 
         except Exception as exc:
             self.dashboard.set_status("Error")

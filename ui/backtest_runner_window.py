@@ -14,7 +14,7 @@ from training.backtest_metrics import BacktestMetrics
 
 class BacktestRunnerWindow(QWidget):
 
-    def __init__(self):
+    def __init__(self, on_metrics_ready=None, on_log_message=None):
 
         super().__init__()
 
@@ -22,6 +22,9 @@ class BacktestRunnerWindow(QWidget):
 
         self.engine = BacktestEngine()
         self.metrics_engine = BacktestMetrics()
+
+        self.on_metrics_ready = on_metrics_ready
+        self.on_log_message = on_log_message
 
         self.date_from_input = QLineEdit()
         self.date_to_input = QLineEdit()
@@ -65,5 +68,14 @@ class BacktestRunnerWindow(QWidget):
 
             self.output.setPlainText(str(metrics))
 
+            if callable(self.on_metrics_ready):
+                self.on_metrics_ready(metrics)
+
+            if callable(self.on_log_message):
+                self.on_log_message("Backtest completed successfully.")
+
         except Exception as exc:
+            if callable(self.on_log_message):
+                self.on_log_message(f"Backtest error: {exc}")
+
             QMessageBox.critical(self, "Backtest Error", str(exc))

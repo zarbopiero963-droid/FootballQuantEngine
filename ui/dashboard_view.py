@@ -54,6 +54,7 @@ class DashboardView(QWidget):
         self.sort_ascending = True
         self.last_csv_path = "outputs/dashboard_export.csv"
         self.last_excel_path = "outputs/dashboard_export.xlsx"
+        self.history_messages = []
 
         self.title = QLabel("Football Quant Engine Dashboard")
 
@@ -70,6 +71,13 @@ class DashboardView(QWidget):
         self.agreement_avg_card = DashboardCard("Avg Agreement", "0.00")
         self.max_edge_card = DashboardCard("Max Market Edge", "0.00")
 
+        self.bankroll_card = DashboardCard("Bankroll", "100.00")
+        self.roi_card = DashboardCard("ROI", "0.00")
+        self.yield_card = DashboardCard("Yield", "0.00")
+        self.hit_rate_card = DashboardCard("Hit Rate", "0.00")
+        self.runs_card = DashboardCard("Backtest Bets", "0")
+        self.max_dd_card = DashboardCard("Max Drawdown", "0.00")
+
         cards_row_1 = QHBoxLayout()
         cards_row_1.addWidget(self.total_bets_card)
         cards_row_1.addWidget(self.status_card)
@@ -85,6 +93,14 @@ class DashboardView(QWidget):
         cards_row_3.addWidget(self.confidence_avg_card)
         cards_row_3.addWidget(self.agreement_avg_card)
         cards_row_3.addWidget(self.max_edge_card)
+
+        cards_row_4 = QHBoxLayout()
+        cards_row_4.addWidget(self.bankroll_card)
+        cards_row_4.addWidget(self.roi_card)
+        cards_row_4.addWidget(self.yield_card)
+        cards_row_4.addWidget(self.hit_rate_card)
+        cards_row_4.addWidget(self.runs_card)
+        cards_row_4.addWidget(self.max_dd_card)
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search...")
@@ -177,6 +193,7 @@ class DashboardView(QWidget):
         layout.addLayout(cards_row_1)
         layout.addLayout(cards_row_2)
         layout.addLayout(cards_row_3)
+        layout.addLayout(cards_row_4)
         layout.addLayout(controls_layout)
         layout.addWidget(self.tabs)
         layout.addWidget(self.inline_status)
@@ -191,6 +208,11 @@ class DashboardView(QWidget):
     def append_log(self, text):
 
         self.log_output.append(str(text))
+
+    def add_history_message(self, text):
+
+        self.history_messages.append(str(text))
+        self.history_output.setPlainText("\n".join(self.history_messages))
 
     def set_log_text(self, text):
 
@@ -411,6 +433,13 @@ class DashboardView(QWidget):
 
         bankroll = (metrics.get("bankroll_history") or [100])[-1]
 
+        self.bankroll_card.set_value(f"{bankroll:.2f}")
+        self.roi_card.set_value(f"{metrics.get('roi', 0):.2%}")
+        self.yield_card.set_value(f"{metrics.get('yield', 0):.2%}")
+        self.hit_rate_card.set_value(f"{metrics.get('hit_rate', 0):.2%}")
+        self.runs_card.set_value(metrics.get("total_bets", 0))
+        self.max_dd_card.set_value(f"{metrics.get('max_drawdown', 0):.2%}")
+
         lines = [
             f"Bankroll: {bankroll:.2f}",
             f"Total Profit: {metrics.get('total_profit', 0):.2f}",
@@ -450,3 +479,6 @@ class DashboardView(QWidget):
         )
 
         self.charts_output.setHtml("".join(chart_html))
+        self.add_history_message(
+            f"Backtest loaded: bets={metrics.get('total_bets', 0)}, roi={metrics.get('roi', 0):.2%}, yield={metrics.get('yield', 0):.2%}"
+        )

@@ -958,3 +958,16 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-07_11-20-18.zip
+Backup created backups/backup_2026-03-07_11-20-18.zip
+[CREATE] file ui/backtest_runner_window.py
+[CREATE] file ui/dashboard_view.py
+[CREATE] file ui/main_window.py
+[CREATE] file tests/test_backtest_dashboard_link.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

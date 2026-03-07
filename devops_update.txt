@@ -763,3 +763,4 @@ def test_backtest_runner_window_import():
 EOF
 
 FIX_WHITESPACE
+

@@ -1,3 +1,256 @@
+CREA_FILE training/backtest_metrics.py
+import math
+
+import pandas as pd
+
+
+class BacktestMetrics:
+
+    def calculate(self, backtest_df):
+
+        if backtest_df.empty:
+            return {}
+
+        df = backtest_df.copy()
+
+        df["selected_market"] = None
+
+        for index, row in df.iterrows():
+
+            probs = {
+                "home": row["home_prob"] if pd.notna(row["home_prob"]) else -1,
+                "draw": row["draw_prob"] if pd.notna(row["draw_prob"]) else -1,
+                "away": row["away_prob"] if pd.notna(row["away_prob"]) else -1,
+            }
+
+            selected_market = max(probs, key=probs.get)
+            df.at[index, "selected_market"] = selected_market
+
+        df["won"] = 0
+
+        df.loc[
+            (df["selected_market"] == "home") & (df["actual_home_win"] == 1),
+            "won",
+        ] = 1
+        df.loc[
+            (df["selected_market"] == "draw") & (df["actual_draw"] == 1),
+            "won",
+        ] = 1
+        df.loc[
+            (df["selected_market"] == "away") & (df["actual_away_win"] == 1),
+            "won",
+        ] = 1
+
+        def resolve_odds(row):
+            if row["selected_market"] == "home":
+                return row.get("home_odds", 2.0)
+            if row["selected_market"] == "draw":
+                return row.get("draw_odds", 3.0)
+            return row.get("away_odds", 2.5)
+
+        df["selected_odds"] = df.apply(resolve_odds, axis=1)
+
+        stake = 1.0
+
+        df["profit"] = df.apply(
+            lambda row: (row["selected_odds"] - 1) * stake
+            if row["won"] == 1
+            else -stake,
+            axis=1,
+        )
+
+        total_bets = len(df)
+        total_profit = df["profit"].sum()
+        total_staked = total_bets * stake
+
+        roi = total_profit / total_staked if total_staked else 0.0
+        yield_value = roi
+        hit_rate = df["won"].mean() if total_bets else 0.0
+
+        brier_scores = []
+        log_losses = []
+
+        for _, row in df.iterrows():
+
+            probs = {
+                "home": row["home_prob"] if pd.notna(row["home_prob"]) else 0.0,
+                "draw": row["draw_prob"] if pd.notna(row["draw_prob"]) else 0.0,
+                "away": row["away_prob"] if pd.notna(row["away_prob"]) else 0.0,
+            }
+
+            actual = {
+                "home": row["actual_home_win"],
+                "draw": row["actual_draw"],
+                "away": row["actual_away_win"],
+            }
+
+            brier = 0.0
+
+            for key in ("home", "draw", "away"):
+                brier += (probs[key] - actual[key]) ** 2
+
+            brier_scores.append(brier)
+
+            selected_prob = max(
+                probs["home"],
+                probs["draw"],
+                probs["away"],
+            )
+
+            selected_prob = min(max(selected_prob, 1e-15), 1 - 1e-15)
+
+            actual_selected = int(row["won"])
+
+            if actual_selected == 1:
+                log_loss_value = -math.log(selected_prob)
+            else:
+                log_loss_value = -math.log(1 - selected_prob)
+
+            log_losses.append(log_loss_value)
+
+        bankroll_history = []
+        bankroll = 100.0
+
+        for profit in df["profit"]:
+            bankroll += profit
+            bankroll_history.append(bankroll)
+
+        accuracy_history = []
+        cumulative_correct = 0
+
+        for index, won in enumerate(df["won"], start=1):
+            cumulative_correct += won
+            accuracy_history.append(cumulative_correct / index)
+
+        max_bankroll = bankroll_history[0] if bankroll_history else 100.0
+        drawdowns = []
+
+        for value in bankroll_history:
+            max_bankroll = max(max_bankroll, value)
+            drawdown = (value - max_bankroll) / max_bankroll if max_bankroll else 0.0
+            drawdowns.append(drawdown)
+
+        max_drawdown = min(drawdowns) if drawdowns else 0.0
+
+        return {
+            "roi": roi,
+            "yield": yield_value,
+            "hit_rate": hit_rate,
+            "brier_score": sum(brier_scores) / len(brier_scores),
+            "log_loss": sum(log_losses) / len(log_losses),
+            "bankroll_history": bankroll_history,
+            "accuracy_history": accuracy_history,
+            "max_drawdown": max_drawdown,
+            "total_profit": total_profit,
+            "total_staked": total_staked,
+            "total_bets": total_bets,
+        }
+EOF
+
+CREA_FILE analysis/report_generator.py
+import os
+
+
+class ReportGenerator:
+
+    def __init__(self):
+
+        os.makedirs("outputs", exist_ok=True)
+
+    def _line_svg(self, values, title, color="#2c7be5"):
+
+        if not values:
+            return f"<h3>{title}</h3><p>No data</p>"
+
+        width = 900
+        height = 260
+        padding = 30
+
+        min_v = min(values)
+        max_v = max(values)
+
+        if max_v == min_v:
+            max_v += 1
+
+        points = []
+
+        for index, value in enumerate(values):
+
+            x = padding + index * (width - 2 * padding) / max(len(values) - 1, 1)
+            y = height - padding - (
+                (value - min_v) / (max_v - min_v)
+            ) * (height - 2 * padding)
+
+            points.append(f"{x},{y}")
+
+        polyline = " ".join(points)
+
+        return (
+            f"<h3>{title}</h3>"
+            f"<svg width='{width}' height='{height}' "
+            f"style='background:#fff;border:1px solid #ccc;border-radius:8px'>"
+            f"<polyline fill='none' stroke='{color}' stroke-width='2' "
+            f"points='{polyline}' />"
+            f"</svg>"
+        )
+
+    def generate(self, metrics, ranked_df=None):
+
+        html = []
+        html.append("<html><head><title>Football Quant Report</title></head><body>")
+        html.append("<h1>Football Quant Engine Report</h1>")
+
+        if metrics:
+            html.append("<h2>Metrics</h2>")
+            html.append("<ul>")
+            html.append(f"<li>ROI: {metrics.get('roi', 0):.4f}</li>")
+            html.append(f"<li>Yield: {metrics.get('yield', 0):.4f}</li>")
+            html.append(f"<li>Hit Rate: {metrics.get('hit_rate', 0):.4f}</li>")
+            html.append(f"<li>Brier Score: {metrics.get('brier_score', 0):.4f}</li>")
+            html.append(f"<li>Log Loss: {metrics.get('log_loss', 0):.4f}</li>")
+            html.append(f"<li>Total Profit: {metrics.get('total_profit', 0):.4f}</li>")
+            html.append(f"<li>Total Staked: {metrics.get('total_staked', 0):.4f}</li>")
+            html.append(f"<li>Total Bets: {metrics.get('total_bets', 0)}</li>")
+            html.append(f"<li>Max Drawdown: {metrics.get('max_drawdown', 0):.4f}</li>")
+            html.append("</ul>")
+
+            html.append(
+                self._line_svg(
+                    metrics.get("bankroll_history", []),
+                    "Bankroll / Equity Curve",
+                    "#2c7be5",
+                )
+            )
+            html.append(
+                self._line_svg(
+                    metrics.get("accuracy_history", []),
+                    "Accuracy Curve",
+                    "#28a745",
+                )
+            )
+
+        if ranked_df is not None and not ranked_df.empty:
+            html.append("<h2>Ranked Value Bets</h2>")
+            html.append("<table border='1' cellpadding='6' cellspacing='0'>")
+            html.append("<tr>")
+            for col in ranked_df.columns:
+                html.append(f"<th>{col}</th>")
+            html.append("</tr>")
+
+            for _, row in ranked_df.iterrows():
+                html.append("<tr>")
+                for col in ranked_df.columns:
+                    html.append(f"<td>{row[col]}</td>")
+                html.append("</tr>")
+
+            html.append("</table>")
+
+        html.append("</body></html>")
+
+        with open("outputs/advanced_report.html", "w", encoding="utf-8") as f:
+            f.write("\n".join(html))
+EOF
+
 CREA_FILE training/import_validator.py
 import pandas as pd
 
@@ -65,8 +318,6 @@ class ImportValidator:
 EOF
 
 CREA_FILE training/csv_importer.py
-import pandas as pd
-
 from database.fixtures_repository import FixturesRepository
 from database.odds_repository import OddsRepository
 from training.import_validator import ImportValidator
@@ -192,7 +443,7 @@ class OfflineImportWindow(QWidget):
 
         super().__init__()
 
-        self.setWindowTitle("Offline CSV Import")
+        self.setWindowTitle("Offline CSV Import Wizard")
 
         self.controller = OfflineController()
 
@@ -201,7 +452,7 @@ class OfflineImportWindow(QWidget):
 
         self.matches_browse = QPushButton("Browse Matches CSV")
         self.odds_browse = QPushButton("Browse Odds CSV")
-        self.import_button = QPushButton("Import Data")
+        self.import_button = QPushButton("Validate + Import")
 
         self.output = QTextEdit()
         self.output.setReadOnly(True)
@@ -220,7 +471,7 @@ class OfflineImportWindow(QWidget):
         layout.addWidget(self.odds_browse, 1, 2)
 
         layout.addWidget(self.import_button, 2, 0, 1, 3)
-        layout.addWidget(QLabel("Import Log"), 3, 0, 1, 3)
+        layout.addWidget(QLabel("Wizard Log"), 3, 0, 1, 3)
         layout.addWidget(self.output, 4, 0, 1, 3)
 
         self.setLayout(layout)
@@ -265,7 +516,7 @@ class OfflineImportWindow(QWidget):
             QMessageBox.information(
                 self,
                 "Import",
-                "CSV import completed successfully.",
+                "CSV validation and import completed successfully.",
             )
         except Exception as exc:
             self.output.setPlainText(str(exc))
@@ -692,6 +943,17 @@ class DashboardView(QWidget):
         self.metrics_output.setPlainText("\n".join(text))
 EOF
 
+CREA_FILE tests/test_import_validator.py
+from training.import_validator import ImportValidator
+
+
+def test_import_validator_class_exists():
+
+    validator = ImportValidator()
+
+    assert isinstance(validator, ImportValidator)
+EOF
+
 CREA_FILE tests/test_dashboard_view_ui.py
 import pytest
 
@@ -708,4 +970,3 @@ def test_dashboard_view_import():
 EOF
 
 FIX_WHITESPACE
-

@@ -1,28 +1,82 @@
-CREA_FILE conftest.py
-import sys
-from pathlib import Path
+CREA_FILE tests/exe/test_installed_exe_smoke.py
+import os
+import time
+
+import pytest
+
+pytest.importorskip("pywinauto")
+
+from pywinauto.application import Application
 
 
-ROOT_DIR = Path(__file__).resolve().parent
+EXE_PATH = os.environ.get(
+    "APP_EXE_PATH",
+    r"dist\FootballQuantEngine\FootballQuantEngine.exe",
+)
 
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
+
+def _start_app():
+    app = Application(backend="uia").start(
+        EXE_PATH,
+        wait_for_idle=False,
+    )
+
+    time.sleep(5)
+
+    connected = Application(backend="uia").connect(process=app.process)
+    return app, connected
+
+
+@pytest.mark.windows
+def test_installed_exe_opens_main_window():
+    if not os.path.exists(EXE_PATH):
+        pytest.skip(f"EXE not found: {EXE_PATH}")
+
+    app, connected = _start_app()
+
+    try:
+        main = connected.window(title_re=".*Football Quant Engine.*")
+        main.wait("exists visible", timeout=20)
+
+        assert main.exists()
+        assert main.is_visible()
+    finally:
+        try:
+            app.kill()
+        except Exception:
+            pass
+
+
+@pytest.mark.windows
+def test_installed_exe_has_main_buttons():
+    if not os.path.exists(EXE_PATH):
+        pytest.skip(f"EXE not found: {EXE_PATH}")
+
+    app, connected = _start_app()
+
+    try:
+        main = connected.window(title_re=".*Football Quant Engine.*")
+        main.wait("exists visible", timeout=20)
+
+        run_btn = main.child_window(title="Run Cycle", control_type="Button")
+        settings_btn = main.child_window(title="Settings", control_type="Button")
+        about_btn = main.child_window(title="About", control_type="Button")
+
+        assert run_btn.exists()
+        assert settings_btn.exists()
+        assert about_btn.exists()
+    finally:
+        try:
+            app.kill()
+        except Exception:
+            pass
 EOF
 
-CREA_FILE tests/conftest.py
-import sys
-from pathlib import Path
-
-
-ROOT_DIR = Path(__file__).resolve().parent.parent
-
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
-EOF
-
-CREA_FILE engine/__init__.py
-# engine package
+CREA_FILE pytest.ini
+[pytest]
+testpaths=tests
+markers =
+    windows: tests intended to run on Windows
 EOF
 
 FIX_WHITESPACE
-

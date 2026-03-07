@@ -926,3 +926,23 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-07_11-09-29.zip
+Backup created backups/backup_2026-03-07_11-09-29.zip
+[CREATE] file engine/probability_calibrator.py
+[CREATE] file engine/model_agreement.py
+[CREATE] file engine/market_comparison.py
+[CREATE] file strategies/no_bet_filter.py
+[CREATE] file engine/confidence_engine.py
+[CREATE] file engine/prediction_pipeline.py
+[CREATE] file tests/test_probability_calibrator.py
+[CREATE] file tests/test_model_agreement.py
+[CREATE] file tests/test_market_comparison.py
+[CREATE] file tests/test_no_bet_filter.py
+[CREATE] file tests/test_confidence_engine.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

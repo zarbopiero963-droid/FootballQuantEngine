@@ -1,7 +1,140 @@
+CREA_FILE training/backtest_engine.py
+import pandas as pd
+
+from database.db_manager import connect
+
+
+class BacktestEngine:
+
+    def load_predictions_with_results(self):
+
+        conn = connect()
+
+        query = """
+        SELECT
+            p.fixture_id,
+            p.home_prob,
+            p.draw_prob,
+            p.away_prob,
+            f.home_goals,
+            f.away_goals,
+            oh.home_odds,
+            oh.draw_odds,
+            oh.away_odds
+        FROM predictions p
+        JOIN fixtures f
+            ON p.fixture_id = f.fixture_id
+        LEFT JOIN (
+            SELECT o1.*
+            FROM odds_history o1
+            JOIN (
+                SELECT fixture_id, MAX(timestamp) AS max_ts
+                FROM odds_history
+                GROUP BY fixture_id
+            ) o2
+                ON o1.fixture_id = o2.fixture_id
+               AND o1.timestamp = o2.max_ts
+        ) oh
+            ON p.fixture_id = oh.fixture_id
+        WHERE
+            f.status = 'FT'
+        """
+
+        df = pd.read_sql_query(query, conn)
+
+        conn.close()
+
+        if df.empty:
+            return df
+
+        df["actual_home_win"] = (df["home_goals"] > df["away_goals"]).astype(int)
+        df["actual_draw"] = (df["home_goals"] == df["away_goals"]).astype(int)
+        df["actual_away_win"] = (df["home_goals"] < df["away_goals"]).astype(int)
+
+        df["home_odds"] = df["home_odds"].fillna(2.0)
+        df["draw_odds"] = df["draw_odds"].fillna(3.0)
+        df["away_odds"] = df["away_odds"].fillna(2.5)
+
+        return df
+
+    def run(self):
+
+        return self.load_predictions_with_results()
+EOF
+
+CREA_FILE analysis/chart_generator.py
+import os
+
+
+class ChartGenerator:
+
+    def __init__(self):
+
+        os.makedirs("outputs", exist_ok=True)
+
+    def _line_svg(self, values, title, color="#2c7be5", width=900, height=260):
+
+        if not values:
+            return f"<h3>{title}</h3><p>No data</p>"
+
+        padding = 30
+        min_v = min(values)
+        max_v = max(values)
+
+        if max_v == min_v:
+            max_v += 1
+
+        points = []
+
+        for index, value in enumerate(values):
+            x = padding + index * (width - 2 * padding) / max(len(values) - 1, 1)
+            y = height - padding - (
+                (value - min_v) / (max_v - min_v)
+            ) * (height - 2 * padding)
+            points.append(f"{x},{y}")
+
+        polyline = " ".join(points)
+
+        return (
+            f"<h3>{title}</h3>"
+            f"<svg width='{width}' height='{height}' "
+            f"style='background:#fff;border:1px solid #ccc;border-radius:8px'>"
+            f"<polyline fill='none' stroke='{color}' stroke-width='2' points='{polyline}' />"
+            f"</svg>"
+        )
+
+    def generate_all(self, metrics):
+
+        html = []
+
+        html.append(self._line_svg(
+            metrics.get("bankroll_history", []),
+            "Bankroll / Equity Curve",
+            "#2c7be5",
+        ))
+
+        html.append(self._line_svg(
+            metrics.get("accuracy_history", []),
+            "Accuracy Curve",
+            "#28a745",
+        ))
+
+        drawdown_series = metrics.get("drawdown_history", [])
+        html.append(self._line_svg(
+            drawdown_series,
+            "Drawdown Curve",
+            "#dc3545",
+        ))
+
+        path = "outputs/charts_report.html"
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("\n".join(html))
+
+        return path
+EOF
+
 CREA_FILE training/backtest_metrics.py
 import math
-
-import pandas as pd
 
 
 class BacktestMetrics:
@@ -16,13 +149,11 @@ class BacktestMetrics:
         df["selected_market"] = None
 
         for index, row in df.iterrows():
-
             probs = {
-                "home": row["home_prob"] if pd.notna(row["home_prob"]) else -1,
-                "draw": row["draw_prob"] if pd.notna(row["draw_prob"]) else -1,
-                "away": row["away_prob"] if pd.notna(row["away_prob"]) else -1,
+                "home": row["home_prob"] if row["home_prob"] == row["home_prob"] else -1,
+                "draw": row["draw_prob"] if row["draw_prob"] == row["draw_prob"] else -1,
+                "away": row["away_prob"] if row["away_prob"] == row["away_prob"] else -1,
             }
-
             selected_market = max(probs, key=probs.get)
             df.at[index, "selected_market"] = selected_market
 
@@ -71,11 +202,10 @@ class BacktestMetrics:
         log_losses = []
 
         for _, row in df.iterrows():
-
             probs = {
-                "home": row["home_prob"] if pd.notna(row["home_prob"]) else 0.0,
-                "draw": row["draw_prob"] if pd.notna(row["draw_prob"]) else 0.0,
-                "away": row["away_prob"] if pd.notna(row["away_prob"]) else 0.0,
+                "home": row["home_prob"] if row["home_prob"] == row["home_prob"] else 0.0,
+                "draw": row["draw_prob"] if row["draw_prob"] == row["draw_prob"] else 0.0,
+                "away": row["away_prob"] if row["away_prob"] == row["away_prob"] else 0.0,
             }
 
             actual = {
@@ -85,10 +215,8 @@ class BacktestMetrics:
             }
 
             brier = 0.0
-
             for key in ("home", "draw", "away"):
                 brier += (probs[key] - actual[key]) ** 2
-
             brier_scores.append(brier)
 
             selected_prob = max(
@@ -96,7 +224,6 @@ class BacktestMetrics:
                 probs["draw"],
                 probs["away"],
             )
-
             selected_prob = min(max(selected_prob, 1e-15), 1 - 1e-15)
 
             actual_selected = int(row["won"])
@@ -122,15 +249,15 @@ class BacktestMetrics:
             cumulative_correct += won
             accuracy_history.append(cumulative_correct / index)
 
-        max_bankroll = bankroll_history[0] if bankroll_history else 100.0
-        drawdowns = []
+        drawdown_history = []
+        peak = 100.0
 
         for value in bankroll_history:
-            max_bankroll = max(max_bankroll, value)
-            drawdown = (value - max_bankroll) / max_bankroll if max_bankroll else 0.0
-            drawdowns.append(drawdown)
+            peak = max(peak, value)
+            drawdown = (value - peak) / peak if peak else 0.0
+            drawdown_history.append(drawdown)
 
-        max_drawdown = min(drawdowns) if drawdowns else 0.0
+        max_drawdown = min(drawdown_history) if drawdown_history else 0.0
 
         return {
             "roi": roi,
@@ -140,6 +267,7 @@ class BacktestMetrics:
             "log_loss": sum(log_losses) / len(log_losses),
             "bankroll_history": bankroll_history,
             "accuracy_history": accuracy_history,
+            "drawdown_history": drawdown_history,
             "max_drawdown": max_drawdown,
             "total_profit": total_profit,
             "total_staked": total_staked,
@@ -147,282 +275,8 @@ class BacktestMetrics:
         }
 EOF
 
-CREA_FILE analysis/report_generator.py
-import os
-
-
-class ReportGenerator:
-
-    def __init__(self):
-
-        os.makedirs("outputs", exist_ok=True)
-
-    def _line_svg(self, values, title, color="#2c7be5"):
-
-        if not values:
-            return f"<h3>{title}</h3><p>No data</p>"
-
-        width = 900
-        height = 260
-        padding = 30
-
-        min_v = min(values)
-        max_v = max(values)
-
-        if max_v == min_v:
-            max_v += 1
-
-        points = []
-
-        for index, value in enumerate(values):
-
-            x = padding + index * (width - 2 * padding) / max(len(values) - 1, 1)
-            y = height - padding - (
-                (value - min_v) / (max_v - min_v)
-            ) * (height - 2 * padding)
-
-            points.append(f"{x},{y}")
-
-        polyline = " ".join(points)
-
-        return (
-            f"<h3>{title}</h3>"
-            f"<svg width='{width}' height='{height}' "
-            f"style='background:#fff;border:1px solid #ccc;border-radius:8px'>"
-            f"<polyline fill='none' stroke='{color}' stroke-width='2' "
-            f"points='{polyline}' />"
-            f"</svg>"
-        )
-
-    def generate(self, metrics, ranked_df=None):
-
-        html = []
-        html.append("<html><head><title>Football Quant Report</title></head><body>")
-        html.append("<h1>Football Quant Engine Report</h1>")
-
-        if metrics:
-            html.append("<h2>Metrics</h2>")
-            html.append("<ul>")
-            html.append(f"<li>ROI: {metrics.get('roi', 0):.4f}</li>")
-            html.append(f"<li>Yield: {metrics.get('yield', 0):.4f}</li>")
-            html.append(f"<li>Hit Rate: {metrics.get('hit_rate', 0):.4f}</li>")
-            html.append(f"<li>Brier Score: {metrics.get('brier_score', 0):.4f}</li>")
-            html.append(f"<li>Log Loss: {metrics.get('log_loss', 0):.4f}</li>")
-            html.append(f"<li>Total Profit: {metrics.get('total_profit', 0):.4f}</li>")
-            html.append(f"<li>Total Staked: {metrics.get('total_staked', 0):.4f}</li>")
-            html.append(f"<li>Total Bets: {metrics.get('total_bets', 0)}</li>")
-            html.append(f"<li>Max Drawdown: {metrics.get('max_drawdown', 0):.4f}</li>")
-            html.append("</ul>")
-
-            html.append(
-                self._line_svg(
-                    metrics.get("bankroll_history", []),
-                    "Bankroll / Equity Curve",
-                    "#2c7be5",
-                )
-            )
-            html.append(
-                self._line_svg(
-                    metrics.get("accuracy_history", []),
-                    "Accuracy Curve",
-                    "#28a745",
-                )
-            )
-
-        if ranked_df is not None and not ranked_df.empty:
-            html.append("<h2>Ranked Value Bets</h2>")
-            html.append("<table border='1' cellpadding='6' cellspacing='0'>")
-            html.append("<tr>")
-            for col in ranked_df.columns:
-                html.append(f"<th>{col}</th>")
-            html.append("</tr>")
-
-            for _, row in ranked_df.iterrows():
-                html.append("<tr>")
-                for col in ranked_df.columns:
-                    html.append(f"<td>{row[col]}</td>")
-                html.append("</tr>")
-
-            html.append("</table>")
-
-        html.append("</body></html>")
-
-        with open("outputs/advanced_report.html", "w", encoding="utf-8") as f:
-            f.write("\n".join(html))
-EOF
-
-CREA_FILE training/import_validator.py
-import pandas as pd
-
-
-class ImportValidator:
-
-    MATCHES_REQUIRED_COLUMNS = [
-        "fixture_id",
-        "league",
-        "season",
-        "home",
-        "away",
-        "match_date",
-        "home_goals",
-        "away_goals",
-        "status",
-    ]
-
-    ODDS_REQUIRED_COLUMNS = [
-        "fixture_id",
-        "home_odds",
-        "draw_odds",
-        "away_odds",
-    ]
-
-    def validate_matches_df(self, df):
-
-        missing = [
-            col for col in self.MATCHES_REQUIRED_COLUMNS
-            if col not in df.columns
-        ]
-
-        return {
-            "ok": len(missing) == 0,
-            "missing_columns": missing,
-            "row_count": len(df.index),
-        }
-
-    def validate_odds_df(self, df):
-
-        missing = [
-            col for col in self.ODDS_REQUIRED_COLUMNS
-            if col not in df.columns
-        ]
-
-        return {
-            "ok": len(missing) == 0,
-            "missing_columns": missing,
-            "row_count": len(df.index),
-        }
-
-    def load_and_validate_matches_csv(self, filepath):
-
-        df = pd.read_csv(filepath)
-        result = self.validate_matches_df(df)
-        result["dataframe"] = df
-        return result
-
-    def load_and_validate_odds_csv(self, filepath):
-
-        df = pd.read_csv(filepath)
-        result = self.validate_odds_df(df)
-        result["dataframe"] = df
-        return result
-EOF
-
-CREA_FILE training/csv_importer.py
-from database.fixtures_repository import FixturesRepository
-from database.odds_repository import OddsRepository
-from training.import_validator import ImportValidator
-
-
-class CsvImporter:
-
-    def __init__(self):
-
-        self.fixtures_repo = FixturesRepository()
-        self.odds_repo = OddsRepository()
-        self.validator = ImportValidator()
-
-    def import_matches(self, filepath):
-
-        validation = self.validator.load_and_validate_matches_csv(filepath)
-
-        if not validation["ok"]:
-            raise ValueError(
-                f"Missing columns in matches CSV: {validation['missing_columns']}"
-            )
-
-        df = validation["dataframe"]
-
-        imported = 0
-
-        for _, row in df.iterrows():
-            self.fixtures_repo.save_fixture(
-                {
-                    "fixture_id": int(row["fixture_id"]),
-                    "league": row["league"],
-                    "season": int(row["season"]),
-                    "home": row["home"],
-                    "away": row["away"],
-                    "match_date": row["match_date"],
-                    "home_goals": int(row["home_goals"]),
-                    "away_goals": int(row["away_goals"]),
-                    "status": row["status"],
-                }
-            )
-            imported += 1
-
-        return {
-            "type": "matches",
-            "imported_rows": imported,
-            "row_count": validation["row_count"],
-        }
-
-    def import_odds(self, filepath):
-
-        validation = self.validator.load_and_validate_odds_csv(filepath)
-
-        if not validation["ok"]:
-            raise ValueError(
-                f"Missing columns in odds CSV: {validation['missing_columns']}"
-            )
-
-        df = validation["dataframe"]
-
-        imported = 0
-
-        for _, row in df.iterrows():
-            self.odds_repo.save_odds(
-                fixture_id=int(row["fixture_id"]),
-                home_odds=float(row["home_odds"]),
-                draw_odds=float(row["draw_odds"]),
-                away_odds=float(row["away_odds"]),
-            )
-            imported += 1
-
-        return {
-            "type": "odds",
-            "imported_rows": imported,
-            "row_count": validation["row_count"],
-        }
-EOF
-
-CREA_FILE engine/offline_controller.py
-from engine.offline_engine import OfflineEngine
-
-
-class OfflineController:
-
-    def __init__(self):
-
-        self.engine = OfflineEngine()
-
-    def import_csv_data(self, matches_csv=None, odds_csv=None):
-
-        results = {}
-
-        if matches_csv:
-            results["matches"] = self.engine.csv_importer.import_matches(matches_csv)
-
-        if odds_csv:
-            results["odds"] = self.engine.csv_importer.import_odds(odds_csv)
-
-        return results
-
-    def run_reports(self, ranked_df=None):
-
-        return self.engine.run_reports(ranked_df=ranked_df)
-EOF
-
 CREA_FILE ui/offline_import_window.py
+import pandas as pd
 from PySide6.QtWidgets import (
     QFileDialog,
     QGridLayout,
@@ -430,11 +284,14 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
     QTextEdit,
     QWidget,
 )
 
 from engine.offline_controller import OfflineController
+from training.import_validator import ImportValidator
 
 
 class OfflineImportWindow(QWidget):
@@ -446,19 +303,26 @@ class OfflineImportWindow(QWidget):
         self.setWindowTitle("Offline CSV Import Wizard")
 
         self.controller = OfflineController()
+        self.validator = ImportValidator()
 
         self.matches_path = QLineEdit()
         self.odds_path = QLineEdit()
 
         self.matches_browse = QPushButton("Browse Matches CSV")
         self.odds_browse = QPushButton("Browse Odds CSV")
+        self.preview_button = QPushButton("Preview CSV")
         self.import_button = QPushButton("Validate + Import")
 
         self.output = QTextEdit()
         self.output.setReadOnly(True)
 
+        self.preview_table = QTableWidget()
+        self.preview_table.setRowCount(0)
+        self.preview_table.setColumnCount(0)
+
         self.matches_browse.clicked.connect(self.browse_matches)
         self.odds_browse.clicked.connect(self.browse_odds)
+        self.preview_button.clicked.connect(self.preview_data)
         self.import_button.clicked.connect(self.import_data)
 
         layout = QGridLayout()
@@ -470,9 +334,14 @@ class OfflineImportWindow(QWidget):
         layout.addWidget(self.odds_path, 1, 1)
         layout.addWidget(self.odds_browse, 1, 2)
 
-        layout.addWidget(self.import_button, 2, 0, 1, 3)
-        layout.addWidget(QLabel("Wizard Log"), 3, 0, 1, 3)
-        layout.addWidget(self.output, 4, 0, 1, 3)
+        layout.addWidget(self.preview_button, 2, 0, 1, 1)
+        layout.addWidget(self.import_button, 2, 1, 1, 2)
+
+        layout.addWidget(QLabel("Preview"), 3, 0, 1, 3)
+        layout.addWidget(self.preview_table, 4, 0, 1, 3)
+
+        layout.addWidget(QLabel("Wizard Log"), 5, 0, 1, 3)
+        layout.addWidget(self.output, 6, 0, 1, 3)
 
         self.setLayout(layout)
 
@@ -499,6 +368,60 @@ class OfflineImportWindow(QWidget):
 
         if path:
             self.odds_path.setText(path)
+
+    def _render_preview(self, df):
+
+        if df is None or df.empty:
+            self.preview_table.setRowCount(0)
+            self.preview_table.setColumnCount(0)
+            return
+
+        preview_df = df.head(10).copy()
+
+        self.preview_table.setColumnCount(len(preview_df.columns))
+        self.preview_table.setRowCount(len(preview_df.index))
+        self.preview_table.setHorizontalHeaderLabels(list(preview_df.columns))
+
+        for row_index in range(len(preview_df.index)):
+            for col_index, col_name in enumerate(preview_df.columns):
+                value = preview_df.iloc[row_index][col_name]
+                self.preview_table.setItem(
+                    row_index,
+                    col_index,
+                    QTableWidgetItem(str(value)),
+                )
+
+        self.preview_table.resizeColumnsToContents()
+
+    def preview_data(self):
+
+        try:
+            messages = []
+
+            matches_csv = self.matches_path.text().strip() or None
+            odds_csv = self.odds_path.text().strip() or None
+
+            if matches_csv:
+                result = self.validator.load_and_validate_matches_csv(matches_csv)
+                messages.append(f"Matches validation: {result['ok']}")
+                messages.append(f"Matches rows: {result['row_count']}")
+                if result["missing_columns"]:
+                    messages.append(f"Missing matches columns: {result['missing_columns']}")
+                self._render_preview(result["dataframe"])
+
+            if odds_csv and not matches_csv:
+                result = self.validator.load_and_validate_odds_csv(odds_csv)
+                messages.append(f"Odds validation: {result['ok']}")
+                messages.append(f"Odds rows: {result['row_count']}")
+                if result["missing_columns"]:
+                    messages.append(f"Missing odds columns: {result['missing_columns']}")
+                self._render_preview(result["dataframe"])
+
+            self.output.setPlainText("\n".join(messages) if messages else "No file selected.")
+
+        except Exception as exc:
+            self.output.setPlainText(str(exc))
+            QMessageBox.critical(self, "Preview Error", str(exc))
 
     def import_data(self):
 
@@ -582,12 +505,6 @@ class DashboardView(QWidget):
         self.sort_ascending = True
         self.last_csv_path = "outputs/dashboard_export.csv"
         self.last_excel_path = "outputs/dashboard_export.xlsx"
-        self.run_history = []
-        self.bankroll = 100.0
-        self.total_profit = 0.0
-        self.total_staked = 0.0
-        self.total_bets = 0
-        self.total_wins = 0
 
         self.title = QLabel("Football Quant Engine Dashboard")
 
@@ -602,6 +519,7 @@ class DashboardView(QWidget):
         self.yield_card = DashboardCard("Yield", "0.00")
         self.hit_rate_card = DashboardCard("Hit Rate", "0.00")
         self.runs_card = DashboardCard("Runs", "0")
+        self.max_dd_card = DashboardCard("Max Drawdown", "0.00")
 
         cards_row_1 = QHBoxLayout()
         cards_row_1.addWidget(self.total_bets_card)
@@ -616,6 +534,7 @@ class DashboardView(QWidget):
         cards_row_2.addWidget(self.yield_card)
         cards_row_2.addWidget(self.hit_rate_card)
         cards_row_2.addWidget(self.runs_card)
+        cards_row_2.addWidget(self.max_dd_card)
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search...")
@@ -662,6 +581,9 @@ class DashboardView(QWidget):
         self.metrics_output = QTextEdit()
         self.metrics_output.setReadOnly(True)
 
+        self.charts_output = QTextEdit()
+        self.charts_output.setReadOnly(True)
+
         self.inline_status = QLabel("Dashboard ready.")
 
         self.tabs = QTabWidget()
@@ -690,10 +612,17 @@ class DashboardView(QWidget):
         metrics_layout.addWidget(self.metrics_output)
         metrics_tab.setLayout(metrics_layout)
 
+        charts_tab = QWidget()
+        charts_layout = QVBoxLayout()
+        charts_layout.addWidget(QLabel("Charts / Equity"))
+        charts_layout.addWidget(self.charts_output)
+        charts_tab.setLayout(charts_layout)
+
         self.tabs.addTab(results_tab, "Results")
         self.tabs.addTab(log_tab, "Log")
         self.tabs.addTab(history_tab, "History")
         self.tabs.addTab(metrics_tab, "Metrics")
+        self.tabs.addTab(charts_tab, "Charts")
 
         main_layout = QVBoxLayout()
         main_layout.addWidget(self.title)
@@ -704,8 +633,6 @@ class DashboardView(QWidget):
         main_layout.addWidget(self.inline_status)
 
         self.setLayout(main_layout)
-
-        self.refresh_metrics_panel()
 
     def set_status(self, text):
 
@@ -732,6 +659,47 @@ class DashboardView(QWidget):
         self.filter_card.set_value(0)
         self.inline_status.setText("Dashboard cleared.")
 
+    def set_metrics(self, metrics):
+
+        if not metrics:
+            self.metrics_output.setPlainText("No metrics available.")
+            return
+
+        self.bankroll_card.set_value(
+            f"{(metrics.get('bankroll_history') or [100])[-1]:.2f}"
+        )
+        self.roi_card.set_value(f"{metrics.get('roi', 0):.2%}")
+        self.yield_card.set_value(f"{metrics.get('yield', 0):.2%}")
+        self.hit_rate_card.set_value(f"{metrics.get('hit_rate', 0):.2%}")
+        self.runs_card.set_value(metrics.get("total_bets", 0))
+        self.max_dd_card.set_value(f"{metrics.get('max_drawdown', 0):.2%}")
+
+        text = []
+        text.append(f"Bankroll: {(metrics.get('bankroll_history') or [100])[-1]:.2f}")
+        text.append(f"Total Profit: {metrics.get('total_profit', 0):.2f}")
+        text.append(f"Total Staked: {metrics.get('total_staked', 0):.2f}")
+        text.append(f"ROI: {metrics.get('roi', 0):.2%}")
+        text.append(f"Yield: {metrics.get('yield', 0):.2%}")
+        text.append(f"Hit Rate: {metrics.get('hit_rate', 0):.2%}")
+        text.append(f"Total Bets: {metrics.get('total_bets', 0)}")
+        text.append(f"Max Drawdown: {metrics.get('max_drawdown', 0):.2%}")
+        text.append(f"Brier Score: {metrics.get('brier_score', 0):.4f}")
+        text.append(f"Log Loss: {metrics.get('log_loss', 0):.4f}")
+
+        self.metrics_output.setPlainText("\n".join(text))
+
+        chart_lines = []
+        chart_lines.append("Bankroll History:")
+        chart_lines.append(str(metrics.get("bankroll_history", [])))
+        chart_lines.append("")
+        chart_lines.append("Accuracy History:")
+        chart_lines.append(str(metrics.get("accuracy_history", [])))
+        chart_lines.append("")
+        chart_lines.append("Drawdown History:")
+        chart_lines.append(str(metrics.get("drawdown_history", [])))
+
+        self.charts_output.setPlainText("\n".join(chart_lines))
+
     def set_results_dataframe(self, df):
 
         if df is None or getattr(df, "empty", False):
@@ -741,7 +709,6 @@ class DashboardView(QWidget):
         self.current_df = df.copy()
         self.filtered_df = df.copy()
         self.render_dataframe(self.filtered_df)
-        self.register_run(df)
 
     def set_results_from_records(self, records):
 
@@ -886,61 +853,6 @@ class DashboardView(QWidget):
         webbrowser.open(f"file://{path.resolve()}")
         self.append_log(f"Excel opened: {path}")
         self.inline_status.setText(f"Excel opened: {path}")
-
-    def register_run(self, df):
-
-        rows = len(df.index)
-
-        self.total_bets += rows
-        self.total_staked += float(rows)
-
-        simulated_hit_rate = 0.55
-        wins = int(round(rows * simulated_hit_rate))
-        losses = rows - wins
-        profit = wins - losses
-
-        self.total_wins += wins
-        self.total_profit += profit
-        self.bankroll += profit
-
-        run_summary = (
-            f"Run #{len(self.run_history) + 1}: "
-            f"rows={rows}, wins={wins}, losses={losses}, profit={profit:.2f}"
-        )
-        self.run_history.append(run_summary)
-
-        self.runs_card.set_value(len(self.run_history))
-        self.bankroll_card.set_value(f"{self.bankroll:.2f}")
-
-        roi = self.total_profit / self.total_staked if self.total_staked else 0.0
-        yield_value = roi
-        hit_rate = self.total_wins / self.total_bets if self.total_bets else 0.0
-
-        self.roi_card.set_value(f"{roi:.2%}")
-        self.yield_card.set_value(f"{yield_value:.2%}")
-        self.hit_rate_card.set_value(f"{hit_rate:.2%}")
-
-        self.history_output.setPlainText("\n".join(self.run_history))
-        self.refresh_metrics_panel()
-
-    def refresh_metrics_panel(self):
-
-        roi = self.total_profit / self.total_staked if self.total_staked else 0.0
-        yield_value = roi
-        hit_rate = self.total_wins / self.total_bets if self.total_bets else 0.0
-
-        text = []
-        text.append(f"Bankroll: {self.bankroll:.2f}")
-        text.append(f"Total Profit: {self.total_profit:.2f}")
-        text.append(f"Total Staked: {self.total_staked:.2f}")
-        text.append(f"ROI: {roi:.2%}")
-        text.append(f"Yield: {yield_value:.2%}")
-        text.append(f"Hit Rate: {hit_rate:.2%}")
-        text.append(f"Runs: {len(self.run_history)}")
-        text.append(f"Total Bets: {self.total_bets}")
-        text.append(f"Total Wins: {self.total_wins}")
-
-        self.metrics_output.setPlainText("\n".join(text))
 EOF
 
 CREA_FILE tests/test_import_validator.py
@@ -952,6 +864,51 @@ def test_import_validator_class_exists():
     validator = ImportValidator()
 
     assert isinstance(validator, ImportValidator)
+EOF
+
+CREA_FILE tests/test_backtest_engine.py
+from training.backtest_engine import BacktestEngine
+
+
+def test_backtest_engine_class_exists():
+
+    engine = BacktestEngine()
+
+    assert isinstance(engine, BacktestEngine)
+EOF
+
+CREA_FILE tests/test_backtest_metrics.py
+import pandas as pd
+
+from training.backtest_metrics import BacktestMetrics
+
+
+def test_backtest_metrics_runs():
+
+    df = pd.DataFrame(
+        [
+            {
+                "home_prob": 0.60,
+                "draw_prob": 0.20,
+                "away_prob": 0.20,
+                "home_goals": 2,
+                "away_goals": 1,
+                "actual_home_win": 1,
+                "actual_draw": 0,
+                "actual_away_win": 0,
+                "home_odds": 2.10,
+                "draw_odds": 3.20,
+                "away_odds": 3.80,
+            }
+        ]
+    )
+
+    metrics = BacktestMetrics().calculate(df)
+
+    assert "roi" in metrics
+    assert "yield" in metrics
+    assert "hit_rate" in metrics
+    assert "max_drawdown" in metrics
 EOF
 
 CREA_FILE tests/test_dashboard_view_ui.py
@@ -970,4 +927,3 @@ def test_dashboard_view_import():
 EOF
 
 FIX_WHITESPACE
-

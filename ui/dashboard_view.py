@@ -1,13 +1,21 @@
+from pathlib import Path
+
+import pandas as pd
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
+    QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
+
+from export.csv_exporter import CsvExporter
+from export.excel_exporter import ExcelExporter
 
 
 class DashboardCard(QFrame):
@@ -38,6 +46,10 @@ class DashboardView(QWidget):
 
         super().__init__()
 
+        self.current_df = pd.DataFrame()
+        self.filtered_df = pd.DataFrame()
+        self.sort_ascending = True
+
         self.title = QLabel("Football Quant Engine Dashboard")
 
         self.total_bets_card = DashboardCard("Value Bets", "0")
@@ -49,6 +61,30 @@ class DashboardView(QWidget):
         cards_layout.addWidget(self.status_card)
         cards_layout.addWidget(self.rows_card)
 
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search...")
+        self.search_input.textChanged.connect(self.apply_filters)
+
+        self.refresh_button = QPushButton("Refresh")
+        self.refresh_button.clicked.connect(self.refresh_table)
+
+        self.sort_button = QPushButton("Toggle Sort")
+        self.sort_button.clicked.connect(self.toggle_sort)
+
+        self.export_csv_button = QPushButton("Export CSV")
+        self.export_csv_button.clicked.connect(self.export_csv)
+
+        self.export_excel_button = QPushButton("Export Excel")
+        self.export_excel_button.clicked.connect(self.export_excel)
+
+        controls_layout = QHBoxLayout()
+        controls_layout.addWidget(QLabel("Filter"))
+        controls_layout.addWidget(self.search_input)
+        controls_layout.addWidget(self.refresh_button)
+        controls_layout.addWidget(self.sort_button)
+        controls_layout.addWidget(self.export_csv_button)
+        controls_layout.addWidget(self.export_excel_button)
+
         self.results_table = QTableWidget()
         self.results_table.setColumnCount(0)
         self.results_table.setRowCount(0)
@@ -59,6 +95,7 @@ class DashboardView(QWidget):
         main_layout = QVBoxLayout()
         main_layout.addWidget(self.title)
         main_layout.addLayout(cards_layout)
+        main_layout.addLayout(controls_layout)
         main_layout.addWidget(QLabel("Results"))
         main_layout.addWidget(self.results_table)
         main_layout.addWidget(QLabel("Output Log"))
@@ -80,6 +117,8 @@ class DashboardView(QWidget):
 
     def clear_table(self):
 
+        self.current_df = pd.DataFrame()
+        self.filtered_df = pd.DataFrame()
         self.results_table.setRowCount(0)
         self.results_table.setColumnCount(0)
         self.rows_card.set_value(0)
@@ -87,12 +126,30 @@ class DashboardView(QWidget):
 
     def set_results_dataframe(self, df):
 
-        if df is None:
+        if df is None or getattr(df, "empty", False):
             self.clear_table()
             return
 
-        if getattr(df, "empty", False):
+        self.current_df = df.copy()
+        self.filtered_df = df.copy()
+        self.render_dataframe(self.filtered_df)
+
+    def set_results_from_records(self, records):
+
+        if not records:
             self.clear_table()
+            return
+
+        df = pd.DataFrame(records)
+        self.set_results_dataframe(df)
+
+    def render_dataframe(self, df):
+
+        if df is None or df.empty:
+            self.results_table.setRowCount(0)
+            self.results_table.setColumnCount(0)
+            self.rows_card.set_value(0)
+            self.total_bets_card.set_value(0)
             return
 
         columns = list(df.columns)
@@ -111,24 +168,71 @@ class DashboardView(QWidget):
         self.rows_card.set_value(rows)
         self.total_bets_card.set_value(rows)
 
-    def set_results_from_records(self, records):
+    def apply_filters(self):
 
-        if not records:
-            self.clear_table()
+        if self.current_df is None or self.current_df.empty:
+            self.render_dataframe(pd.DataFrame())
             return
 
-        columns = list(records[0].keys())
-        rows = len(records)
+        query = self.search_input.text().strip().lower()
 
-        self.results_table.setColumnCount(len(columns))
-        self.results_table.setRowCount(rows)
-        self.results_table.setHorizontalHeaderLabels(columns)
+        if not query:
+            filtered = self.current_df.copy()
+        else:
+            mask = self.current_df.astype(str).apply(
+                lambda row: row.str.lower().str.contains(query, na=False).any(),
+                axis=1,
+            )
+            filtered = self.current_df[mask].copy()
 
-        for row_index, row_data in enumerate(records):
-            for col_index, col_name in enumerate(columns):
-                value = row_data.get(col_name, "")
-                item = QTableWidgetItem(str(value))
-                self.results_table.setItem(row_index, col_index, item)
+        self.filtered_df = filtered
+        self.render_dataframe(self.filtered_df)
 
-        self.rows_card.set_value(rows)
-        self.total_bets_card.set_value(rows)
+    def refresh_table(self):
+
+        self.apply_filters()
+        self.append_log("Dashboard refreshed.")
+
+    def toggle_sort(self):
+
+        if self.filtered_df is None or self.filtered_df.empty:
+            return
+
+        first_column = self.filtered_df.columns[0]
+        self.filtered_df = self.filtered_df.sort_values(
+            by=first_column,
+            ascending=self.sort_ascending,
+        )
+        self.sort_ascending = not self.sort_ascending
+        self.render_dataframe(self.filtered_df)
+        self.append_log("Sort toggled.")
+
+    def export_csv(self):
+
+        if self.filtered_df is None or self.filtered_df.empty:
+            self.append_log("CSV export skipped: no data.")
+            return
+
+        Path("outputs").mkdir(parents=True, exist_ok=True)
+        filepath = "outputs/dashboard_export.csv"
+
+        CsvExporter().export_value_bets(
+            filepath,
+            self.filtered_df.to_dict("records"),
+        )
+        self.append_log(f"CSV exported: {filepath}")
+
+    def export_excel(self):
+
+        if self.filtered_df is None or self.filtered_df.empty:
+            self.append_log("Excel export skipped: no data.")
+            return
+
+        Path("outputs").mkdir(parents=True, exist_ok=True)
+        filepath = "outputs/dashboard_export.xlsx"
+
+        ExcelExporter().export_value_bets(
+            filepath,
+            self.filtered_df.to_dict("records"),
+        )
+        self.append_log(f"Excel exported: {filepath}")

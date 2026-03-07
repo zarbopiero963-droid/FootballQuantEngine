@@ -49,17 +49,25 @@ class DashboardView(QWidget):
         self.current_df = pd.DataFrame()
         self.filtered_df = pd.DataFrame()
         self.sort_ascending = True
+        self.last_csv_path = "outputs/dashboard_export.csv"
+        self.last_excel_path = "outputs/dashboard_export.xlsx"
 
         self.title = QLabel("Football Quant Engine Dashboard")
 
         self.total_bets_card = DashboardCard("Value Bets", "0")
         self.status_card = DashboardCard("Last Status", "Ready")
         self.rows_card = DashboardCard("Rows", "0")
+        self.columns_card = DashboardCard("Columns", "0")
+        self.filter_card = DashboardCard("Filtered", "0")
 
-        cards_layout = QHBoxLayout()
-        cards_layout.addWidget(self.total_bets_card)
-        cards_layout.addWidget(self.status_card)
-        cards_layout.addWidget(self.rows_card)
+        cards_row_1 = QHBoxLayout()
+        cards_row_1.addWidget(self.total_bets_card)
+        cards_row_1.addWidget(self.status_card)
+        cards_row_1.addWidget(self.rows_card)
+
+        cards_row_2 = QHBoxLayout()
+        cards_row_2.addWidget(self.columns_card)
+        cards_row_2.addWidget(self.filter_card)
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search...")
@@ -77,6 +85,12 @@ class DashboardView(QWidget):
         self.export_excel_button = QPushButton("Export Excel")
         self.export_excel_button.clicked.connect(self.export_excel)
 
+        self.open_csv_button = QPushButton("Open CSV")
+        self.open_csv_button.clicked.connect(self.open_csv)
+
+        self.open_excel_button = QPushButton("Open Excel")
+        self.open_excel_button.clicked.connect(self.open_excel)
+
         controls_layout = QHBoxLayout()
         controls_layout.addWidget(QLabel("Filter"))
         controls_layout.addWidget(self.search_input)
@@ -84,6 +98,8 @@ class DashboardView(QWidget):
         controls_layout.addWidget(self.sort_button)
         controls_layout.addWidget(self.export_csv_button)
         controls_layout.addWidget(self.export_excel_button)
+        controls_layout.addWidget(self.open_csv_button)
+        controls_layout.addWidget(self.open_excel_button)
 
         self.results_table = QTableWidget()
         self.results_table.setColumnCount(0)
@@ -92,20 +108,25 @@ class DashboardView(QWidget):
         self.log_output = QTextEdit()
         self.log_output.setReadOnly(True)
 
+        self.inline_status = QLabel("Dashboard ready.")
+
         main_layout = QVBoxLayout()
         main_layout.addWidget(self.title)
-        main_layout.addLayout(cards_layout)
+        main_layout.addLayout(cards_row_1)
+        main_layout.addLayout(cards_row_2)
         main_layout.addLayout(controls_layout)
         main_layout.addWidget(QLabel("Results"))
         main_layout.addWidget(self.results_table)
         main_layout.addWidget(QLabel("Output Log"))
         main_layout.addWidget(self.log_output)
+        main_layout.addWidget(self.inline_status)
 
         self.setLayout(main_layout)
 
     def set_status(self, text):
 
         self.status_card.set_value(text)
+        self.inline_status.setText(f"Status: {text}")
 
     def append_log(self, text):
 
@@ -123,6 +144,9 @@ class DashboardView(QWidget):
         self.results_table.setColumnCount(0)
         self.rows_card.set_value(0)
         self.total_bets_card.set_value(0)
+        self.columns_card.set_value(0)
+        self.filter_card.set_value(0)
+        self.inline_status.setText("Dashboard cleared.")
 
     def set_results_dataframe(self, df):
 
@@ -150,6 +174,9 @@ class DashboardView(QWidget):
             self.results_table.setColumnCount(0)
             self.rows_card.set_value(0)
             self.total_bets_card.set_value(0)
+            self.columns_card.set_value(0)
+            self.filter_card.set_value(0)
+            self.inline_status.setText("No rows to display.")
             return
 
         columns = list(df.columns)
@@ -165,8 +192,14 @@ class DashboardView(QWidget):
                 item = QTableWidgetItem(str(value))
                 self.results_table.setItem(row_index, col_index, item)
 
+        self.results_table.resizeColumnsToContents()
+        self.results_table.resizeRowsToContents()
+
         self.rows_card.set_value(rows)
         self.total_bets_card.set_value(rows)
+        self.columns_card.set_value(len(columns))
+        self.filter_card.set_value(rows)
+        self.inline_status.setText(f"Showing {rows} rows and {len(columns)} columns.")
 
     def apply_filters(self):
 
@@ -192,6 +225,7 @@ class DashboardView(QWidget):
 
         self.apply_filters()
         self.append_log("Dashboard refreshed.")
+        self.inline_status.setText("Dashboard refreshed.")
 
     def toggle_sort(self):
 
@@ -206,33 +240,64 @@ class DashboardView(QWidget):
         self.sort_ascending = not self.sort_ascending
         self.render_dataframe(self.filtered_df)
         self.append_log("Sort toggled.")
+        self.inline_status.setText(f"Sorted by {first_column}.")
 
     def export_csv(self):
 
         if self.filtered_df is None or self.filtered_df.empty:
             self.append_log("CSV export skipped: no data.")
+            self.inline_status.setText("CSV export skipped.")
             return
 
         Path("outputs").mkdir(parents=True, exist_ok=True)
-        filepath = "outputs/dashboard_export.csv"
 
         CsvExporter().export_value_bets(
-            filepath,
+            self.last_csv_path,
             self.filtered_df.to_dict("records"),
         )
-        self.append_log(f"CSV exported: {filepath}")
+        self.append_log(f"CSV exported: {self.last_csv_path}")
+        self.inline_status.setText(f"CSV exported: {self.last_csv_path}")
 
     def export_excel(self):
 
         if self.filtered_df is None or self.filtered_df.empty:
             self.append_log("Excel export skipped: no data.")
+            self.inline_status.setText("Excel export skipped.")
             return
 
         Path("outputs").mkdir(parents=True, exist_ok=True)
-        filepath = "outputs/dashboard_export.xlsx"
 
         ExcelExporter().export_value_bets(
-            filepath,
+            self.last_excel_path,
             self.filtered_df.to_dict("records"),
         )
-        self.append_log(f"Excel exported: {filepath}")
+        self.append_log(f"Excel exported: {self.last_excel_path}")
+        self.inline_status.setText(f"Excel exported: {self.last_excel_path}")
+
+    def open_csv(self):
+
+        path = Path(self.last_csv_path)
+        if not path.exists():
+            self.append_log("Open CSV skipped: file not found.")
+            self.inline_status.setText("CSV file not found.")
+            return
+
+        import webbrowser
+
+        webbrowser.open(f"file://{path.resolve()}")
+        self.append_log(f"CSV opened: {path}")
+        self.inline_status.setText(f"CSV opened: {path}")
+
+    def open_excel(self):
+
+        path = Path(self.last_excel_path)
+        if not path.exists():
+            self.append_log("Open Excel skipped: file not found.")
+            self.inline_status.setText("Excel file not found.")
+            return
+
+        import webbrowser
+
+        webbrowser.open(f"file://{path.resolve()}")
+        self.append_log(f"Excel opened: {path}")
+        self.inline_status.setText(f"Excel opened: {path}")

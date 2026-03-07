@@ -20,7 +20,10 @@ class OfflineEngine:
 
     def run_offline_analysis(self, fixtures_df: pd.DataFrame):
         if fixtures_df is None or fixtures_df.empty:
-            return pd.DataFrame()
+            return {
+                "features": pd.DataFrame(),
+                "rows": 0,
+            }
 
         df = fixtures_df.copy()
 
@@ -36,7 +39,14 @@ class OfflineEngine:
             )
             df.loc[df["home_goals"] == df["away_goals"], "result"] = "D"
 
-        return df
+        features = df.copy()
+        features["goal_diff"] = features["home_goals"] - features["away_goals"]
+        features["total_goals"] = features["home_goals"] + features["away_goals"]
+
+        return {
+            "features": features,
+            "rows": len(features.index),
+        }
 
     def run_reports(self):
         return True

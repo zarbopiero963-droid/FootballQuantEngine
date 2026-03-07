@@ -42,16 +42,30 @@ python app/cli.py
 ## Build locale
 
 python -m PyInstaller football_quant_engine.spec
+EOF
 
-## Build GitHub
+CREA_FILE LICENSE
+MIT License
 
-Workflow:
+Copyright (c) 2026
 
-.github/workflows/build.yml
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-Artifact atteso:
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-FootballQuantEngine-Windows.zip
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 EOF
 
 CREA_FILE requirements.txt
@@ -126,155 +140,6 @@ coll = COLLECT(
     upx=False,
     name="FootballQuantEngine",
 )
-EOF
-
-CREA_FILE LICENSE
-MIT License
-
-Copyright (c) 2026
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-EOF
-
-CREA_FILE CONTRIBUTING.md
-# Contributing to Football Quant Engine
-
-Thanks for your interest in contributing.
-
-## Recommended workflow
-
-1. Fork the repository
-2. Create a new branch
-3. Make your changes
-4. Run lint and tests
-5. Open a pull request
-
-## Code style
-
-This project uses:
-
-- black
-- isort
-- ruff
-- pytest
-
-Before submitting changes, run:
-
-python -m pytest -q
-ruff check .
-black --check .
-isort --check-only .
-
-## Suggested contribution areas
-
-- mathematical models
-- offline engine improvements
-- CSV import/export
-- UI improvements
-- reporting
-- testing
-- documentation
-EOF
-
-CREA_FILE .editorconfig
-root = true
-
-[*]
-charset = utf-8
-end_of_line = lf
-insert_final_newline = true
-indent_style = space
-indent_size = 4
-trim_trailing_whitespace = true
-
-[*.md]
-trim_trailing_whitespace = false
-EOF
-
-CREA_FILE tests/test_readme_alignment.py
-from pathlib import Path
-
-
-def test_readme_exists_and_not_empty():
-
-    readme = Path("README.md")
-
-    assert readme.exists()
-
-    content = readme.read_text(encoding="utf-8")
-
-    assert len(content.strip()) > 0
-    assert "Football Quant Engine" in content
-EOF
-
-CREA_FILE tests/test_requirements_alignment.py
-from pathlib import Path
-
-
-def test_requirements_contains_core_dependencies():
-
-    requirements = Path("requirements.txt")
-
-    assert requirements.exists()
-
-    content = requirements.read_text(encoding="utf-8")
-
-    required = [
-        "requests",
-        "pandas",
-        "numpy",
-        "scipy",
-        "scikit-learn",
-        "matplotlib",
-        "PySide6",
-        "openpyxl",
-        "pytest",
-        "black",
-        "isort",
-        "ruff",
-        "pyinstaller",
-    ]
-
-    for item in required:
-        assert item in content
-EOF
-
-CREA_FILE tests/test_spec_file.py
-from pathlib import Path
-
-
-def test_spec_file_exists():
-
-    spec = Path("football_quant_engine.spec")
-
-    assert spec.exists()
-EOF
-
-CREA_FILE tests/test_repo_files.py
-from pathlib import Path
-
-
-def test_repository_files_exist():
-
-    assert Path("LICENSE").exists()
-    assert Path("CONTRIBUTING.md").exists()
-    assert Path(".editorconfig").exists()
 EOF
 
 FIX_WHITESPACE

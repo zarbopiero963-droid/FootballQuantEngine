@@ -1,4 +1,3 @@
-CREA_FILE tests/ui/test_offline_import_window_qt.py
 import pytest
 
 pytest.importorskip("PySide6")
@@ -6,111 +5,7 @@ pytest.importorskip("pytestqt")
 
 try:
     from PySide6.QtCore import Qt
-    from ui.offline_import_window import OfflineImportWindow
-except Exception as exc:
-    pytest.skip(
-        f"Qt UI not available in this environment: {exc}",
-        allow_module_level=True,
-    )
 
-
-class DummyOfflineImportWindow(OfflineImportWindow):
-    def import_data(self):
-        self.output.setPlainText("{'matches': {'imported_rows': 10}, 'odds': {'imported_rows': 10}}")
-
-
-def test_offline_import_window_opens(qtbot):
-    window = DummyOfflineImportWindow()
-    qtbot.addWidget(window)
-    window.show()
-
-    qtbot.waitUntil(lambda: window.isVisible(), timeout=5000)
-
-    assert window.windowTitle() != ""
-    assert window.import_button is not None
-
-
-def test_offline_import_window_import_button_updates_output(qtbot):
-    window = DummyOfflineImportWindow()
-    qtbot.addWidget(window)
-    window.show()
-
-    qtbot.mouseClick(window.import_button, Qt.LeftButton)
-
-    qtbot.waitUntil(
-        lambda: "imported_rows" in window.output.toPlainText(),
-        timeout=3000,
-    )
-
-    assert "matches" in window.output.toPlainText()
-    assert "odds" in window.output.toPlainText()
-EOF
-
-CREA_FILE tests/ui/test_outputs_view_qt.py
-import pytest
-
-pytest.importorskip("PySide6")
-pytest.importorskip("pytestqt")
-
-try:
-    from PySide6.QtCore import Qt
-    from ui.outputs_view import OutputsView
-except Exception as exc:
-    pytest.skip(
-        f"Qt UI not available in this environment: {exc}",
-        allow_module_level=True,
-    )
-
-
-class DummyOutputsView(OutputsView):
-    def run_reports(self):
-        pass
-
-    def open_dashboard(self):
-        return True
-
-    def open_report(self):
-        return True
-
-    def open_charts(self):
-        return True
-
-
-def test_outputs_view_opens(qtbot):
-    window = DummyOutputsView()
-    qtbot.addWidget(window)
-    window.show()
-
-    qtbot.waitUntil(lambda: window.isVisible(), timeout=5000)
-
-    assert window.windowTitle() != ""
-    assert window.run_reports_button is not None
-    assert window.open_dashboard_button is not None
-    assert window.open_report_button is not None
-    assert window.open_charts_button is not None
-
-
-def test_outputs_buttons_are_clickable(qtbot):
-    window = DummyOutputsView()
-    qtbot.addWidget(window)
-    window.show()
-
-    qtbot.mouseClick(window.run_reports_button, Qt.LeftButton)
-    qtbot.mouseClick(window.open_dashboard_button, Qt.LeftButton)
-    qtbot.mouseClick(window.open_report_button, Qt.LeftButton)
-    qtbot.mouseClick(window.open_charts_button, Qt.LeftButton)
-
-    assert True
-EOF
-
-CREA_FILE tests/ui/test_backtest_dashboard_integration_qt.py
-import pytest
-
-pytest.importorskip("PySide6")
-pytest.importorskip("pytestqt")
-
-try:
-    from PySide6.QtCore import Qt
     from ui.backtest_runner_window import BacktestRunnerWindow
     from ui.dashboard_view import DashboardView
 except Exception as exc:
@@ -216,28 +111,3 @@ def test_backtest_runner_output_is_filled(qtbot):
     )
 
     assert "Total Bets:" in window.output.toPlainText()
-EOF
-
-CREA_FILE tests/ui/test_outputs_and_import_smoke_qt.py
-import pytest
-
-pytest.importorskip("PySide6")
-pytest.importorskip("pytestqt")
-
-try:
-    from ui.offline_import_window import OfflineImportWindow
-    from ui.outputs_view import OutputsView
-except Exception as exc:
-    pytest.skip(
-        f"Qt UI not available in this environment: {exc}",
-        allow_module_level=True,
-    )
-
-
-def test_import_and_outputs_windows_importable():
-    assert OfflineImportWindow is not None
-    assert OutputsView is not None
-EOF
-
-FIX_WHITESPACE
-

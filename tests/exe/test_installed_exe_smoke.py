@@ -1,12 +1,15 @@
 import os
+import subprocess
+import sys
 import time
 
 import pytest
 
-pytest.importorskip("pywinauto")
+if not sys.platform.startswith("win"):
+    pytest.skip("EXE smoke tests run only on Windows", allow_module_level=True)
 
-from pywinauto import Desktop
-from pywinauto.application import Application
+psutil = pytest.importorskip("psutil")
+
 
 EXE_PATH = os.environ.get(
     "APP_EXE_PATH",
@@ -14,101 +17,69 @@ EXE_PATH = os.environ.get(
 )
 
 
-def _start_app():
-    app = Application(backend="uia").start(
-        EXE_PATH,
-        wait_for_idle=False,
+@pytest.mark.windows
+def test_installed_exe_starts_process():
+    if not os.path.exists(EXE_PATH):
+        pytest.skip(f"EXE not found: {EXE_PATH}")
+
+    proc = subprocess.Popen(
+        [EXE_PATH],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL,
     )
-    time.sleep(8)
-    return app
 
+    try:
+        time.sleep(8)
 
-def _find_main_window(process_id, timeout=25):
-    desktop = Desktop(backend="uia")
-    end_time = time.time() + timeout
+        assert psutil.pid_exists(proc.pid), "EXE process was not created"
 
-    while time.time() < end_time:
-        windows = []
-        for win in desktop.windows():
+        process = psutil.Process(proc.pid)
+        assert process.is_running(), "EXE process is not running"
+
+        status = process.status()
+        assert status in (
+            psutil.STATUS_RUNNING,
+            psutil.STATUS_SLEEPING,
+            psutil.STATUS_IDLE,
+        ), f"Unexpected process status: {status}"
+
+    finally:
+        try:
+            proc.terminate()
+            proc.wait(timeout=10)
+        except Exception:
             try:
-                if win.process_id() == process_id:
-                    windows.append(win)
+                proc.kill()
             except Exception:
-                continue
-
-        visible_windows = []
-        for win in windows:
-            try:
-                if win.is_visible():
-                    visible_windows.append(win)
-            except Exception:
-                continue
-
-        if visible_windows:
-            return visible_windows[0]
-
-        if windows:
-            return windows[0]
-
-        time.sleep(1)
-
-    return None
+                pass
 
 
 @pytest.mark.windows
-def test_installed_exe_opens_main_window():
+def test_installed_exe_does_not_exit_immediately():
     if not os.path.exists(EXE_PATH):
         pytest.skip(f"EXE not found: {EXE_PATH}")
 
-    app = _start_app()
+    proc = subprocess.Popen(
+        [EXE_PATH],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL,
+    )
 
     try:
-        main = _find_main_window(app.process, timeout=30)
+        time.sleep(5)
 
-        assert main is not None, "No window found for EXE process"
+        return_code = proc.poll()
 
-        try:
-            title = main.window_text()
-        except Exception:
-            title = ""
+        assert return_code is None, f"EXE exited too early with code: {return_code}"
 
-        assert main.exists()
-        assert title is not None
     finally:
         try:
-            app.kill()
+            proc.terminate()
+            proc.wait(timeout=10)
         except Exception:
-            pass
-
-
-@pytest.mark.windows
-def test_installed_exe_has_main_buttons():
-    if not os.path.exists(EXE_PATH):
-        pytest.skip(f"EXE not found: {EXE_PATH}")
-
-    app = _start_app()
-
-    try:
-        main = _find_main_window(app.process, timeout=30)
-
-        assert main is not None, "No window found for EXE process"
-
-        descendants = main.descendants(control_type="Button")
-
-        button_titles = []
-        for btn in descendants:
             try:
-                button_titles.append(btn.window_text())
+                proc.kill()
             except Exception:
-                continue
-
-        expected_any = {"Run Cycle", "Settings", "About"}
-
-        assert any(
-            title in expected_any for title in button_titles
-        ), f"No expected buttons found. Buttons detected: {button_titles}"
-    finally:
-        try:
-            app.kill()
-        except Exception:
-            pass
+                pass

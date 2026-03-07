@@ -1,2 +1,62 @@
-f
+APPEND requirements.txt
+pyinstaller
+EOF
 
+CREA_FILE tests/ui/test_main_window_qt.py
+import pytest
+pytestmark = [pytest.mark.ui]
+pytest.importorskip("PySide6")
+pytest.importorskip("pytestqt")
+
+try:
+from PySide6.QtCore import Qt
+from ui.main_window import MainWindow
+except Exception as exc:
+pytest.skip(
+f"Qt UI not available in this environment: {exc}",
+allow_module_level=True,
+)
+
+class DummyController:
+
+def _results(self):
+    return [
+        {
+            "fixture_id": "1",
+            "home_team": "TeamA",
+            "away_team": "TeamB",
+            "market": "home",
+            "probability": 0.58,
+            "fair_odds": 1.72,
+            "bookmaker_odds": 2.05,
+            "market_edge": 0.06,
+            "model_edge": 0.18,
+            "confidence": 0.72,
+            "agreement": 0.68,
+            "decision": "BET",
+        }
+    ]
+
+def run_once(self):
+    return self._results()
+
+def run_predictions(self):
+    return self._results()
+
+def test_ui_smoke(qtbot):
+
+window = MainWindow(DummyController())
+
+qtbot.addWidget(window)
+
+window.show()
+
+qtbot.waitUntil(lambda: window.isVisible(), timeout=3000)
+
+qtbot.mouseClick(window.run_button, Qt.LeftButton)
+
+assert window.dashboard is not None
+
+EOF
+
+FIX_WHITESPACE

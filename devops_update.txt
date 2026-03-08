@@ -1,710 +1,521 @@
 ############################################
-TEMPORAL BACKTEST GUARD 1
+MARKET EXPANSION ENGINE 1
 ############################################
 
-CREA_CARTELLA quant/temporal
-CREA_CARTELLA outputs/temporal
+CREA_CARTELLA quant/markets
 
-CREA_FILE quant/temporal/time_splitter.py
+CREA_FILE quant/markets/over_under_model.py
 from __future__ import annotations
 
-import pandas as pd
+import math
 
 
-class TimeSplitter:
+class OverUnderModel:
 
-    def ensure_datetime(self, df: pd.DataFrame, date_col: str = "match_date") -> pd.DataFrame:
-        if df is None or df.empty:
-            return pd.DataFrame()
+    def __init__(self, max_goals: int = 10):
+        self.max_goals = int(max_goals)
 
-        out = df.copy()
-        out[date_col] = pd.to_datetime(out[date_col], errors="coerce")
-        out = out.dropna(subset=[date_col]).sort_values(date_col).reset_index(drop=True)
-        return out
+    def _poisson_pmf(self, goals: int, lam: float) -> float:
+        lam = max(0.01, float(lam))
+        return (math.exp(-lam) * (lam ** goals)) / math.factorial(goals)
 
-    def split_train_validation_test(
-        self,
-        df: pd.DataFrame,
-        date_col: str = "match_date",
-        train_ratio: float = 0.6,
-        validation_ratio: float = 0.2,
-    ) -> dict:
-        out = self.ensure_datetime(df, date_col=date_col)
+    def _score_matrix(self, lambda_home: float, lambda_away: float) -> list[list[float]]:
+        matrix = []
 
-        if out.empty:
-            empty = pd.DataFrame()
+        home_probs = [self._poisson_pmf(i, lambda_home) for i in range(self.max_goals + 1)]
+        away_probs = [self._poisson_pmf(i, lambda_away) for i in range(self.max_goals + 1)]
+
+        home_total = sum(home_probs) or 1.0
+        away_total = sum(away_probs) or 1.0
+
+        home_probs = [x / home_total for x in home_probs]
+        away_probs = [x / away_total for x in away_probs]
+
+        for hg in range(self.max_goals + 1):
+            row = []
+            for ag in range(self.max_goals + 1):
+                row.append(home_probs[hg] * away_probs[ag])
+            matrix.append(row)
+
+        return matrix
+
+    def probabilities(self, lambda_home: float, lambda_away: float, line: float = 2.5) -> dict:
+        matrix = self._score_matrix(lambda_home, lambda_away)
+
+        over_prob = 0.0
+        under_prob = 0.0
+
+        for hg, row in enumerate(matrix):
+            for ag, prob in enumerate(row):
+                total_goals = hg + ag
+
+                if total_goals > line:
+                    over_prob += prob
+                else:
+                    under_prob += prob
+
+        total = over_prob + under_prob
+        if total <= 0:
             return {
-                "train": empty,
-                "validation": empty,
-                "test": empty,
+                "over": 0.5,
+                "under": 0.5,
             }
 
-        n = len(out.index)
-        train_end = max(1, int(n * train_ratio))
-        validation_end = max(train_end + 1, int(n * (train_ratio + validation_ratio)))
-
-        validation_end = min(validation_end, n)
-
-        train = out.iloc[:train_end].reset_index(drop=True)
-        validation = out.iloc[train_end:validation_end].reset_index(drop=True)
-        test = out.iloc[validation_end:].reset_index(drop=True)
-
         return {
-            "train": train,
-            "validation": validation,
-            "test": test,
+            "over": over_prob / total,
+            "under": under_prob / total,
         }
 
-    def rolling_windows(
-        self,
-        df: pd.DataFrame,
-        date_col: str = "match_date",
-        train_size: int = 50,
-        test_size: int = 20,
-        step: int = 20,
-    ) -> list[dict]:
-        out = self.ensure_datetime(df, date_col=date_col)
-
-        if out.empty:
-            return []
-
-        train_size = max(1, int(train_size))
-        test_size = max(1, int(test_size))
-        step = max(1, int(step))
-
-        windows = []
-        start = 0
-        total = len(out.index)
-
-        while start + train_size + test_size <= total:
-            train = out.iloc[start:start + train_size].reset_index(drop=True)
-            test = out.iloc[start + train_size:start + train_size + test_size].reset_index(drop=True)
-
-            windows.append(
-                {
-                    "train": train,
-                    "test": test,
-                    "train_start": str(train[date_col].min()),
-                    "train_end": str(train[date_col].max()),
-                    "test_start": str(test[date_col].min()),
-                    "test_end": str(test[date_col].max()),
-                }
-            )
-
-            start += step
-
-        return windows
+    def fair_odds(self, probability: float) -> float:
+        probability = float(probability)
+        if probability <= 0.0:
+            return 999.0
+        return 1.0 / probability
 EOF
 
-CREA_FILE quant/temporal/temporal_metrics.py
+CREA_FILE quant/markets/btts_model.py
 from __future__ import annotations
 
-import pandas as pd
+import math
 
 
-class TemporalMetrics:
+class BTTSModel:
 
-    def _safe_float(self, value, default=0.0) -> float:
+    def __init__(self, max_goals: int = 10):
+        self.max_goals = int(max_goals)
+
+    def _poisson_pmf(self, goals: int, lam: float) -> float:
+        lam = max(0.01, float(lam))
+        return (math.exp(-lam) * (lam ** goals)) / math.factorial(goals)
+
+    def probabilities(self, lambda_home: float, lambda_away: float) -> dict:
+        home_probs = [self._poisson_pmf(i, lambda_home) for i in range(self.max_goals + 1)]
+        away_probs = [self._poisson_pmf(i, lambda_away) for i in range(self.max_goals + 1)]
+
+        home_total = sum(home_probs) or 1.0
+        away_total = sum(away_probs) or 1.0
+
+        home_probs = [x / home_total for x in home_probs]
+        away_probs = [x / away_total for x in away_probs]
+
+        yes_prob = 0.0
+        no_prob = 0.0
+
+        for hg in range(self.max_goals + 1):
+            for ag in range(self.max_goals + 1):
+                prob = home_probs[hg] * away_probs[ag]
+
+                if hg > 0 and ag > 0:
+                    yes_prob += prob
+                else:
+                    no_prob += prob
+
+        total = yes_prob + no_prob
+        if total <= 0:
+            return {
+                "yes": 0.5,
+                "no": 0.5,
+            }
+
+        return {
+            "yes": yes_prob / total,
+            "no": no_prob / total,
+        }
+
+    def fair_odds(self, probability: float) -> float:
+        probability = float(probability)
+        if probability <= 0.0:
+            return 999.0
+        return 1.0 / probability
+EOF
+
+CREA_FILE quant/markets/market_probabilities.py
+from __future__ import annotations
+
+from quant.markets.btts_model import BTTSModel
+from quant.markets.over_under_model import OverUnderModel
+
+
+class MarketProbabilities:
+
+    def __init__(self):
+        self.ou = OverUnderModel()
+        self.btts = BTTSModel()
+
+    def build(self, lambda_home: float, lambda_away: float) -> dict:
+        ou_25 = self.ou.probabilities(lambda_home, lambda_away, line=2.5)
+        btts = self.btts.probabilities(lambda_home, lambda_away)
+
+        return {
+            "over_25": ou_25["over"],
+            "under_25": ou_25["under"],
+            "btts_yes": btts["yes"],
+            "btts_no": btts["no"],
+        }
+EOF
+
+CREA_FILE quant/markets/market_odds_mapper.py
+from __future__ import annotations
+
+
+class MarketOddsMapper:
+
+    def odds_for_market(self, odds_payload: dict, market: str) -> float:
+        odds_payload = odds_payload or {}
+        market = str(market)
+
+        mapping = {
+            "home": odds_payload.get("home"),
+            "draw": odds_payload.get("draw"),
+            "away": odds_payload.get("away"),
+            "over_25": odds_payload.get("over_25"),
+            "under_25": odds_payload.get("under_25"),
+            "btts_yes": odds_payload.get("btts_yes"),
+            "btts_no": odds_payload.get("btts_no"),
+        }
+
+        value = mapping.get(market)
         try:
-            return float(value)
+            return float(value or 0.0)
         except Exception:
-            return float(default)
-
-    def build(self, df: pd.DataFrame) -> dict:
-        if df is None or df.empty:
-            return {
-                "rows": 0,
-                "bet_count": 0,
-                "total_stake": 0.0,
-                "total_pnl": 0.0,
-                "roi": 0.0,
-                "yield": 0.0,
-                "hit_rate": 0.0,
-                "avg_ev": 0.0,
-                "avg_clv_abs": 0.0,
-                "avg_clv_pct": 0.0,
-            }
-
-        work = df.copy()
-
-        if "decision" in work.columns:
-            bet_mask = work["decision"].astype(str).eq("BET")
-            bets = work[bet_mask].copy()
-        else:
-            bets = work.copy()
-
-        if bets.empty:
-            return {
-                "rows": len(work.index),
-                "bet_count": 0,
-                "total_stake": 0.0,
-                "total_pnl": 0.0,
-                "roi": 0.0,
-                "yield": 0.0,
-                "hit_rate": 0.0,
-                "avg_ev": 0.0,
-                "avg_clv_abs": 0.0,
-                "avg_clv_pct": 0.0,
-            }
-
-        total_stake = sum(self._safe_float(v) for v in bets.get("stake", pd.Series([0.0] * len(bets.index))))
-        total_pnl = sum(self._safe_float(v) for v in bets.get("pnl", pd.Series([0.0] * len(bets.index))))
-
-        wins = 0
-        if "result" in bets.columns:
-            wins = int(bets["result"].astype(str).str.upper().eq("WIN").sum())
-        elif "pnl" in bets.columns:
-            wins = int((bets["pnl"].astype(float) > 0).sum())
-
-        bet_count = len(bets.index)
-
-        roi = (total_pnl / total_stake) if total_stake > 0 else 0.0
-        yield_value = roi
-        hit_rate = (wins / bet_count) if bet_count > 0 else 0.0
-
-        avg_ev = (
-            float(bets["ev"].astype(float).mean())
-            if "ev" in bets.columns and bet_count > 0
-            else 0.0
-        )
-        avg_clv_abs = (
-            float(bets["clv_abs"].astype(float).mean())
-            if "clv_abs" in bets.columns and bet_count > 0
-            else 0.0
-        )
-        avg_clv_pct = (
-            float(bets["clv_pct"].astype(float).mean())
-            if "clv_pct" in bets.columns and bet_count > 0
-            else 0.0
-        )
-
-        return {
-            "rows": int(len(work.index)),
-            "bet_count": int(bet_count),
-            "total_stake": round(total_stake, 2),
-            "total_pnl": round(total_pnl, 2),
-            "roi": round(roi, 6),
-            "yield": round(yield_value, 6),
-            "hit_rate": round(hit_rate, 6),
-            "avg_ev": round(avg_ev, 6),
-            "avg_clv_abs": round(avg_clv_abs, 6),
-            "avg_clv_pct": round(avg_clv_pct, 6),
-        }
+            return 0.0
 EOF
 
-CREA_FILE quant/temporal/temporal_guard.py
+CREA_FILE quant/markets/market_value_engine.py
 from __future__ import annotations
 
+from quant.value.clv_estimator import CLVEstimator
+from quant.value.ev_calculator import EVCalculator
+from quant.value.stake_policy import StakePolicy
+from quant.value.value_bet_filter import ValueBetFilter
+from quant.value.value_bet_ranker import ValueBetRanker
 
-class TemporalGuard:
 
-    def __init__(
-        self,
-        min_rows: int = 1,
-        min_bet_count: int = 0,
-        min_roi: float = -1.0,
-        min_yield: float = -1.0,
-        min_hit_rate: float = 0.0,
-        min_avg_ev: float = -1.0,
-    ):
-        self.min_rows = int(min_rows)
-        self.min_bet_count = int(min_bet_count)
-        self.min_roi = float(min_roi)
-        self.min_yield = float(min_yield)
-        self.min_hit_rate = float(min_hit_rate)
-        self.min_avg_ev = float(min_avg_ev)
+class MarketValueEngine:
 
-    def evaluate(self, metrics: dict) -> dict:
-        checks = [
-            {
-                "name": "rows_minimum",
-                "passed": int(metrics.get("rows", 0)) >= self.min_rows,
-                "value": metrics.get("rows", 0),
-            },
-            {
-                "name": "bet_count_minimum",
-                "passed": int(metrics.get("bet_count", 0)) >= self.min_bet_count,
-                "value": metrics.get("bet_count", 0),
-            },
-            {
-                "name": "roi_threshold",
-                "passed": float(metrics.get("roi", 0.0)) >= self.min_roi,
-                "value": metrics.get("roi", 0.0),
-            },
-            {
-                "name": "yield_threshold",
-                "passed": float(metrics.get("yield", 0.0)) >= self.min_yield,
-                "value": metrics.get("yield", 0.0),
-            },
-            {
-                "name": "hit_rate_threshold",
-                "passed": float(metrics.get("hit_rate", 0.0)) >= self.min_hit_rate,
-                "value": metrics.get("hit_rate", 0.0),
-            },
-            {
-                "name": "avg_ev_threshold",
-                "passed": float(metrics.get("avg_ev", 0.0)) >= self.min_avg_ev,
-                "value": metrics.get("avg_ev", 0.0),
-            },
-        ]
+    def __init__(self):
+        self.ev = EVCalculator()
+        self.clv = CLVEstimator()
+        self.stake_policy = StakePolicy()
+        self.filter = ValueBetFilter(
+            min_ev=0.015,
+            min_probability=0.48,
+            min_confidence=0.58,
+            min_agreement=0.52,
+            min_odds=1.30,
+            max_odds=8.50,
+        )
+        self.ranker = ValueBetRanker()
 
-        return {
-            "passed": all(item["passed"] for item in checks),
-            "checks": checks,
-            "metrics": metrics,
-        }
+    def enrich_market_record(self, record: dict, bankroll: float = 1000.0) -> dict:
+        probability = float(record.get("probability", 0.0))
+        bookmaker_odds = float(record.get("bookmaker_odds", 0.0))
+        confidence = float(record.get("confidence", 0.0))
+        agreement = float(record.get("agreement", 0.0))
+        opening_odds = float(record.get("opening_odds", bookmaker_odds))
+
+        fair_odds = self.ev.fair_odds(probability)
+        implied_probability = self.ev.implied_probability(bookmaker_odds)
+        probability_edge = self.ev.probability_edge(probability, bookmaker_odds)
+        ev_value = self.ev.expected_value(probability, bookmaker_odds)
+        clv_potential = self.clv.estimate_clv_edge(probability, opening_odds, bookmaker_odds)
+        movement_score = self.clv.odds_movement_score(opening_odds, bookmaker_odds)
+
+        decision = self.filter.decide(
+            probability=probability,
+            odds=bookmaker_odds,
+            ev=ev_value,
+            confidence=confidence,
+            agreement=agreement,
+        )
+
+        stake = self.stake_policy.suggest(
+            bankroll=bankroll,
+            probability=probability,
+            odds=bookmaker_odds,
+            confidence=confidence,
+        )
+
+        enriched = dict(record)
+        enriched["fair_odds"] = round(fair_odds, 4)
+        enriched["implied_probability"] = round(implied_probability, 6)
+        enriched["probability_edge"] = round(probability_edge, 6)
+        enriched["ev"] = round(ev_value, 6)
+        enriched["clv_potential"] = round(clv_potential, 6)
+        enriched["odds_movement_score"] = round(movement_score, 6)
+        enriched["decision"] = decision
+        enriched["suggested_stake"] = round(stake["stake"], 2)
+        enriched["stake_cap_pct"] = round(stake["max_cap_pct"], 4)
+
+        return enriched
+
+    def rank(self, rows: list[dict]) -> list[dict]:
+        return self.ranker.sort(rows)
 EOF
 
-CREA_FILE quant/temporal/temporal_reporter.py
+CREA_FILE quant/markets/market_expansion_engine.py
 from __future__ import annotations
 
-import csv
-import json
-import os
+from quant.markets.market_odds_mapper import MarketOddsMapper
+from quant.markets.market_probabilities import MarketProbabilities
+from quant.markets.market_value_engine import MarketValueEngine
+from quant.services.quant_job_runner import QuantJobRunner
 
 
-class TemporalReporter:
+class MarketExpansionEngine:
 
-    def __init__(self, output_dir: str = "outputs/temporal"):
-        self.output_dir = output_dir
-        os.makedirs(self.output_dir, exist_ok=True)
+    def __init__(self):
+        self.quant_runner = QuantJobRunner()
+        self.market_probabilities = MarketProbabilities()
+        self.odds_mapper = MarketOddsMapper()
+        self.value_engine = MarketValueEngine()
 
-    def save_json(self, payload: dict, filename: str = "temporal_guard_report.json") -> str:
-        path = os.path.join(self.output_dir, filename)
-        with open(path, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2)
-        return path
+    def _derive_lambda_pair(self, record: dict) -> tuple[float, float]:
+        home_xg = float(record.get("expected_goals_home", 0.0) or 0.0)
+        away_xg = float(record.get("expected_goals_away", 0.0) or 0.0)
 
-    def save_csv(self, windows: list[dict], filename: str = "temporal_windows.csv") -> str:
-        path = os.path.join(self.output_dir, filename)
+        if home_xg > 0.0 and away_xg > 0.0:
+            return home_xg, away_xg
 
-        if not windows:
-            with open(path, "w", newline="", encoding="utf-8") as handle:
-                writer = csv.writer(handle)
-                writer.writerow(["empty"])
-            return path
+        probability = float(record.get("probability", 0.33) or 0.33)
+        confidence = float(record.get("confidence", 0.50) or 0.50)
 
-        fieldnames = sorted({key for row in windows for key in row.keys()})
+        lambda_home = max(0.8, 1.20 + (probability - 0.33) + (confidence - 0.5))
+        lambda_away = max(0.8, 1.05 + ((1.0 - probability) - 0.33))
 
-        with open(path, "w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(windows)
+        return lambda_home, lambda_away
 
-        return path
+    def _group_by_fixture(self, records: list[dict]) -> dict:
+        grouped = {}
 
-    def save_html(self, payload: dict, filename: str = "temporal_guard_report.html") -> str:
-        path = os.path.join(self.output_dir, filename)
+        for row in records:
+            fixture_id = str(row.get("fixture_id", ""))
+            if fixture_id not in grouped:
+                grouped[fixture_id] = []
+            grouped[fixture_id].append(row)
 
-        windows = payload.get("windows", [])
-        guard = payload.get("guard", {})
-        checks = guard.get("checks", [])
-        metrics = guard.get("metrics", {})
+        return grouped
+
+    def _fixture_meta(self, fixture_rows: list[dict]) -> dict:
+        first = fixture_rows[0]
+
+        bookmaker_odds = {
+            "home": 0.0,
+            "draw": 0.0,
+            "away": 0.0,
+            "over_25": float(first.get("over_25_odds", 0.0) or 0.0),
+            "under_25": float(first.get("under_25_odds", 0.0) or 0.0),
+            "btts_yes": float(first.get("btts_yes_odds", 0.0) or 0.0),
+            "btts_no": float(first.get("btts_no_odds", 0.0) or 0.0),
+        }
+
+        for row in fixture_rows:
+            market = str(row.get("market", ""))
+            if market in ("home", "draw", "away"):
+                bookmaker_odds[market] = float(row.get("bookmaker_odds", 0.0) or 0.0)
+
+        return {
+            "fixture_id": str(first.get("fixture_id", "")),
+            "home_team": first.get("home_team", ""),
+            "away_team": first.get("away_team", ""),
+            "agreement": max(float(r.get("agreement", 0.0) or 0.0) for r in fixture_rows),
+            "confidence": max(float(r.get("confidence", 0.0) or 0.0) for r in fixture_rows),
+            "bookmaker_odds": bookmaker_odds,
+            "lambda_pair": self._derive_lambda_pair(first),
+        }
+
+    def _build_market_rows(self, fixture_meta: dict) -> list[dict]:
+        lambda_home, lambda_away = fixture_meta["lambda_pair"]
+        probs = self.market_probabilities.build(lambda_home, lambda_away)
+        bookmaker_odds = fixture_meta["bookmaker_odds"]
 
         rows = []
-        for row in windows:
+        for market, probability in probs.items():
+            odds = self.odds_mapper.odds_for_market(bookmaker_odds, market)
+
             rows.append(
-                "<tr>"
-                f"<td>{row.get('window_id','')}</td>"
-                f"<td>{row.get('train_start','')}</td>"
-                f"<td>{row.get('train_end','')}</td>"
-                f"<td>{row.get('test_start','')}</td>"
-                f"<td>{row.get('test_end','')}</td>"
-                f"<td>{row.get('bet_count',0)}</td>"
-                f"<td>{row.get('roi',0)}</td>"
-                f"<td>{row.get('yield',0)}</td>"
-                f"<td>{row.get('hit_rate',0)}</td>"
-                f"<td>{row.get('avg_ev',0)}</td>"
-                f"<td>{row.get('avg_clv_abs',0)}</td>"
-                "</tr>"
-            )
-
-        check_rows = []
-        for item in checks:
-            check_rows.append(
-                "<tr>"
-                f"<td>{item.get('name','')}</td>"
-                f"<td>{item.get('passed',False)}</td>"
-                f"<td>{item.get('value','')}</td>"
-                "</tr>"
-            )
-
-        metric_rows = []
-        for key, value in metrics.items():
-            metric_rows.append(f"<tr><td>{key}</td><td>{value}</td></tr>")
-
-        html = f"""<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>Temporal Backtest Guard</title>
-<style>
-body {{ font-family: Arial, sans-serif; margin: 24px; }}
-table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; }}
-th, td {{ border: 1px solid #ccc; padding: 8px; }}
-th {{ background: #f4f4f4; }}
-</style>
-</head>
-<body>
-<h1>Temporal Backtest Guard</h1>
-
-<h2>Aggregate Metrics</h2>
-<table>
-<tr><th>Metric</th><th>Value</th></tr>
-{''.join(metric_rows)}
-</table>
-
-<h2>Guard Checks</h2>
-<table>
-<tr><th>Check</th><th>Passed</th><th>Value</th></tr>
-{''.join(check_rows)}
-</table>
-
-<h2>Rolling Windows</h2>
-<table>
-<tr>
-<th>Window</th>
-<th>Train Start</th>
-<th>Train End</th>
-<th>Test Start</th>
-<th>Test End</th>
-<th>Bet Count</th>
-<th>ROI</th>
-<th>Yield</th>
-<th>Hit Rate</th>
-<th>Avg EV</th>
-<th>Avg CLV Abs</th>
-</tr>
-{''.join(rows)}
-</table>
-</body>
-</html>"""
-
-        with open(path, "w", encoding="utf-8") as handle:
-            handle.write(html)
-
-        return path
-EOF
-
-CREA_FILE quant/temporal/temporal_backtest_guard.py
-from __future__ import annotations
-
-import pandas as pd
-
-from quant.temporal.temporal_guard import TemporalGuard
-from quant.temporal.temporal_metrics import TemporalMetrics
-from quant.temporal.temporal_reporter import TemporalReporter
-from quant.temporal.time_splitter import TimeSplitter
-
-
-class TemporalBacktestGuard:
-
-    def __init__(self):
-        self.splitter = TimeSplitter()
-        self.metrics = TemporalMetrics()
-        self.guard = TemporalGuard()
-        self.reporter = TemporalReporter()
-
-    def _ensure_date_column(self, df: pd.DataFrame) -> pd.DataFrame:
-        out = df.copy()
-
-        if "match_date" not in out.columns:
-            if "created_at" in out.columns:
-                out["match_date"] = out["created_at"]
-            else:
-                out["match_date"] = pd.date_range(
-                    start="2024-01-01",
-                    periods=len(out.index),
-                    freq="D",
-                )
-
-        return out
-
-    def run(
-        self,
-        df: pd.DataFrame,
-        date_col: str = "match_date",
-        train_size: int = 50,
-        test_size: int = 20,
-        step: int = 20,
-    ) -> dict:
-        if df is None or df.empty:
-            payload = {
-                "passed": False,
-                "guard": {
-                    "passed": False,
-                    "checks": [],
-                    "metrics": self.metrics.build(pd.DataFrame()),
-                },
-                "windows": [],
-            }
-            json_path = self.reporter.save_json(payload)
-            csv_path = self.reporter.save_csv([])
-            html_path = self.reporter.save_html(payload)
-            return {
-                "passed": False,
-                "payload": payload,
-                "json_path": json_path,
-                "csv_path": csv_path,
-                "html_path": html_path,
-            }
-
-        work = self._ensure_date_column(df)
-        windows = self.splitter.rolling_windows(
-            work,
-            date_col=date_col,
-            train_size=train_size,
-            test_size=test_size,
-            step=step,
-        )
-
-        summary_rows = []
-
-        for idx, window in enumerate(windows, start=1):
-            test_df = window["test"]
-            metrics = self.metrics.build(test_df)
-
-            summary_rows.append(
                 {
-                    "window_id": idx,
-                    "train_start": window["train_start"],
-                    "train_end": window["train_end"],
-                    "test_start": window["test_start"],
-                    "test_end": window["test_end"],
-                    "rows": metrics["rows"],
-                    "bet_count": metrics["bet_count"],
-                    "roi": metrics["roi"],
-                    "yield": metrics["yield"],
-                    "hit_rate": metrics["hit_rate"],
-                    "avg_ev": metrics["avg_ev"],
-                    "avg_clv_abs": metrics["avg_clv_abs"],
-                    "avg_clv_pct": metrics["avg_clv_pct"],
+                    "fixture_id": fixture_meta["fixture_id"],
+                    "home_team": fixture_meta["home_team"],
+                    "away_team": fixture_meta["away_team"],
+                    "market": market,
+                    "probability": round(float(probability), 6),
+                    "bookmaker_odds": round(float(odds), 4),
+                    "opening_odds": round(float(odds), 4),
+                    "confidence": round(float(fixture_meta["confidence"]), 6),
+                    "agreement": round(float(fixture_meta["agreement"]), 6),
+                    "expected_goals_home": round(float(lambda_home), 4),
+                    "expected_goals_away": round(float(lambda_away), 4),
+                    "source": "market_expansion",
                 }
             )
 
-        aggregate_df = pd.DataFrame(summary_rows)
+        return rows
 
-        if aggregate_df.empty:
-            aggregate_metrics = self.metrics.build(pd.DataFrame())
-        else:
-            aggregate_metrics = {
-                "rows": int(aggregate_df["rows"].sum()),
-                "bet_count": int(aggregate_df["bet_count"].sum()),
-                "total_stake": 0.0,
-                "total_pnl": 0.0,
-                "roi": round(float(aggregate_df["roi"].mean()), 6),
-                "yield": round(float(aggregate_df["yield"].mean()), 6),
-                "hit_rate": round(float(aggregate_df["hit_rate"].mean()), 6),
-                "avg_ev": round(float(aggregate_df["avg_ev"].mean()), 6),
-                "avg_clv_abs": round(float(aggregate_df["avg_clv_abs"].mean()), 6),
-                "avg_clv_pct": round(float(aggregate_df["avg_clv_pct"].mean()), 6),
-            }
+    def run(self, bankroll: float = 1000.0) -> list[dict]:
+        base_records = self.quant_runner.run_cycle()
+        grouped = self._group_by_fixture(base_records)
 
-        guard_result = self.guard.evaluate(aggregate_metrics)
+        expanded = []
 
-        payload = {
-            "passed": guard_result["passed"],
-            "guard": guard_result,
-            "windows": summary_rows,
-        }
+        for _, fixture_rows in grouped.items():
+            meta = self._fixture_meta(fixture_rows)
+            market_rows = self._build_market_rows(meta)
 
-        json_path = self.reporter.save_json(payload)
-        csv_path = self.reporter.save_csv(summary_rows)
-        html_path = self.reporter.save_html(payload)
+            enriched = [
+                self.value_engine.enrich_market_record(row, bankroll=bankroll)
+                for row in market_rows
+            ]
+            expanded.extend(enriched)
 
-        return {
-            "passed": guard_result["passed"],
-            "payload": payload,
-            "json_path": json_path,
-            "csv_path": csv_path,
-            "html_path": html_path,
-        }
+        return self.value_engine.rank(expanded)
 EOF
 
-CREA_FILE quant/temporal/temporal_guard_runner.py
+CREA_FILE quant/markets/market_expansion_runner.py
 from __future__ import annotations
 
-import pandas as pd
-
-from quant.clv.bet_journal import BetJournal
-from quant.temporal.temporal_backtest_guard import TemporalBacktestGuard
+from quant.markets.market_expansion_engine import MarketExpansionEngine
 
 
-class TemporalGuardRunner:
+class MarketExpansionRunner:
 
     def __init__(self):
-        self.journal = BetJournal()
-        self.guard = TemporalBacktestGuard()
+        self.engine = MarketExpansionEngine()
 
-    def _load_dataframe(self) -> pd.DataFrame:
-        rows = self.journal.list_bets()
-        if not rows:
-            return pd.DataFrame()
-
-        df = pd.DataFrame(rows)
-
-        if "created_at" in df.columns and "match_date" not in df.columns:
-            df["match_date"] = df["created_at"]
-
-        return df
-
-    def run(self) -> dict:
-        df = self._load_dataframe()
-        return self.guard.run(df)
+    def run(self, bankroll: float = 1000.0) -> list[dict]:
+        return self.engine.run(bankroll=bankroll)
 EOF
 
-CREA_FILE app/temporal_guard_controller.py
-from quant.temporal.temporal_guard_runner import TemporalGuardRunner
+CREA_FILE app/market_expansion_controller.py
+from quant.markets.market_expansion_runner import MarketExpansionRunner
 
 
-class AppTemporalGuardController:
+class AppMarketExpansionController:
 
     def __init__(self):
-        self.runner = TemporalGuardRunner()
+        self.runner = MarketExpansionRunner()
 
-    def run(self):
-        return self.runner.run()
+    def run(self, bankroll: float = 1000.0):
+        return self.runner.run(bankroll=bankroll)
 EOF
 
-CREA_FILE tests/test_time_splitter.py
-import pandas as pd
-
-from quant.temporal.time_splitter import TimeSplitter
+CREA_FILE tests/test_over_under_model.py
+from quant.markets.over_under_model import OverUnderModel
 
 
-def test_time_splitter_rolling_windows():
-    df = pd.DataFrame(
+def test_over_under_model_probabilities_sum_to_one():
+    model = OverUnderModel()
+    probs = model.probabilities(1.5, 1.2, line=2.5)
+
+    total = probs["over"] + probs["under"]
+
+    assert 0.999 <= total <= 1.001
+EOF
+
+CREA_FILE tests/test_btts_model.py
+from quant.markets.btts_model import BTTSModel
+
+
+def test_btts_model_probabilities_sum_to_one():
+    model = BTTSModel()
+    probs = model.probabilities(1.4, 1.1)
+
+    total = probs["yes"] + probs["no"]
+
+    assert 0.999 <= total <= 1.001
+EOF
+
+CREA_FILE tests/test_market_probabilities.py
+from quant.markets.market_probabilities import MarketProbabilities
+
+
+def test_market_probabilities_build():
+    result = MarketProbabilities().build(1.6, 1.2)
+
+    assert "over_25" in result
+    assert "under_25" in result
+    assert "btts_yes" in result
+    assert "btts_no" in result
+EOF
+
+CREA_FILE tests/test_market_odds_mapper.py
+from quant.markets.market_odds_mapper import MarketOddsMapper
+
+
+def test_market_odds_mapper_reads_market_odds():
+    mapper = MarketOddsMapper()
+
+    odds = {
+        "over_25": 1.88,
+        "under_25": 1.92,
+        "btts_yes": 1.75,
+        "btts_no": 2.05,
+    }
+
+    assert mapper.odds_for_market(odds, "over_25") == 1.88
+    assert mapper.odds_for_market(odds, "btts_no") == 2.05
+EOF
+
+CREA_FILE tests/test_market_value_engine.py
+from quant.markets.market_value_engine import MarketValueEngine
+
+
+def test_market_value_engine_enriches_record():
+    engine = MarketValueEngine()
+
+    result = engine.enrich_market_record(
         {
-            "match_date": pd.date_range("2024-01-01", periods=12, freq="D"),
-            "value": list(range(12)),
-        }
+            "fixture_id": "1",
+            "home_team": "TeamA",
+            "away_team": "TeamB",
+            "market": "over_25",
+            "probability": 0.61,
+            "bookmaker_odds": 1.90,
+            "opening_odds": 1.95,
+            "confidence": 0.70,
+            "agreement": 0.66,
+        },
+        bankroll=1000.0,
     )
 
-    windows = TimeSplitter().rolling_windows(
-        df,
-        train_size=5,
-        test_size=3,
-        step=2,
-    )
-
-    assert isinstance(windows, list)
-    assert len(windows) > 0
-    assert "train" in windows[0]
-    assert "test" in windows[0]
+    assert "ev" in result
+    assert "decision" in result
+    assert "suggested_stake" in result
 EOF
 
-CREA_FILE tests/test_temporal_metrics.py
-import pandas as pd
-
-from quant.temporal.temporal_metrics import TemporalMetrics
+CREA_FILE tests/test_market_expansion_engine.py
+from quant.markets.market_expansion_engine import MarketExpansionEngine
 
 
-def test_temporal_metrics_build():
-    df = pd.DataFrame(
-        [
-            {
-                "decision": "BET",
-                "stake": 10,
-                "pnl": 5,
-                "result": "WIN",
-                "ev": 0.10,
-                "clv_abs": 0.02,
-                "clv_pct": 0.05,
-            },
-            {
-                "decision": "BET",
-                "stake": 10,
-                "pnl": -10,
-                "result": "LOSE",
-                "ev": 0.03,
-                "clv_abs": -0.01,
-                "clv_pct": -0.02,
-            },
-        ]
-    )
+def test_market_expansion_engine_runs():
+    rows = MarketExpansionEngine().run()
 
-    result = TemporalMetrics().build(df)
-
-    assert result["bet_count"] == 2
-    assert "roi" in result
-    assert "avg_ev" in result
+    assert isinstance(rows, list)
+    assert len(rows) > 0
+    assert "market" in rows[0]
+    assert rows[0]["market"] in {"over_25", "under_25", "btts_yes", "btts_no"}
 EOF
 
-CREA_FILE tests/test_temporal_guard.py
-from quant.temporal.temporal_guard import TemporalGuard
+CREA_FILE tests/test_market_expansion_runner.py
+from quant.markets.market_expansion_runner import MarketExpansionRunner
 
 
-def test_temporal_guard_evaluate():
-    result = TemporalGuard().evaluate(
-        {
-            "rows": 10,
-            "bet_count": 3,
-            "roi": 0.02,
-            "yield": 0.02,
-            "hit_rate": 0.50,
-            "avg_ev": 0.04,
-        }
-    )
+def test_market_expansion_runner_runs():
+    rows = MarketExpansionRunner().run()
 
-    assert "passed" in result
-    assert "checks" in result
+    assert isinstance(rows, list)
+    assert len(rows) > 0
 EOF
 
-CREA_FILE tests/test_temporal_backtest_guard.py
-import pandas as pd
-
-from quant.temporal.temporal_backtest_guard import TemporalBacktestGuard
+CREA_FILE tests/test_app_market_expansion_controller.py
+from app.market_expansion_controller import AppMarketExpansionController
 
 
-def test_temporal_backtest_guard_runs():
-    df = pd.DataFrame(
-        {
-            "match_date": pd.date_range("2024-01-01", periods=20, freq="D"),
-            "decision": ["BET"] * 20,
-            "stake": [10] * 20,
-            "pnl": [5, -10, 5, 5, -10] * 4,
-            "result": ["WIN", "LOSE", "WIN", "WIN", "LOSE"] * 4,
-            "ev": [0.05] * 20,
-            "clv_abs": [0.01] * 20,
-            "clv_pct": [0.02] * 20,
-        }
-    )
+def test_app_market_expansion_controller_runs():
+    rows = AppMarketExpansionController().run()
 
-    result = TemporalBacktestGuard().run(
-        df,
-        train_size=8,
-        test_size=4,
-        step=4,
-    )
-
-    assert isinstance(result, dict)
-    assert "payload" in result
-    assert "json_path" in result
-    assert "html_path" in result
-EOF
-
-CREA_FILE tests/test_temporal_guard_runner.py
-from quant.temporal.temporal_guard_runner import TemporalGuardRunner
-
-
-def test_temporal_guard_runner_runs():
-    result = TemporalGuardRunner().run()
-
-    assert isinstance(result, dict)
-    assert "payload" in result
-    assert "passed" in result
-EOF
-
-CREA_FILE tests/test_app_temporal_guard_controller.py
-from app.temporal_guard_controller import AppTemporalGuardController
-
-
-def test_app_temporal_guard_controller_runs():
-    result = AppTemporalGuardController().run()
-
-    assert isinstance(result, dict)
-    assert "payload" in result
+    assert isinstance(rows, list)
+    assert len(rows) > 0
 EOF
 
 FIX_WHITESPACE
-

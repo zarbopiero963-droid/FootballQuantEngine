@@ -6,12 +6,12 @@
       {
         "name": "rows_minimum",
         "passed": true,
-        "value": 60
+        "value": 80
       },
       {
         "name": "bet_count_minimum",
         "passed": true,
-        "value": 20
+        "value": 27
       },
       {
         "name": "roi_threshold",
@@ -31,18 +31,18 @@
       {
         "name": "avg_ev_threshold",
         "passed": true,
-        "value": 0.192866
+        "value": 0.189102
       }
     ],
     "metrics": {
-      "rows": 60,
-      "bet_count": 20,
+      "rows": 80,
+      "bet_count": 27,
       "total_stake": 0.0,
       "total_pnl": 0.0,
       "roi": 0.0,
       "yield": 0.0,
       "hit_rate": 0.0,
-      "avg_ev": 0.192866,
+      "avg_ev": 0.189102,
       "avg_clv_abs": NaN,
       "avg_clv_pct": NaN
     }
@@ -90,6 +90,21 @@
       "yield": 0.0,
       "hit_rate": 0.0,
       "avg_ev": 0.199665,
+      "avg_clv_abs": NaN,
+      "avg_clv_pct": NaN
+    },
+    {
+      "window_id": 4,
+      "train_start": "2026-03-08 12:46:57.498469+00:00",
+      "train_end": "2026-03-08 14:53:56.619122+00:00",
+      "test_start": "2026-03-08 14:53:56.621416+00:00",
+      "test_end": "2026-03-08 15:07:32.222277+00:00",
+      "rows": 20,
+      "bet_count": 7,
+      "roi": 0.0,
+      "yield": 0.0,
+      "hit_rate": 0.0,
+      "avg_ev": 0.17781,
       "avg_clv_abs": NaN,
       "avg_clv_pct": NaN
     }

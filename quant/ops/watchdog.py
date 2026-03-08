@@ -1,4 +1,3 @@
-CREA_FILE quant/ops/watchdog.py
 from __future__ import annotations
 
 import time
@@ -34,7 +33,3 @@ class Watchdog:
         for _ in range(max(1, int(cycles))):
             self.ping(component)
             time.sleep(float(interval_seconds))
-EOF
-
-FIX_WHITESPACE
-

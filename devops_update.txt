@@ -478,3 +478,4 @@ def test_app_live_fusion_runs():
 EOF
 
 FIX_WHITESPACE
+

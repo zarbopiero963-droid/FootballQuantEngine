@@ -1391,3 +1391,29 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-08_11-08-39.zip
+Backup created backups/backup_2026-03-08_11-08-39.zip
+[WARN] Unknown command: LIVE FUSION LAYER 1
+[CREATE] folder quant/fusion
+[CREATE] file quant/fusion/team_name_normalizer.py
+[CREATE] file quant/fusion/team_mapping_table.py
+[CREATE] file quant/fusion/team_mapper.py
+[CREATE] file quant/fusion/understat_stats_adapter.py
+[CREATE] file quant/fusion/live_fusion_layer.py
+[CREATE] file quant/fusion/live_fusion_provider.py
+[CREATE] file quant/fusion/live_fusion_exporter.py
+[CREATE] file quant/fusion/live_fusion_runner.py
+[CREATE] file tests/test_team_name_normalizer.py
+[CREATE] file tests/test_team_mapper.py
+[CREATE] file tests/test_live_fusion_layer.py
+[CREATE] file tests/test_live_fusion_provider.py
+[CREATE] file tests/test_live_fusion_runner.py
+[CREATE] file app/live_fusion.py
+[CREATE] file tests/test_app_live_fusion.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

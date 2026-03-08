@@ -1,63 +1,707 @@
-CREA_FILE quant/ops/scheduler_service.py
+############################################
+FULL INTEGRATION BLOCK - FIXED
+############################################
+
+CREA_CARTELLA quant/analytics
+
+CREA_FILE quant/ml/ml_prediction_bridge.py
 from __future__ import annotations
 
-from engine.scheduler import Scheduler
-from quant.ops.monitoring import Monitoring
+from quant.ml.ml_layer_real import MLLayerReal
 
 
-class SchedulerService:
+class MLPredictionBridge:
 
     def __init__(self):
-        self.scheduler = Scheduler()
-        self.monitoring = Monitoring()
+        self.layer = MLLayerReal()
 
-    def add_recurring_job(
+    def fit(self, training_rows: list[dict]) -> None:
+        self.layer.fit(training_rows or [])
+
+    def enrich_records(self, records: list[dict]) -> list[dict]:
+        if not records:
+            return []
+
+        enriched = []
+
+        for row in records:
+            new_row = dict(row)
+            ml_home_prob = self.layer.predict_home_probability(new_row)
+            new_row["ml_home_probability"] = round(float(ml_home_prob), 6)
+
+            market = str(new_row.get("market", ""))
+            base_prob = float(new_row.get("probability", 0.0) or 0.0)
+
+            if market == "home":
+                fused_prob = (base_prob * 0.65) + (ml_home_prob * 0.35)
+                new_row["probability"] = round(float(min(max(fused_prob, 0.0001), 0.9999)), 6)
+
+            elif market == "away":
+                away_prob = max(0.0001, 1.0 - ml_home_prob)
+                fused_prob = (base_prob * 0.65) + (away_prob * 0.35)
+                new_row["probability"] = round(float(min(max(fused_prob, 0.0001), 0.9999)), 6)
+
+            elif market == "draw":
+                draw_prob = max(0.05, 1.0 - max(ml_home_prob, 1.0 - ml_home_prob))
+                fused_prob = (base_prob * 0.80) + (draw_prob * 0.20)
+                new_row["probability"] = round(float(min(max(fused_prob, 0.0001), 0.9999)), 6)
+
+            enriched.append(new_row)
+
+        return enriched
+EOF
+
+CREA_FILE quant/value/adaptive_value_bet_engine.py
+from __future__ import annotations
+
+from quant.value.clv_estimator import CLVEstimator
+from quant.value.ev_calculator import EVCalculator
+from quant.value.stake_policy import StakePolicy
+from quant.value.value_bet_ranker import ValueBetRanker
+
+
+class AdaptiveValueBetEngine:
+
+    def __init__(self):
+        self.ev = EVCalculator()
+        self.clv = CLVEstimator()
+        self.stake_policy = StakePolicy()
+        self.ranker = ValueBetRanker()
+
+        self.thresholds = {
+            "min_probability": 0.54,
+            "min_ev": 0.02,
+            "min_confidence": 0.60,
+            "min_agreement": 0.55,
+            "min_odds": 1.40,
+            "max_odds": 8.00,
+        }
+
+    def update_thresholds(self, thresholds: dict | None) -> None:
+        if not thresholds:
+            return
+
+        for key in self.thresholds.keys():
+            if key in thresholds:
+                self.thresholds[key] = float(thresholds[key])
+
+    def decide(
         self,
-        name: str,
-        callback,
-        interval_seconds: float,
-        run_immediately: bool = False,
-    ):
-        if hasattr(self.scheduler, "add_job"):
-            try:
-                self.scheduler.add_job(
-                    name=name,
-                    callback=callback,
-                    interval_seconds=interval_seconds,
-                    run_immediately=run_immediately,
-                )
-            except TypeError:
-                self.scheduler.add_job(name, callback, interval_seconds)
-        else:
-            raise AttributeError("Scheduler does not expose add_job")
+        probability: float,
+        bookmaker_odds: float,
+        ev_value: float,
+        confidence: float,
+        agreement: float,
+    ) -> str:
+        min_probability = float(self.thresholds["min_probability"])
+        min_ev = float(self.thresholds["min_ev"])
+        min_confidence = float(self.thresholds["min_confidence"])
+        min_agreement = float(self.thresholds["min_agreement"])
+        min_odds = float(self.thresholds["min_odds"])
+        max_odds = float(self.thresholds["max_odds"])
+
+        if (
+            probability >= min_probability
+            and min_odds <= bookmaker_odds <= max_odds
+            and ev_value >= min_ev
+            and confidence >= min_confidence
+            and agreement >= min_agreement
+        ):
+            return "BET"
+
+        if (
+            probability >= min_probability * 0.95
+            and min_odds <= bookmaker_odds <= (max_odds * 1.25)
+            and ev_value >= min_ev * 0.50
+            and confidence >= min_confidence * 0.85
+            and agreement >= min_agreement * 0.85
+        ):
+            return "WATCHLIST"
+
+        return "NO_BET"
+
+    def enrich_record(
+        self,
+        record: dict,
+        bankroll: float = 1000.0,
+    ) -> dict:
+        probability = float(record.get("probability", 0.0) or 0.0)
+        bookmaker_odds = float(record.get("bookmaker_odds", 0.0) or 0.0)
+        confidence = float(record.get("confidence", 0.0) or 0.0)
+        agreement = float(record.get("agreement", 0.0) or 0.0)
+        opening_odds = float(record.get("opening_odds", bookmaker_odds) or bookmaker_odds)
+
+        fair_odds = self.ev.fair_odds(probability)
+        implied_probability = self.ev.implied_probability(bookmaker_odds)
+        probability_edge = self.ev.probability_edge(probability, bookmaker_odds)
+        ev_value = self.ev.expected_value(probability, bookmaker_odds)
+        clv_potential = self.clv.estimate_clv_edge(probability, opening_odds, bookmaker_odds)
+        movement_score = self.clv.odds_movement_score(opening_odds, bookmaker_odds)
+
+        decision = self.decide(
+            probability=probability,
+            bookmaker_odds=bookmaker_odds,
+            ev_value=ev_value,
+            confidence=confidence,
+            agreement=agreement,
+        )
+
+        stake = self.stake_policy.suggest(
+            bankroll=bankroll,
+            probability=probability,
+            odds=bookmaker_odds,
+            confidence=confidence,
+        )
+
+        enriched = dict(record)
+        enriched["fair_odds"] = round(fair_odds, 4)
+        enriched["implied_probability"] = round(implied_probability, 6)
+        enriched["probability_edge"] = round(probability_edge, 6)
+        enriched["ev"] = round(ev_value, 6)
+        enriched["clv_potential"] = round(clv_potential, 6)
+        enriched["odds_movement_score"] = round(movement_score, 6)
+        enriched["decision"] = decision
+        enriched["suggested_stake"] = round(stake["stake"], 2)
+        enriched["stake_cap_pct"] = round(stake["max_cap_pct"], 4)
+
+        return enriched
+
+    def run(self, rows: list[dict], bankroll: float = 1000.0) -> list[dict]:
+        enriched = [self.enrich_record(row, bankroll=bankroll) for row in rows]
+        return self.ranker.sort(enriched)
+EOF
+
+CREA_FILE quant/live/closing_odds_sync.py
+from __future__ import annotations
+
+from quant.clv.clv_journal_service import CLVJournalService
+from quant.live.closing_odds_collector import ClosingOddsCollector
+
+
+class ClosingOddsSync:
+
+    def __init__(self):
+        self.collector = ClosingOddsCollector()
+        self.clv_service = CLVJournalService()
+
+    def ingest_and_sync(
+        self,
+        fixture_id: str,
+        market: str,
+        closing_odds: float,
+        result: str | None = None,
+    ) -> dict:
+        collected = self.collector.collect(fixture_id, market, closing_odds)
+
+        updated_journal = None
+        if result is not None:
+            updated_journal = self.clv_service.settle_bet(
+                fixture_id=fixture_id,
+                market=market,
+                closing_odds=closing_odds,
+                result=result,
+            )
+
+        return {
+            "closing_row": collected,
+            "journal_update": updated_journal,
+        }
+EOF
+
+CREA_FILE quant/analytics/integrated_analytics.py
+from __future__ import annotations
+
+from quant.live.edge_stability_detector import EdgeStabilityDetector
+from quant.live.league_performance_analyzer import LeaguePerformanceAnalyzer
+from quant.live.market_optimizer import LeagueMarketPerformanceOptimizer
+
+
+class IntegratedAnalytics:
+
+    def __init__(self):
+        self.league_analyzer = LeaguePerformanceAnalyzer()
+        self.edge_detector = EdgeStabilityDetector()
+        self.market_optimizer = LeagueMarketPerformanceOptimizer()
+
+    def build(self, rows: list[dict]) -> dict:
+        return {
+            "league_summary": self.league_analyzer.analyze(rows),
+            "edge_summary": self.edge_detector.analyze(rows),
+            "market_summary": self.market_optimizer.optimize(rows),
+        }
+EOF
+
+CREA_FILE quant/ops/full_integration_runner.py
+from __future__ import annotations
+
+import json
+import os
+
+import pandas as pd
+
+from quant.analytics.integrated_analytics import IntegratedAnalytics
+from quant.clv.clv_journal_service import CLVJournalService
+from quant.fusion.live_fusion_runner import LiveFusionRunner
+from quant.markets.market_expansion_engine import MarketExpansionEngine
+from quant.ml.ml_prediction_bridge import MLPredictionBridge
+from quant.ml.temporal_validator_real import TemporalValidatorReal
+from quant.ml.threshold_optimizer import ThresholdOptimizer
+from quant.ops.heartbeat import Heartbeat
+from quant.ops.monitoring import Monitoring
+from quant.temporal.temporal_guard_runner import TemporalGuardRunner
+from quant.value.adaptive_value_bet_engine import AdaptiveValueBetEngine
+
+
+class FullIntegrationRunner:
+
+    def __init__(self):
+        self.fusion_runner = LiveFusionRunner()
+        self.market_engine = MarketExpansionEngine()
+        self.ml_bridge = MLPredictionBridge()
+        self.threshold_optimizer = ThresholdOptimizer()
+        self.value_engine = AdaptiveValueBetEngine()
+        self.clv_service = CLVJournalService()
+        self.temporal_guard = TemporalGuardRunner()
+        self.analytics = IntegratedAnalytics()
+        self.temporal_validator = TemporalValidatorReal()
+        self.heartbeat = Heartbeat()
+        self.monitoring = Monitoring()
+        self.summary_path = "outputs/ops/full_integration_summary.json"
+        os.makedirs(os.path.dirname(self.summary_path), exist_ok=True)
+
+    def _build_training_rows_from_fusion(self, fused_rows: list[dict]) -> list[dict]:
+        if not fused_rows:
+            return []
+
+        rows = []
+
+        for row in fused_rows:
+            rows.append(
+                {
+                    "elo_diff": float(row.get("elo_diff", 0.0) or 0.0),
+                    "form_diff": float(row.get("form_score_diff", 0.0) or 0.0),
+                    "xg_diff": float(row.get("xg_diff", 0.0) or 0.0),
+                    "xga_diff": float(row.get("xga_diff", 0.0) or 0.0),
+                    "xpts_diff": float(row.get("xpts_diff", 0.0) or 0.0),
+                    "shots_diff": float(row.get("shots_diff", 0.0) or 0.0),
+                    "shots_on_target_diff": float(row.get("shots_on_target_diff", 0.0) or 0.0),
+                    "form_score_diff": float(row.get("form_score_diff", 0.0) or 0.0),
+                    "bookmaker_odds_home": float(row.get("bookmaker_odds_home", 0.0) or 0.0),
+                    "bookmaker_odds_draw": float(row.get("bookmaker_odds_draw", 0.0) or 0.0),
+                    "bookmaker_odds_away": float(row.get("bookmaker_odds_away", 0.0) or 0.0),
+                    "result": row.get("result", "D"),
+                    "match_date": row.get("match_date", row.get("created_at", "2024-01-01")),
+                }
+            )
+
+        return rows
+
+    def _build_temporal_dataframe(self, rows: list[dict]) -> pd.DataFrame:
+        if not rows:
+            return pd.DataFrame()
+        return pd.DataFrame(rows)
+
+    def _apply_thresholds(self, rows: list[dict], bankroll: float) -> tuple[list[dict], dict]:
+        optimized = self.threshold_optimizer.optimize(rows)
+
+        self.value_engine.update_thresholds(
+            {
+                "min_probability": optimized.get("min_probability", 0.54),
+                "min_ev": optimized.get("min_ev", 0.02),
+                "min_confidence": optimized.get("min_confidence", 0.60),
+                "min_agreement": optimized.get("min_agreement", 0.55),
+            }
+        )
+
+        ranked = self.value_engine.run(rows, bankroll=bankroll)
+        return ranked, optimized
+
+    def _save_summary(self, payload: dict) -> str:
+        summary = {
+            "fusion_count": len(payload.get("fusion", {}).get("rows", [])),
+            "market_count": len(payload.get("market_rows", [])),
+            "ml_count": len(payload.get("ml_rows", [])),
+            "ranked_count": len(payload.get("ranked_rows", [])),
+            "journal_count": len(payload.get("journal_rows", [])),
+            "threshold_summary": payload.get("threshold_summary", {}),
+            "performance_summary": payload.get("performance_summary", {}),
+            "analytics": payload.get("analytics", {}),
+            "temporal_validation_windows": len(payload.get("temporal_validation", [])),
+            "temporal_guard_passed": payload.get("temporal_guard", {}).get("passed", False),
+        }
+
+        with open(self.summary_path, "w", encoding="utf-8") as handle:
+            json.dump(summary, handle, indent=2)
+
+        return self.summary_path
+
+    def run_cycle(
+        self,
+        bankroll: float = 1000.0,
+        league: str = "Serie A",
+        season: int = 2024,
+    ) -> dict:
+        self.heartbeat.beat("full_integration_runner", "running")
+        self.monitoring.log(
+            "full_integration_cycle_started",
+            {"bankroll": bankroll, "league": league, "season": season},
+        )
+
+        fusion_payload = self.fusion_runner.run(league=league, season=season)
+        fused_rows = fusion_payload.get("rows", [])
+
+        training_rows = self._build_training_rows_from_fusion(fused_rows)
+        self.ml_bridge.fit(training_rows)
+
+        market_rows = self.market_engine.run(bankroll=bankroll)
+        ml_rows = self.ml_bridge.enrich_records(market_rows)
+
+        ranked_rows, threshold_summary = self._apply_thresholds(
+            ml_rows,
+            bankroll=bankroll,
+        )
+
+        journal_rows = self.clv_service.record_bets(ranked_rows)
+        journal_list = self.clv_service.journal.list_bets()
+
+        temporal_validation = self.temporal_validator.validate(
+            self._build_temporal_dataframe(training_rows)
+        )
+        temporal_guard_payload = self.temporal_guard.run()
+        analytics_payload = self.analytics.build(journal_list)
+        summary = self.clv_service.performance_summary()
+
+        payload = {
+            "fusion": fusion_payload,
+            "ml_training_rows": len(training_rows),
+            "market_rows": market_rows,
+            "ml_rows": ml_rows,
+            "ranked_rows": ranked_rows,
+            "threshold_summary": threshold_summary,
+            "journal_rows": journal_rows,
+            "performance_summary": summary,
+            "temporal_validation": temporal_validation,
+            "temporal_guard": temporal_guard_payload,
+            "analytics": analytics_payload,
+        }
+
+        summary_path = self._save_summary(payload)
+        payload["summary_path"] = summary_path
 
         self.monitoring.log(
-            "scheduler_job_added",
+            "full_integration_cycle_completed",
             {
-                "name": name,
-                "interval_seconds": interval_seconds,
-                "run_immediately": run_immediately,
+                "fusion_rows": len(fused_rows),
+                "market_rows": len(market_rows),
+                "ranked_rows": len(ranked_rows),
+                "journal_rows": len(journal_rows),
+                "summary_path": summary_path,
             },
         )
 
-    def start(self):
-        self.monitoring.log("scheduler_started", {})
+        return payload
+EOF
 
-        if hasattr(self.scheduler, "start_background"):
-            self.scheduler.start_background()
-        elif hasattr(self.scheduler, "start"):
-            self.scheduler.start()
+CREA_FILE quant/ops/integration_scheduler_app.py
+from __future__ import annotations
+
+from quant.ops.full_integration_runner import FullIntegrationRunner
+from quant.ops.scheduler_service import SchedulerService
+from quant.ops.watchdog import Watchdog
+from quant.ops.worker_pool import WorkerPool
+
+
+class IntegrationSchedulerApp:
+
+    def __init__(self):
+        self.runner = FullIntegrationRunner()
+        self.scheduler = SchedulerService()
+        self.watchdog = Watchdog()
+        self.worker_pool = WorkerPool(max_workers=2)
+
+    def _scheduled_cycle(self):
+        self.watchdog.ping("integration_scheduler")
+        return self.runner.run_cycle()
+
+    def start(self, interval_seconds: float = 300.0):
+        self.scheduler.add_recurring_job(
+            name="full_integration_cycle",
+            callback=lambda: self.worker_pool.submit(self._scheduled_cycle),
+            interval_seconds=interval_seconds,
+            run_immediately=True,
+        )
+        self.scheduler.start()
 
     def stop(self):
-        if hasattr(self.scheduler, "shutdown"):
-            self.scheduler.shutdown()
-        elif hasattr(self.scheduler, "stop_background"):
-            self.scheduler.stop_background()
-        elif hasattr(self.scheduler, "stop"):
-            self.scheduler.stop()
+        self.scheduler.stop()
+        self.worker_pool.shutdown(wait=False)
+EOF
 
-        self.monitoring.log("scheduler_stopped", {})
+CREA_FILE app/full_integration_controller.py
+from quant.ops.full_integration_runner import FullIntegrationRunner
+
+
+class AppFullIntegrationController:
+
+    def __init__(self):
+        self.runner = FullIntegrationRunner()
+
+    def run(self, bankroll: float = 1000.0, league: str = "Serie A", season: int = 2024):
+        return self.runner.run_cycle(
+            bankroll=bankroll,
+            league=league,
+            season=season,
+        )
+EOF
+
+CREA_FILE ui/full_integration_bridge.py
+from __future__ import annotations
+
+from app.full_integration_controller import AppFullIntegrationController
+
+
+class FullIntegrationBridge:
+
+    def __init__(self):
+        self.controller = AppFullIntegrationController()
+
+    def run(
+        self,
+        bankroll: float = 1000.0,
+        league: str = "Serie A",
+        season: int = 2024,
+    ) -> dict:
+        payload = self.controller.run(
+            bankroll=bankroll,
+            league=league,
+            season=season,
+        )
+
+        return {
+            "summary": {
+                "fusion_count": len(payload.get("fusion", {}).get("rows", [])),
+                "market_count": len(payload.get("market_rows", [])),
+                "ranked_count": len(payload.get("ranked_rows", [])),
+                "journal_count": len(payload.get("journal_rows", [])),
+                "threshold_summary": payload.get("threshold_summary", {}),
+                "performance_summary": payload.get("performance_summary", {}),
+                "analytics": payload.get("analytics", {}),
+                "temporal_guard_passed": payload.get("temporal_guard", {}).get("passed", False),
+            },
+            "path": payload.get("summary_path", ""),
+            "payload": payload,
+        }
+EOF
+
+CREA_FILE tests/test_ml_prediction_bridge.py
+from quant.ml.ml_prediction_bridge import MLPredictionBridge
+
+
+def test_ml_prediction_bridge_runs():
+    bridge = MLPredictionBridge()
+
+    training_rows = [
+        {
+            "elo_diff": 10,
+            "form_diff": 0.1,
+            "xg_diff": 0.2,
+            "xga_diff": 0.1,
+            "xpts_diff": 0.3,
+            "shots_diff": 2,
+            "shots_on_target_diff": 1,
+            "form_score_diff": 0.1,
+            "bookmaker_odds_home": 2.0,
+            "bookmaker_odds_draw": 3.2,
+            "bookmaker_odds_away": 3.8,
+            "result": "H",
+        },
+        {
+            "elo_diff": -8,
+            "form_diff": -0.1,
+            "xg_diff": -0.2,
+            "xga_diff": -0.1,
+            "xpts_diff": -0.2,
+            "shots_diff": -2,
+            "shots_on_target_diff": -1,
+            "form_score_diff": -0.1,
+            "bookmaker_odds_home": 2.4,
+            "bookmaker_odds_draw": 3.1,
+            "bookmaker_odds_away": 2.9,
+            "result": "A",
+        },
+    ]
+    bridge.fit(training_rows)
+
+    rows = [
+        {
+            "fixture_id": "1",
+            "home_team": "A",
+            "away_team": "B",
+            "market": "home",
+            "probability": 0.55,
+            "bookmaker_odds": 2.0,
+            "confidence": 0.7,
+            "agreement": 0.65,
+            "elo_diff": 5,
+            "form_diff": 0.1,
+            "xg_diff": 0.1,
+            "xga_diff": 0.1,
+            "xpts_diff": 0.2,
+            "shots_diff": 1,
+            "shots_on_target_diff": 1,
+            "form_score_diff": 0.1,
+            "bookmaker_odds_home": 2.0,
+            "bookmaker_odds_draw": 3.0,
+            "bookmaker_odds_away": 3.5,
+        }
+    ]
+
+    result = bridge.enrich_records(rows)
+
+    assert isinstance(result, list)
+    assert "ml_home_probability" in result[0]
+EOF
+
+CREA_FILE tests/test_adaptive_value_bet_engine.py
+from quant.value.adaptive_value_bet_engine import AdaptiveValueBetEngine
+
+
+def test_adaptive_value_bet_engine_updates_thresholds():
+    engine = AdaptiveValueBetEngine()
+    engine.update_thresholds(
+        {
+            "min_probability": 0.51,
+            "min_ev": 0.01,
+            "min_confidence": 0.55,
+            "min_agreement": 0.50,
+        }
+    )
+
+    rows = engine.run(
+        [
+            {
+                "fixture_id": "1",
+                "home_team": "A",
+                "away_team": "B",
+                "market": "home",
+                "probability": 0.58,
+                "bookmaker_odds": 2.05,
+                "confidence": 0.70,
+                "agreement": 0.65,
+            }
+        ]
+    )
+
+    assert isinstance(rows, list)
+    assert "ev" in rows[0]
+EOF
+
+CREA_FILE tests/test_closing_odds_sync.py
+from quant.live.closing_odds_sync import ClosingOddsSync
+
+
+def test_closing_odds_sync_runs(tmp_path):
+    sync = ClosingOddsSync()
+    sync.collector.path = str(tmp_path / "closing_odds.json")
+    sync.clv_service.journal.path = str(tmp_path / "bet_journal.json")
+    sync.clv_service.journal.__init__(sync.clv_service.journal.path)
+
+    sync.clv_service.record_bets(
+        [
+            {
+                "fixture_id": "1",
+                "home_team": "A",
+                "away_team": "B",
+                "market": "home",
+                "probability": 0.58,
+                "fair_odds": 1.72,
+                "bookmaker_odds": 2.05,
+                "ev": 0.18,
+                "confidence": 0.72,
+                "agreement": 0.68,
+                "decision": "BET",
+                "suggested_stake": 10.0,
+            }
+        ]
+    )
+
+    result = sync.ingest_and_sync("1", "home", 1.95, result="WIN")
+
+    assert "closing_row" in result
+    assert "journal_update" in result
+EOF
+
+CREA_FILE tests/test_integrated_analytics.py
+from quant.analytics.integrated_analytics import IntegratedAnalytics
+
+
+def test_integrated_analytics_builds():
+    rows = [
+        {
+            "league": "Serie A",
+            "market": "home",
+            "stake": 10,
+            "pnl": 5,
+            "ev": 0.08,
+        }
+    ]
+
+    payload = IntegratedAnalytics().build(rows)
+
+    assert "league_summary" in payload
+    assert "edge_summary" in payload
+    assert "market_summary" in payload
+EOF
+
+CREA_FILE tests/test_full_integration_runner.py
+from quant.ops.full_integration_runner import FullIntegrationRunner
+
+
+def test_full_integration_runner_runs():
+    payload = FullIntegrationRunner().run_cycle()
+
+    assert isinstance(payload, dict)
+    assert "fusion" in payload
+    assert "market_rows" in payload
+    assert "ranked_rows" in payload
+    assert "analytics" in payload
+    assert "temporal_guard" in payload
+    assert "summary_path" in payload
+EOF
+
+CREA_FILE tests/test_integration_scheduler_app.py
+from quant.ops.integration_scheduler_app import IntegrationSchedulerApp
+
+
+def test_integration_scheduler_app_constructs():
+    app = IntegrationSchedulerApp()
+
+    assert app.runner is not None
+    assert app.scheduler is not None
+    assert app.watchdog is not None
+EOF
+
+CREA_FILE tests/test_app_full_integration_controller.py
+from app.full_integration_controller import AppFullIntegrationController
+
+
+def test_app_full_integration_controller_runs():
+    payload = AppFullIntegrationController().run()
+
+    assert isinstance(payload, dict)
+    assert "ranked_rows" in payload
+EOF
+
+CREA_FILE tests/test_ui_full_integration_bridge.py
+from ui.full_integration_bridge import FullIntegrationBridge
+
+
+def test_ui_full_integration_bridge_runs():
+    result = FullIntegrationBridge().run()
+
+    assert isinstance(result, dict)
+    assert "summary" in result
+    assert "path" in result
 EOF
 
 FIX_WHITESPACE
-

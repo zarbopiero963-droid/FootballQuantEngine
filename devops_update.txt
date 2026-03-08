@@ -1,478 +1,709 @@
 ############################################
-CLV TRACKER 1
+TEMPORAL BACKTEST GUARD 1
 ############################################
 
-CREA_CARTELLA quant/clv
-CREA_CARTELLA outputs/clv
+CREA_CARTELLA quant/temporal
+CREA_CARTELLA outputs/temporal
 
-CREA_FILE quant/clv/bet_journal.py
+CREA_FILE quant/temporal/time_splitter.py
 from __future__ import annotations
 
-import csv
-import json
-import os
-from datetime import datetime
+import pandas as pd
 
 
-class BetJournal:
+class TimeSplitter:
 
-    def __init__(self, path: str = "outputs/clv/bet_journal.json"):
-        self.path = path
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+    def ensure_datetime(self, df: pd.DataFrame, date_col: str = "match_date") -> pd.DataFrame:
+        if df is None or df.empty:
+            return pd.DataFrame()
 
-        if not os.path.exists(self.path):
-            with open(self.path, "w", encoding="utf-8") as handle:
-                json.dump([], handle, indent=2)
+        out = df.copy()
+        out[date_col] = pd.to_datetime(out[date_col], errors="coerce")
+        out = out.dropna(subset=[date_col]).sort_values(date_col).reset_index(drop=True)
+        return out
 
-    def _load(self) -> list[dict]:
-        with open(self.path, "r", encoding="utf-8") as handle:
-            return json.load(handle)
+    def split_train_validation_test(
+        self,
+        df: pd.DataFrame,
+        date_col: str = "match_date",
+        train_ratio: float = 0.6,
+        validation_ratio: float = 0.2,
+    ) -> dict:
+        out = self.ensure_datetime(df, date_col=date_col)
 
-    def _save(self, rows: list[dict]) -> None:
-        with open(self.path, "w", encoding="utf-8") as handle:
-            json.dump(rows, handle, indent=2)
-
-    def add_bet(self, payload: dict) -> dict:
-        rows = self._load()
-
-        row = dict(payload)
-        row.setdefault("created_at", datetime.utcnow().isoformat() + "Z")
-        row.setdefault("status", "OPEN")
-        row.setdefault("closing_odds", None)
-        row.setdefault("result", None)
-        row.setdefault("pnl", None)
-        row.setdefault("clv_abs", None)
-        row.setdefault("clv_pct", None)
-
-        rows.append(row)
-        self._save(rows)
-        return row
-
-    def list_bets(self) -> list[dict]:
-        return self._load()
-
-    def update_bet(self, fixture_id: str, market: str, fields: dict) -> dict | None:
-        rows = self._load()
-        updated = None
-
-        for row in rows:
-            if str(row.get("fixture_id")) == str(fixture_id) and str(row.get("market")) == str(market):
-                row.update(fields)
-                updated = row
-                break
-
-        self._save(rows)
-        return updated
-
-    def export_csv(self, path: str = "outputs/clv/bet_journal.csv") -> str:
-        rows = self._load()
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-
-        if not rows:
-            with open(path, "w", newline="", encoding="utf-8") as handle:
-                writer = csv.writer(handle)
-                writer.writerow(["empty"])
-            return path
-
-        fieldnames = sorted({key for row in rows for key in row.keys()})
-
-        with open(path, "w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(rows)
-
-        return path
-EOF
-
-CREA_FILE quant/clv/clv_tracker.py
-from __future__ import annotations
-
-
-class CLVTracker:
-
-    def implied_probability(self, odds: float) -> float:
-        odds = float(odds or 0.0)
-        if odds <= 0.0:
-            return 0.0
-        return 1.0 / odds
-
-    def clv_absolute(self, placed_odds: float, closing_odds: float) -> float:
-        placed_odds = float(placed_odds or 0.0)
-        closing_odds = float(closing_odds or 0.0)
-
-        if placed_odds <= 0.0 or closing_odds <= 0.0:
-            return 0.0
-
-        placed_imp = self.implied_probability(placed_odds)
-        closing_imp = self.implied_probability(closing_odds)
-
-        return placed_imp - closing_imp
-
-    def clv_percent(self, placed_odds: float, closing_odds: float) -> float:
-        placed_odds = float(placed_odds or 0.0)
-        closing_odds = float(closing_odds or 0.0)
-
-        if placed_odds <= 0.0 or closing_odds <= 0.0:
-            return 0.0
-
-        return (placed_odds - closing_odds) / placed_odds
-
-    def evaluate(self, placed_odds: float, closing_odds: float) -> dict:
-        return {
-            "clv_abs": round(self.clv_absolute(placed_odds, closing_odds), 6),
-            "clv_pct": round(self.clv_percent(placed_odds, closing_odds), 6),
-        }
-EOF
-
-CREA_FILE quant/clv/pnl_calculator.py
-from __future__ import annotations
-
-
-class PnLCalculator:
-
-    def settle(self, stake: float, odds: float, result: str) -> float:
-        stake = float(stake or 0.0)
-        odds = float(odds or 0.0)
-        result = str(result or "").upper()
-
-        if stake <= 0.0:
-            return 0.0
-
-        if result == "WIN":
-            return round((stake * odds) - stake, 2)
-
-        if result == "LOSE":
-            return round(-stake, 2)
-
-        if result == "VOID":
-            return 0.0
-
-        return 0.0
-EOF
-
-CREA_FILE quant/clv/performance_report.py
-from __future__ import annotations
-
-
-class PerformanceReport:
-
-    def build(self, rows: list[dict]) -> dict:
-        if not rows:
+        if out.empty:
+            empty = pd.DataFrame()
             return {
-                "total_bets": 0,
-                "open_bets": 0,
-                "settled_bets": 0,
-                "wins": 0,
-                "losses": 0,
-                "voids": 0,
+                "train": empty,
+                "validation": empty,
+                "test": empty,
+            }
+
+        n = len(out.index)
+        train_end = max(1, int(n * train_ratio))
+        validation_end = max(train_end + 1, int(n * (train_ratio + validation_ratio)))
+
+        validation_end = min(validation_end, n)
+
+        train = out.iloc[:train_end].reset_index(drop=True)
+        validation = out.iloc[train_end:validation_end].reset_index(drop=True)
+        test = out.iloc[validation_end:].reset_index(drop=True)
+
+        return {
+            "train": train,
+            "validation": validation,
+            "test": test,
+        }
+
+    def rolling_windows(
+        self,
+        df: pd.DataFrame,
+        date_col: str = "match_date",
+        train_size: int = 50,
+        test_size: int = 20,
+        step: int = 20,
+    ) -> list[dict]:
+        out = self.ensure_datetime(df, date_col=date_col)
+
+        if out.empty:
+            return []
+
+        train_size = max(1, int(train_size))
+        test_size = max(1, int(test_size))
+        step = max(1, int(step))
+
+        windows = []
+        start = 0
+        total = len(out.index)
+
+        while start + train_size + test_size <= total:
+            train = out.iloc[start:start + train_size].reset_index(drop=True)
+            test = out.iloc[start + train_size:start + train_size + test_size].reset_index(drop=True)
+
+            windows.append(
+                {
+                    "train": train,
+                    "test": test,
+                    "train_start": str(train[date_col].min()),
+                    "train_end": str(train[date_col].max()),
+                    "test_start": str(test[date_col].min()),
+                    "test_end": str(test[date_col].max()),
+                }
+            )
+
+            start += step
+
+        return windows
+EOF
+
+CREA_FILE quant/temporal/temporal_metrics.py
+from __future__ import annotations
+
+import pandas as pd
+
+
+class TemporalMetrics:
+
+    def _safe_float(self, value, default=0.0) -> float:
+        try:
+            return float(value)
+        except Exception:
+            return float(default)
+
+    def build(self, df: pd.DataFrame) -> dict:
+        if df is None or df.empty:
+            return {
+                "rows": 0,
+                "bet_count": 0,
                 "total_stake": 0.0,
                 "total_pnl": 0.0,
                 "roi": 0.0,
                 "yield": 0.0,
+                "hit_rate": 0.0,
                 "avg_ev": 0.0,
                 "avg_clv_abs": 0.0,
                 "avg_clv_pct": 0.0,
             }
 
-        total_bets = len(rows)
-        open_bets = sum(1 for row in rows if str(row.get("status", "")).upper() == "OPEN")
-        settled_rows = [row for row in rows if str(row.get("status", "")).upper() == "SETTLED"]
+        work = df.copy()
 
-        wins = sum(1 for row in settled_rows if str(row.get("result", "")).upper() == "WIN")
-        losses = sum(1 for row in settled_rows if str(row.get("result", "")).upper() == "LOSE")
-        voids = sum(1 for row in settled_rows if str(row.get("result", "")).upper() == "VOID")
+        if "decision" in work.columns:
+            bet_mask = work["decision"].astype(str).eq("BET")
+            bets = work[bet_mask].copy()
+        else:
+            bets = work.copy()
 
-        total_stake = round(sum(float(row.get("stake", 0.0) or 0.0) for row in rows), 2)
-        total_pnl = round(sum(float(row.get("pnl", 0.0) or 0.0) for row in settled_rows), 2)
+        if bets.empty:
+            return {
+                "rows": len(work.index),
+                "bet_count": 0,
+                "total_stake": 0.0,
+                "total_pnl": 0.0,
+                "roi": 0.0,
+                "yield": 0.0,
+                "hit_rate": 0.0,
+                "avg_ev": 0.0,
+                "avg_clv_abs": 0.0,
+                "avg_clv_pct": 0.0,
+            }
 
-        settled_bets = len(settled_rows)
+        total_stake = sum(self._safe_float(v) for v in bets.get("stake", pd.Series([0.0] * len(bets.index))))
+        total_pnl = sum(self._safe_float(v) for v in bets.get("pnl", pd.Series([0.0] * len(bets.index))))
+
+        wins = 0
+        if "result" in bets.columns:
+            wins = int(bets["result"].astype(str).str.upper().eq("WIN").sum())
+        elif "pnl" in bets.columns:
+            wins = int((bets["pnl"].astype(float) > 0).sum())
+
+        bet_count = len(bets.index)
+
         roi = (total_pnl / total_stake) if total_stake > 0 else 0.0
-        yield_value = (total_pnl / total_stake) if total_stake > 0 else 0.0
+        yield_value = roi
+        hit_rate = (wins / bet_count) if bet_count > 0 else 0.0
 
-        ev_values = [float(row.get("ev", 0.0) or 0.0) for row in rows]
-        clv_abs_values = [float(row.get("clv_abs", 0.0) or 0.0) for row in settled_rows if row.get("clv_abs") is not None]
-        clv_pct_values = [float(row.get("clv_pct", 0.0) or 0.0) for row in settled_rows if row.get("clv_pct") is not None]
+        avg_ev = (
+            float(bets["ev"].astype(float).mean())
+            if "ev" in bets.columns and bet_count > 0
+            else 0.0
+        )
+        avg_clv_abs = (
+            float(bets["clv_abs"].astype(float).mean())
+            if "clv_abs" in bets.columns and bet_count > 0
+            else 0.0
+        )
+        avg_clv_pct = (
+            float(bets["clv_pct"].astype(float).mean())
+            if "clv_pct" in bets.columns and bet_count > 0
+            else 0.0
+        )
 
         return {
-            "total_bets": total_bets,
-            "open_bets": open_bets,
-            "settled_bets": settled_bets,
-            "wins": wins,
-            "losses": losses,
-            "voids": voids,
-            "total_stake": total_stake,
-            "total_pnl": total_pnl,
+            "rows": int(len(work.index)),
+            "bet_count": int(bet_count),
+            "total_stake": round(total_stake, 2),
+            "total_pnl": round(total_pnl, 2),
             "roi": round(roi, 6),
             "yield": round(yield_value, 6),
-            "avg_ev": round(sum(ev_values) / max(len(ev_values), 1), 6),
-            "avg_clv_abs": round(sum(clv_abs_values) / max(len(clv_abs_values), 1), 6),
-            "avg_clv_pct": round(sum(clv_pct_values) / max(len(clv_pct_values), 1), 6),
+            "hit_rate": round(hit_rate, 6),
+            "avg_ev": round(avg_ev, 6),
+            "avg_clv_abs": round(avg_clv_abs, 6),
+            "avg_clv_pct": round(avg_clv_pct, 6),
         }
 EOF
 
-CREA_FILE quant/clv/clv_journal_service.py
+CREA_FILE quant/temporal/temporal_guard.py
 from __future__ import annotations
 
+
+class TemporalGuard:
+
+    def __init__(
+        self,
+        min_rows: int = 1,
+        min_bet_count: int = 0,
+        min_roi: float = -1.0,
+        min_yield: float = -1.0,
+        min_hit_rate: float = 0.0,
+        min_avg_ev: float = -1.0,
+    ):
+        self.min_rows = int(min_rows)
+        self.min_bet_count = int(min_bet_count)
+        self.min_roi = float(min_roi)
+        self.min_yield = float(min_yield)
+        self.min_hit_rate = float(min_hit_rate)
+        self.min_avg_ev = float(min_avg_ev)
+
+    def evaluate(self, metrics: dict) -> dict:
+        checks = [
+            {
+                "name": "rows_minimum",
+                "passed": int(metrics.get("rows", 0)) >= self.min_rows,
+                "value": metrics.get("rows", 0),
+            },
+            {
+                "name": "bet_count_minimum",
+                "passed": int(metrics.get("bet_count", 0)) >= self.min_bet_count,
+                "value": metrics.get("bet_count", 0),
+            },
+            {
+                "name": "roi_threshold",
+                "passed": float(metrics.get("roi", 0.0)) >= self.min_roi,
+                "value": metrics.get("roi", 0.0),
+            },
+            {
+                "name": "yield_threshold",
+                "passed": float(metrics.get("yield", 0.0)) >= self.min_yield,
+                "value": metrics.get("yield", 0.0),
+            },
+            {
+                "name": "hit_rate_threshold",
+                "passed": float(metrics.get("hit_rate", 0.0)) >= self.min_hit_rate,
+                "value": metrics.get("hit_rate", 0.0),
+            },
+            {
+                "name": "avg_ev_threshold",
+                "passed": float(metrics.get("avg_ev", 0.0)) >= self.min_avg_ev,
+                "value": metrics.get("avg_ev", 0.0),
+            },
+        ]
+
+        return {
+            "passed": all(item["passed"] for item in checks),
+            "checks": checks,
+            "metrics": metrics,
+        }
+EOF
+
+CREA_FILE quant/temporal/temporal_reporter.py
+from __future__ import annotations
+
+import csv
+import json
+import os
+
+
+class TemporalReporter:
+
+    def __init__(self, output_dir: str = "outputs/temporal"):
+        self.output_dir = output_dir
+        os.makedirs(self.output_dir, exist_ok=True)
+
+    def save_json(self, payload: dict, filename: str = "temporal_guard_report.json") -> str:
+        path = os.path.join(self.output_dir, filename)
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+        return path
+
+    def save_csv(self, windows: list[dict], filename: str = "temporal_windows.csv") -> str:
+        path = os.path.join(self.output_dir, filename)
+
+        if not windows:
+            with open(path, "w", newline="", encoding="utf-8") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(["empty"])
+            return path
+
+        fieldnames = sorted({key for row in windows for key in row.keys()})
+
+        with open(path, "w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(windows)
+
+        return path
+
+    def save_html(self, payload: dict, filename: str = "temporal_guard_report.html") -> str:
+        path = os.path.join(self.output_dir, filename)
+
+        windows = payload.get("windows", [])
+        guard = payload.get("guard", {})
+        checks = guard.get("checks", [])
+        metrics = guard.get("metrics", {})
+
+        rows = []
+        for row in windows:
+            rows.append(
+                "<tr>"
+                f"<td>{row.get('window_id','')}</td>"
+                f"<td>{row.get('train_start','')}</td>"
+                f"<td>{row.get('train_end','')}</td>"
+                f"<td>{row.get('test_start','')}</td>"
+                f"<td>{row.get('test_end','')}</td>"
+                f"<td>{row.get('bet_count',0)}</td>"
+                f"<td>{row.get('roi',0)}</td>"
+                f"<td>{row.get('yield',0)}</td>"
+                f"<td>{row.get('hit_rate',0)}</td>"
+                f"<td>{row.get('avg_ev',0)}</td>"
+                f"<td>{row.get('avg_clv_abs',0)}</td>"
+                "</tr>"
+            )
+
+        check_rows = []
+        for item in checks:
+            check_rows.append(
+                "<tr>"
+                f"<td>{item.get('name','')}</td>"
+                f"<td>{item.get('passed',False)}</td>"
+                f"<td>{item.get('value','')}</td>"
+                "</tr>"
+            )
+
+        metric_rows = []
+        for key, value in metrics.items():
+            metric_rows.append(f"<tr><td>{key}</td><td>{value}</td></tr>")
+
+        html = f"""<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Temporal Backtest Guard</title>
+<style>
+body {{ font-family: Arial, sans-serif; margin: 24px; }}
+table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; }}
+th, td {{ border: 1px solid #ccc; padding: 8px; }}
+th {{ background: #f4f4f4; }}
+</style>
+</head>
+<body>
+<h1>Temporal Backtest Guard</h1>
+
+<h2>Aggregate Metrics</h2>
+<table>
+<tr><th>Metric</th><th>Value</th></tr>
+{''.join(metric_rows)}
+</table>
+
+<h2>Guard Checks</h2>
+<table>
+<tr><th>Check</th><th>Passed</th><th>Value</th></tr>
+{''.join(check_rows)}
+</table>
+
+<h2>Rolling Windows</h2>
+<table>
+<tr>
+<th>Window</th>
+<th>Train Start</th>
+<th>Train End</th>
+<th>Test Start</th>
+<th>Test End</th>
+<th>Bet Count</th>
+<th>ROI</th>
+<th>Yield</th>
+<th>Hit Rate</th>
+<th>Avg EV</th>
+<th>Avg CLV Abs</th>
+</tr>
+{''.join(rows)}
+</table>
+</body>
+</html>"""
+
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(html)
+
+        return path
+EOF
+
+CREA_FILE quant/temporal/temporal_backtest_guard.py
+from __future__ import annotations
+
+import pandas as pd
+
+from quant.temporal.temporal_guard import TemporalGuard
+from quant.temporal.temporal_metrics import TemporalMetrics
+from quant.temporal.temporal_reporter import TemporalReporter
+from quant.temporal.time_splitter import TimeSplitter
+
+
+class TemporalBacktestGuard:
+
+    def __init__(self):
+        self.splitter = TimeSplitter()
+        self.metrics = TemporalMetrics()
+        self.guard = TemporalGuard()
+        self.reporter = TemporalReporter()
+
+    def _ensure_date_column(self, df: pd.DataFrame) -> pd.DataFrame:
+        out = df.copy()
+
+        if "match_date" not in out.columns:
+            if "created_at" in out.columns:
+                out["match_date"] = out["created_at"]
+            else:
+                out["match_date"] = pd.date_range(
+                    start="2024-01-01",
+                    periods=len(out.index),
+                    freq="D",
+                )
+
+        return out
+
+    def run(
+        self,
+        df: pd.DataFrame,
+        date_col: str = "match_date",
+        train_size: int = 50,
+        test_size: int = 20,
+        step: int = 20,
+    ) -> dict:
+        if df is None or df.empty:
+            payload = {
+                "passed": False,
+                "guard": {
+                    "passed": False,
+                    "checks": [],
+                    "metrics": self.metrics.build(pd.DataFrame()),
+                },
+                "windows": [],
+            }
+            json_path = self.reporter.save_json(payload)
+            csv_path = self.reporter.save_csv([])
+            html_path = self.reporter.save_html(payload)
+            return {
+                "passed": False,
+                "payload": payload,
+                "json_path": json_path,
+                "csv_path": csv_path,
+                "html_path": html_path,
+            }
+
+        work = self._ensure_date_column(df)
+        windows = self.splitter.rolling_windows(
+            work,
+            date_col=date_col,
+            train_size=train_size,
+            test_size=test_size,
+            step=step,
+        )
+
+        summary_rows = []
+
+        for idx, window in enumerate(windows, start=1):
+            test_df = window["test"]
+            metrics = self.metrics.build(test_df)
+
+            summary_rows.append(
+                {
+                    "window_id": idx,
+                    "train_start": window["train_start"],
+                    "train_end": window["train_end"],
+                    "test_start": window["test_start"],
+                    "test_end": window["test_end"],
+                    "rows": metrics["rows"],
+                    "bet_count": metrics["bet_count"],
+                    "roi": metrics["roi"],
+                    "yield": metrics["yield"],
+                    "hit_rate": metrics["hit_rate"],
+                    "avg_ev": metrics["avg_ev"],
+                    "avg_clv_abs": metrics["avg_clv_abs"],
+                    "avg_clv_pct": metrics["avg_clv_pct"],
+                }
+            )
+
+        aggregate_df = pd.DataFrame(summary_rows)
+
+        if aggregate_df.empty:
+            aggregate_metrics = self.metrics.build(pd.DataFrame())
+        else:
+            aggregate_metrics = {
+                "rows": int(aggregate_df["rows"].sum()),
+                "bet_count": int(aggregate_df["bet_count"].sum()),
+                "total_stake": 0.0,
+                "total_pnl": 0.0,
+                "roi": round(float(aggregate_df["roi"].mean()), 6),
+                "yield": round(float(aggregate_df["yield"].mean()), 6),
+                "hit_rate": round(float(aggregate_df["hit_rate"].mean()), 6),
+                "avg_ev": round(float(aggregate_df["avg_ev"].mean()), 6),
+                "avg_clv_abs": round(float(aggregate_df["avg_clv_abs"].mean()), 6),
+                "avg_clv_pct": round(float(aggregate_df["avg_clv_pct"].mean()), 6),
+            }
+
+        guard_result = self.guard.evaluate(aggregate_metrics)
+
+        payload = {
+            "passed": guard_result["passed"],
+            "guard": guard_result,
+            "windows": summary_rows,
+        }
+
+        json_path = self.reporter.save_json(payload)
+        csv_path = self.reporter.save_csv(summary_rows)
+        html_path = self.reporter.save_html(payload)
+
+        return {
+            "passed": guard_result["passed"],
+            "payload": payload,
+            "json_path": json_path,
+            "csv_path": csv_path,
+            "html_path": html_path,
+        }
+EOF
+
+CREA_FILE quant/temporal/temporal_guard_runner.py
+from __future__ import annotations
+
+import pandas as pd
+
 from quant.clv.bet_journal import BetJournal
-from quant.clv.clv_tracker import CLVTracker
-from quant.clv.pnl_calculator import PnLCalculator
-from quant.clv.performance_report import PerformanceReport
+from quant.temporal.temporal_backtest_guard import TemporalBacktestGuard
 
 
-class CLVJournalService:
+class TemporalGuardRunner:
 
     def __init__(self):
         self.journal = BetJournal()
-        self.tracker = CLVTracker()
-        self.pnl = PnLCalculator()
-        self.report_builder = PerformanceReport()
+        self.guard = TemporalBacktestGuard()
 
-    def record_bets(self, rows: list[dict]) -> list[dict]:
-        saved = []
-
-        for row in rows:
-            payload = {
-                "fixture_id": row.get("fixture_id"),
-                "home_team": row.get("home_team"),
-                "away_team": row.get("away_team"),
-                "market": row.get("market"),
-                "probability": row.get("probability"),
-                "fair_odds": row.get("fair_odds"),
-                "bookmaker_odds": row.get("bookmaker_odds"),
-                "opening_odds": row.get("opening_odds", row.get("bookmaker_odds")),
-                "ev": row.get("ev"),
-                "confidence": row.get("confidence"),
-                "agreement": row.get("agreement"),
-                "decision": row.get("decision"),
-                "stake": row.get("suggested_stake", 0.0),
-            }
-            saved.append(self.journal.add_bet(payload))
-
-        return saved
-
-    def settle_bet(
-        self,
-        fixture_id: str,
-        market: str,
-        closing_odds: float,
-        result: str,
-    ) -> dict | None:
+    def _load_dataframe(self) -> pd.DataFrame:
         rows = self.journal.list_bets()
+        if not rows:
+            return pd.DataFrame()
 
-        target = None
-        for row in rows:
-            if str(row.get("fixture_id")) == str(fixture_id) and str(row.get("market")) == str(market):
-                target = row
-                break
+        df = pd.DataFrame(rows)
 
-        if not target:
-            return None
+        if "created_at" in df.columns and "match_date" not in df.columns:
+            df["match_date"] = df["created_at"]
 
-        bookmaker_odds = float(target.get("bookmaker_odds", 0.0) or 0.0)
-        stake = float(target.get("stake", 0.0) or 0.0)
+        return df
 
-        clv_data = self.tracker.evaluate(
-            placed_odds=bookmaker_odds,
-            closing_odds=float(closing_odds),
-        )
-
-        pnl = self.pnl.settle(
-            stake=stake,
-            odds=bookmaker_odds,
-            result=result,
-        )
-
-        updated = self.journal.update_bet(
-            fixture_id=fixture_id,
-            market=market,
-            fields={
-                "closing_odds": float(closing_odds),
-                "result": str(result).upper(),
-                "status": "SETTLED",
-                "pnl": pnl,
-                "clv_abs": clv_data["clv_abs"],
-                "clv_pct": clv_data["clv_pct"],
-            },
-        )
-
-        return updated
-
-    def performance_summary(self) -> dict:
-        return self.report_builder.build(self.journal.list_bets())
-
-    def export_csv(self) -> str:
-        return self.journal.export_csv()
+    def run(self) -> dict:
+        df = self._load_dataframe()
+        return self.guard.run(df)
 EOF
 
-CREA_FILE quant/clv/clv_runner.py
-from __future__ import annotations
-
-from quant.clv.clv_journal_service import CLVJournalService
-from quant.value.value_bet_runner import ValueBetRunner
+CREA_FILE app/temporal_guard_controller.py
+from quant.temporal.temporal_guard_runner import TemporalGuardRunner
 
 
-class CLVRunner:
+class AppTemporalGuardController:
 
     def __init__(self):
-        self.value_runner = ValueBetRunner()
-        self.service = CLVJournalService()
+        self.runner = TemporalGuardRunner()
 
-    def run(self, bankroll: float = 1000.0) -> dict:
-        bets = self.value_runner.run(bankroll=bankroll)
-        saved = self.service.record_bets(bets)
-        summary = self.service.performance_summary()
-        csv_path = self.service.export_csv()
-
-        return {
-            "bets": saved,
-            "summary": summary,
-            "csv_path": csv_path,
-        }
+    def run(self):
+        return self.runner.run()
 EOF
 
-CREA_FILE app/clv_controller.py
-from quant.clv.clv_runner import CLVRunner
+CREA_FILE tests/test_time_splitter.py
+import pandas as pd
+
+from quant.temporal.time_splitter import TimeSplitter
 
 
-class AppCLVController:
-
-    def __init__(self):
-        self.runner = CLVRunner()
-
-    def run(self, bankroll: float = 1000.0):
-        return self.runner.run(bankroll=bankroll)
-EOF
-
-CREA_FILE tests/test_clv_tracker.py
-from quant.clv.clv_tracker import CLVTracker
-
-
-def test_clv_tracker_outputs():
-    tracker = CLVTracker()
-
-    result = tracker.evaluate(2.10, 1.95)
-
-    assert "clv_abs" in result
-    assert "clv_pct" in result
-EOF
-
-CREA_FILE tests/test_pnl_calculator.py
-from quant.clv.pnl_calculator import PnLCalculator
-
-
-def test_pnl_calculator_settle():
-    calc = PnLCalculator()
-
-    assert calc.settle(10, 2.00, "WIN") == 10.0
-    assert calc.settle(10, 2.00, "LOSE") == -10.0
-    assert calc.settle(10, 2.00, "VOID") == 0.0
-EOF
-
-CREA_FILE tests/test_bet_journal.py
-from quant.clv.bet_journal import BetJournal
-
-
-def test_bet_journal_add_and_list(tmp_path):
-    journal = BetJournal(str(tmp_path / "bet_journal.json"))
-
-    journal.add_bet(
+def test_time_splitter_rolling_windows():
+    df = pd.DataFrame(
         {
-            "fixture_id": "1",
-            "market": "home",
-            "stake": 10,
-            "bookmaker_odds": 2.00,
+            "match_date": pd.date_range("2024-01-01", periods=12, freq="D"),
+            "value": list(range(12)),
         }
     )
 
-    rows = journal.list_bets()
-
-    assert len(rows) == 1
-    assert rows[0]["fixture_id"] == "1"
-EOF
-
-CREA_FILE tests/test_clv_journal_service.py
-from quant.clv.clv_journal_service import CLVJournalService
-
-
-def test_clv_journal_service_record_and_settle(tmp_path):
-    service = CLVJournalService()
-    service.journal.path = str(tmp_path / "bet_journal.json")
-    service.journal.__init__(service.journal.path)
-
-    service.record_bets(
-        [
-            {
-                "fixture_id": "1",
-                "home_team": "TeamA",
-                "away_team": "TeamB",
-                "market": "home",
-                "probability": 0.58,
-                "fair_odds": 1.72,
-                "bookmaker_odds": 2.05,
-                "ev": 0.18,
-                "confidence": 0.72,
-                "agreement": 0.68,
-                "decision": "BET",
-                "suggested_stake": 10.0,
-            }
-        ]
+    windows = TimeSplitter().rolling_windows(
+        df,
+        train_size=5,
+        test_size=3,
+        step=2,
     )
 
-    updated = service.settle_bet("1", "home", 1.95, "WIN")
-
-    assert updated is not None
-    assert updated["status"] == "SETTLED"
-    assert "clv_abs" in updated
-    assert "pnl" in updated
+    assert isinstance(windows, list)
+    assert len(windows) > 0
+    assert "train" in windows[0]
+    assert "test" in windows[0]
 EOF
 
-CREA_FILE tests/test_performance_report.py
-from quant.clv.performance_report import PerformanceReport
+CREA_FILE tests/test_temporal_metrics.py
+import pandas as pd
+
+from quant.temporal.temporal_metrics import TemporalMetrics
 
 
-def test_performance_report_build():
-    report = PerformanceReport().build(
+def test_temporal_metrics_build():
+    df = pd.DataFrame(
         [
             {
+                "decision": "BET",
                 "stake": 10,
-                "ev": 0.10,
-                "status": "SETTLED",
+                "pnl": 5,
                 "result": "WIN",
-                "pnl": 10,
+                "ev": 0.10,
                 "clv_abs": 0.02,
                 "clv_pct": 0.05,
-            }
+            },
+            {
+                "decision": "BET",
+                "stake": 10,
+                "pnl": -10,
+                "result": "LOSE",
+                "ev": 0.03,
+                "clv_abs": -0.01,
+                "clv_pct": -0.02,
+            },
         ]
     )
 
-    assert report["total_bets"] == 1
-    assert "roi" in report
-    assert "avg_clv_abs" in report
+    result = TemporalMetrics().build(df)
+
+    assert result["bet_count"] == 2
+    assert "roi" in result
+    assert "avg_ev" in result
 EOF
 
-CREA_FILE tests/test_clv_runner.py
-from quant.clv.clv_runner import CLVRunner
+CREA_FILE tests/test_temporal_guard.py
+from quant.temporal.temporal_guard import TemporalGuard
 
 
-def test_clv_runner_runs():
-    result = CLVRunner().run()
+def test_temporal_guard_evaluate():
+    result = TemporalGuard().evaluate(
+        {
+            "rows": 10,
+            "bet_count": 3,
+            "roi": 0.02,
+            "yield": 0.02,
+            "hit_rate": 0.50,
+            "avg_ev": 0.04,
+        }
+    )
 
-    assert isinstance(result, dict)
-    assert "bets" in result
-    assert "summary" in result
-    assert "csv_path" in result
+    assert "passed" in result
+    assert "checks" in result
 EOF
 
-CREA_FILE tests/test_app_clv_controller.py
-from app.clv_controller import AppCLVController
+CREA_FILE tests/test_temporal_backtest_guard.py
+import pandas as pd
+
+from quant.temporal.temporal_backtest_guard import TemporalBacktestGuard
 
 
-def test_app_clv_controller_runs():
-    result = AppCLVController().run()
+def test_temporal_backtest_guard_runs():
+    df = pd.DataFrame(
+        {
+            "match_date": pd.date_range("2024-01-01", periods=20, freq="D"),
+            "decision": ["BET"] * 20,
+            "stake": [10] * 20,
+            "pnl": [5, -10, 5, 5, -10] * 4,
+            "result": ["WIN", "LOSE", "WIN", "WIN", "LOSE"] * 4,
+            "ev": [0.05] * 20,
+            "clv_abs": [0.01] * 20,
+            "clv_pct": [0.02] * 20,
+        }
+    )
+
+    result = TemporalBacktestGuard().run(
+        df,
+        train_size=8,
+        test_size=4,
+        step=4,
+    )
 
     assert isinstance(result, dict)
-    assert "summary" in result
+    assert "payload" in result
+    assert "json_path" in result
+    assert "html_path" in result
+EOF
+
+CREA_FILE tests/test_temporal_guard_runner.py
+from quant.temporal.temporal_guard_runner import TemporalGuardRunner
+
+
+def test_temporal_guard_runner_runs():
+    result = TemporalGuardRunner().run()
+
+    assert isinstance(result, dict)
+    assert "payload" in result
+    assert "passed" in result
+EOF
+
+CREA_FILE tests/test_app_temporal_guard_controller.py
+from app.temporal_guard_controller import AppTemporalGuardController
+
+
+def test_app_temporal_guard_controller_runs():
+    result = AppTemporalGuardController().run()
+
+    assert isinstance(result, dict)
+    assert "payload" in result
 EOF
 
 FIX_WHITESPACE
-

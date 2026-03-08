@@ -1531,3 +1531,15 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-08_13-36-06.zip
+Backup created backups/backup_2026-03-08_13-36-06.zip
+[CREATE] file quant/live/closing_odds_collector.py
+[CREATE] file quant/live/edge_stability_detector.py
+[CREATE] file quant/ml/ml_layer_real.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

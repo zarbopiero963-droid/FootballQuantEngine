@@ -1,466 +1,477 @@
 ############################################
-VALUE BET ENGINE
+CLV TRACKER 1
 ############################################
 
-CREA_CARTELLA quant/value
+CREA_CARTELLA quant/clv
+CREA_CARTELLA outputs/clv
 
-CREA_FILE quant/value/ev_calculator.py
+CREA_FILE quant/clv/bet_journal.py
+from __future__ import annotations
+
+import csv
+import json
+import os
+from datetime import datetime
+
+
+class BetJournal:
+
+    def __init__(self, path: str = "outputs/clv/bet_journal.json"):
+        self.path = path
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+
+        if not os.path.exists(self.path):
+            with open(self.path, "w", encoding="utf-8") as handle:
+                json.dump([], handle, indent=2)
+
+    def _load(self) -> list[dict]:
+        with open(self.path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+
+    def _save(self, rows: list[dict]) -> None:
+        with open(self.path, "w", encoding="utf-8") as handle:
+            json.dump(rows, handle, indent=2)
+
+    def add_bet(self, payload: dict) -> dict:
+        rows = self._load()
+
+        row = dict(payload)
+        row.setdefault("created_at", datetime.utcnow().isoformat() + "Z")
+        row.setdefault("status", "OPEN")
+        row.setdefault("closing_odds", None)
+        row.setdefault("result", None)
+        row.setdefault("pnl", None)
+        row.setdefault("clv_abs", None)
+        row.setdefault("clv_pct", None)
+
+        rows.append(row)
+        self._save(rows)
+        return row
+
+    def list_bets(self) -> list[dict]:
+        return self._load()
+
+    def update_bet(self, fixture_id: str, market: str, fields: dict) -> dict | None:
+        rows = self._load()
+        updated = None
+
+        for row in rows:
+            if str(row.get("fixture_id")) == str(fixture_id) and str(row.get("market")) == str(market):
+                row.update(fields)
+                updated = row
+                break
+
+        self._save(rows)
+        return updated
+
+    def export_csv(self, path: str = "outputs/clv/bet_journal.csv") -> str:
+        rows = self._load()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+
+        if not rows:
+            with open(path, "w", newline="", encoding="utf-8") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(["empty"])
+            return path
+
+        fieldnames = sorted({key for row in rows for key in row.keys()})
+
+        with open(path, "w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+
+        return path
+EOF
+
+CREA_FILE quant/clv/clv_tracker.py
 from __future__ import annotations
 
 
-class EVCalculator:
-
-    def expected_value(self, probability: float, odds: float) -> float:
-        probability = float(probability)
-        odds = float(odds or 0.0)
-
-        if odds <= 0.0:
-            return 0.0
-
-        return (probability * odds) - 1.0
-
-    def fair_odds(self, probability: float) -> float:
-        probability = float(probability)
-
-        if probability <= 0.0:
-            return 999.0
-
-        return 1.0 / probability
+class CLVTracker:
 
     def implied_probability(self, odds: float) -> float:
         odds = float(odds or 0.0)
-
         if odds <= 0.0:
             return 0.0
-
         return 1.0 / odds
 
-    def probability_edge(self, model_probability: float, odds: float) -> float:
-        return float(model_probability) - self.implied_probability(odds)
-EOF
+    def clv_absolute(self, placed_odds: float, closing_odds: float) -> float:
+        placed_odds = float(placed_odds or 0.0)
+        closing_odds = float(closing_odds or 0.0)
 
-CREA_FILE quant/value/kelly_engine.py
-from __future__ import annotations
-
-
-class KellyEngine:
-
-    def kelly_fraction(self, probability: float, odds: float) -> float:
-        probability = float(probability)
-        odds = float(odds or 0.0)
-
-        if odds <= 1.0:
+        if placed_odds <= 0.0 or closing_odds <= 0.0:
             return 0.0
 
-        b = odds - 1.0
-        q = 1.0 - probability
+        placed_imp = self.implied_probability(placed_odds)
+        closing_imp = self.implied_probability(closing_odds)
 
-        value = ((b * probability) - q) / b
+        return placed_imp - closing_imp
 
-        return max(0.0, value)
+    def clv_percent(self, placed_odds: float, closing_odds: float) -> float:
+        placed_odds = float(placed_odds or 0.0)
+        closing_odds = float(closing_odds or 0.0)
 
-    def fractional_kelly(
-        self,
-        probability: float,
-        odds: float,
-        fraction: float = 0.25,
-    ) -> float:
-        base = self.kelly_fraction(probability, odds)
-        return max(0.0, base * float(fraction))
-
-    def suggested_stake(
-        self,
-        bankroll: float,
-        probability: float,
-        odds: float,
-        fraction: float = 0.25,
-        max_bankroll_pct: float = 0.05,
-    ) -> float:
-        bankroll = float(bankroll or 0.0)
-        max_bankroll_pct = float(max_bankroll_pct)
-
-        if bankroll <= 0.0:
+        if placed_odds <= 0.0 or closing_odds <= 0.0:
             return 0.0
 
-        frac = self.fractional_kelly(
-            probability=probability,
-            odds=odds,
-            fraction=fraction,
-        )
+        return (placed_odds - closing_odds) / placed_odds
 
-        frac = min(frac, max_bankroll_pct)
-
-        return round(bankroll * frac, 2)
-EOF
-
-CREA_FILE quant/value/clv_estimator.py
-from __future__ import annotations
-
-
-class CLVEstimator:
-
-    def estimate_clv_edge(
-        self,
-        model_probability: float,
-        opening_odds: float,
-        current_odds: float,
-    ) -> float:
-        model_probability = float(model_probability)
-        opening_odds = float(opening_odds or 0.0)
-        current_odds = float(current_odds or 0.0)
-
-        if opening_odds <= 0.0 or current_odds <= 0.0:
-            return 0.0
-
-        opening_ev = (model_probability * opening_odds) - 1.0
-        current_ev = (model_probability * current_odds) - 1.0
-
-        return current_ev - opening_ev
-
-    def odds_movement_score(self, opening_odds: float, current_odds: float) -> float:
-        opening_odds = float(opening_odds or 0.0)
-        current_odds = float(current_odds or 0.0)
-
-        if opening_odds <= 0.0 or current_odds <= 0.0:
-            return 0.0
-
-        return (opening_odds - current_odds) / opening_odds
-EOF
-
-CREA_FILE quant/value/stake_policy.py
-from __future__ import annotations
-
-from quant.value.kelly_engine import KellyEngine
-
-
-class StakePolicy:
-
-    def __init__(self):
-        self.kelly = KellyEngine()
-
-    def suggest(
-        self,
-        bankroll: float,
-        probability: float,
-        odds: float,
-        confidence: float,
-        fraction: float = 0.25,
-    ) -> dict:
-        confidence = float(confidence)
-
-        if confidence >= 0.80:
-            max_cap = 0.05
-        elif confidence >= 0.65:
-            max_cap = 0.035
-        else:
-            max_cap = 0.02
-
-        stake = self.kelly.suggested_stake(
-            bankroll=bankroll,
-            probability=probability,
-            odds=odds,
-            fraction=fraction,
-            max_bankroll_pct=max_cap,
-        )
-
+    def evaluate(self, placed_odds: float, closing_odds: float) -> dict:
         return {
-            "stake": round(stake, 2),
-            "max_cap_pct": max_cap,
+            "clv_abs": round(self.clv_absolute(placed_odds, closing_odds), 6),
+            "clv_pct": round(self.clv_percent(placed_odds, closing_odds), 6),
         }
 EOF
 
-CREA_FILE quant/value/value_bet_ranker.py
+CREA_FILE quant/clv/pnl_calculator.py
 from __future__ import annotations
 
 
-class ValueBetRanker:
+class PnLCalculator:
 
-    def sort(self, rows: list[dict]) -> list[dict]:
-        return sorted(
-            rows,
-            key=lambda row: (
-                row.get("decision") != "BET",
-                -float(row.get("ev", 0.0)),
-                -float(row.get("confidence", 0.0)),
-                -float(row.get("agreement", 0.0)),
-                -float(row.get("clv_potential", 0.0)),
-            ),
-        )
+    def settle(self, stake: float, odds: float, result: str) -> float:
+        stake = float(stake or 0.0)
+        odds = float(odds or 0.0)
+        result = str(result or "").upper()
+
+        if stake <= 0.0:
+            return 0.0
+
+        if result == "WIN":
+            return round((stake * odds) - stake, 2)
+
+        if result == "LOSE":
+            return round(-stake, 2)
+
+        if result == "VOID":
+            return 0.0
+
+        return 0.0
 EOF
 
-CREA_FILE quant/value/value_bet_filter.py
+CREA_FILE quant/clv/performance_report.py
 from __future__ import annotations
 
 
-class ValueBetFilter:
+class PerformanceReport:
 
-    def __init__(
-        self,
-        min_ev: float = 0.02,
-        min_probability: float = 0.50,
-        min_confidence: float = 0.60,
-        min_agreement: float = 0.55,
-        min_odds: float = 1.40,
-        max_odds: float = 8.00,
-    ):
-        self.min_ev = float(min_ev)
-        self.min_probability = float(min_probability)
-        self.min_confidence = float(min_confidence)
-        self.min_agreement = float(min_agreement)
-        self.min_odds = float(min_odds)
-        self.max_odds = float(max_odds)
+    def build(self, rows: list[dict]) -> dict:
+        if not rows:
+            return {
+                "total_bets": 0,
+                "open_bets": 0,
+                "settled_bets": 0,
+                "wins": 0,
+                "losses": 0,
+                "voids": 0,
+                "total_stake": 0.0,
+                "total_pnl": 0.0,
+                "roi": 0.0,
+                "yield": 0.0,
+                "avg_ev": 0.0,
+                "avg_clv_abs": 0.0,
+                "avg_clv_pct": 0.0,
+            }
 
-    def decide(
-        self,
-        probability: float,
-        odds: float,
-        ev: float,
-        confidence: float,
-        agreement: float,
-    ) -> str:
-        probability = float(probability)
-        odds = float(odds)
-        ev = float(ev)
-        confidence = float(confidence)
-        agreement = float(agreement)
+        total_bets = len(rows)
+        open_bets = sum(1 for row in rows if str(row.get("status", "")).upper() == "OPEN")
+        settled_rows = [row for row in rows if str(row.get("status", "")).upper() == "SETTLED"]
 
-        if (
-            probability >= self.min_probability
-            and self.min_odds <= odds <= self.max_odds
-            and ev >= self.min_ev
-            and confidence >= self.min_confidence
-            and agreement >= self.min_agreement
-        ):
-            return "BET"
+        wins = sum(1 for row in settled_rows if str(row.get("result", "")).upper() == "WIN")
+        losses = sum(1 for row in settled_rows if str(row.get("result", "")).upper() == "LOSE")
+        voids = sum(1 for row in settled_rows if str(row.get("result", "")).upper() == "VOID")
 
-        if (
-            probability >= self.min_probability * 0.95
-            and self.min_odds <= odds <= (self.max_odds * 1.25)
-            and ev >= self.min_ev * 0.50
-            and confidence >= self.min_confidence * 0.85
-            and agreement >= self.min_agreement * 0.85
-        ):
-            return "WATCHLIST"
+        total_stake = round(sum(float(row.get("stake", 0.0) or 0.0) for row in rows), 2)
+        total_pnl = round(sum(float(row.get("pnl", 0.0) or 0.0) for row in settled_rows), 2)
 
-        return "NO_BET"
+        settled_bets = len(settled_rows)
+        roi = (total_pnl / total_stake) if total_stake > 0 else 0.0
+        yield_value = (total_pnl / total_stake) if total_stake > 0 else 0.0
+
+        ev_values = [float(row.get("ev", 0.0) or 0.0) for row in rows]
+        clv_abs_values = [float(row.get("clv_abs", 0.0) or 0.0) for row in settled_rows if row.get("clv_abs") is not None]
+        clv_pct_values = [float(row.get("clv_pct", 0.0) or 0.0) for row in settled_rows if row.get("clv_pct") is not None]
+
+        return {
+            "total_bets": total_bets,
+            "open_bets": open_bets,
+            "settled_bets": settled_bets,
+            "wins": wins,
+            "losses": losses,
+            "voids": voids,
+            "total_stake": total_stake,
+            "total_pnl": total_pnl,
+            "roi": round(roi, 6),
+            "yield": round(yield_value, 6),
+            "avg_ev": round(sum(ev_values) / max(len(ev_values), 1), 6),
+            "avg_clv_abs": round(sum(clv_abs_values) / max(len(clv_abs_values), 1), 6),
+            "avg_clv_pct": round(sum(clv_pct_values) / max(len(clv_pct_values), 1), 6),
+        }
 EOF
 
-CREA_FILE quant/value/value_bet_engine.py
+CREA_FILE quant/clv/clv_journal_service.py
 from __future__ import annotations
 
-from quant.value.clv_estimator import CLVEstimator
-from quant.value.ev_calculator import EVCalculator
-from quant.value.stake_policy import StakePolicy
-from quant.value.value_bet_filter import ValueBetFilter
-from quant.value.value_bet_ranker import ValueBetRanker
+from quant.clv.bet_journal import BetJournal
+from quant.clv.clv_tracker import CLVTracker
+from quant.clv.pnl_calculator import PnLCalculator
+from quant.clv.performance_report import PerformanceReport
 
 
-class ValueBetEngine:
+class CLVJournalService:
 
     def __init__(self):
-        self.ev = EVCalculator()
-        self.clv = CLVEstimator()
-        self.stake_policy = StakePolicy()
-        self.filter = ValueBetFilter()
-        self.ranker = ValueBetRanker()
+        self.journal = BetJournal()
+        self.tracker = CLVTracker()
+        self.pnl = PnLCalculator()
+        self.report_builder = PerformanceReport()
 
-    def enrich_record(
+    def record_bets(self, rows: list[dict]) -> list[dict]:
+        saved = []
+
+        for row in rows:
+            payload = {
+                "fixture_id": row.get("fixture_id"),
+                "home_team": row.get("home_team"),
+                "away_team": row.get("away_team"),
+                "market": row.get("market"),
+                "probability": row.get("probability"),
+                "fair_odds": row.get("fair_odds"),
+                "bookmaker_odds": row.get("bookmaker_odds"),
+                "opening_odds": row.get("opening_odds", row.get("bookmaker_odds")),
+                "ev": row.get("ev"),
+                "confidence": row.get("confidence"),
+                "agreement": row.get("agreement"),
+                "decision": row.get("decision"),
+                "stake": row.get("suggested_stake", 0.0),
+            }
+            saved.append(self.journal.add_bet(payload))
+
+        return saved
+
+    def settle_bet(
         self,
-        record: dict,
-        bankroll: float = 1000.0,
-    ) -> dict:
-        probability = float(record.get("probability", 0.0))
-        bookmaker_odds = float(record.get("bookmaker_odds", 0.0))
-        confidence = float(record.get("confidence", 0.0))
-        agreement = float(record.get("agreement", 0.0))
-        opening_odds = float(record.get("opening_odds", bookmaker_odds))
+        fixture_id: str,
+        market: str,
+        closing_odds: float,
+        result: str,
+    ) -> dict | None:
+        rows = self.journal.list_bets()
 
-        ev_value = self.ev.expected_value(probability, bookmaker_odds)
-        fair_odds = self.ev.fair_odds(probability)
-        implied_probability = self.ev.implied_probability(bookmaker_odds)
-        prob_edge = self.ev.probability_edge(probability, bookmaker_odds)
+        target = None
+        for row in rows:
+            if str(row.get("fixture_id")) == str(fixture_id) and str(row.get("market")) == str(market):
+                target = row
+                break
 
-        clv_potential = self.clv.estimate_clv_edge(
-            model_probability=probability,
-            opening_odds=opening_odds,
-            current_odds=bookmaker_odds,
+        if not target:
+            return None
+
+        bookmaker_odds = float(target.get("bookmaker_odds", 0.0) or 0.0)
+        stake = float(target.get("stake", 0.0) or 0.0)
+
+        clv_data = self.tracker.evaluate(
+            placed_odds=bookmaker_odds,
+            closing_odds=float(closing_odds),
         )
-        movement_score = self.clv.odds_movement_score(
-            opening_odds=opening_odds,
-            current_odds=bookmaker_odds,
-        )
 
-        decision = self.filter.decide(
-            probability=probability,
+        pnl = self.pnl.settle(
+            stake=stake,
             odds=bookmaker_odds,
-            ev=ev_value,
-            confidence=confidence,
-            agreement=agreement,
+            result=result,
         )
 
-        stake_data = self.stake_policy.suggest(
-            bankroll=bankroll,
-            probability=probability,
-            odds=bookmaker_odds,
-            confidence=confidence,
+        updated = self.journal.update_bet(
+            fixture_id=fixture_id,
+            market=market,
+            fields={
+                "closing_odds": float(closing_odds),
+                "result": str(result).upper(),
+                "status": "SETTLED",
+                "pnl": pnl,
+                "clv_abs": clv_data["clv_abs"],
+                "clv_pct": clv_data["clv_pct"],
+            },
         )
 
-        enriched = dict(record)
-        enriched["fair_odds"] = round(fair_odds, 4)
-        enriched["implied_probability"] = round(implied_probability, 6)
-        enriched["probability_edge"] = round(prob_edge, 6)
-        enriched["ev"] = round(ev_value, 6)
-        enriched["clv_potential"] = round(clv_potential, 6)
-        enriched["odds_movement_score"] = round(movement_score, 6)
-        enriched["decision"] = decision
-        enriched["suggested_stake"] = round(stake_data["stake"], 2)
-        enriched["stake_cap_pct"] = round(stake_data["max_cap_pct"], 4)
+        return updated
 
-        return enriched
+    def performance_summary(self) -> dict:
+        return self.report_builder.build(self.journal.list_bets())
 
-    def run(
-        self,
-        records: list[dict],
-        bankroll: float = 1000.0,
-    ) -> list[dict]:
-        enriched = [
-            self.enrich_record(record, bankroll=bankroll)
-            for record in records
-        ]
-        return self.ranker.sort(enriched)
+    def export_csv(self) -> str:
+        return self.journal.export_csv()
 EOF
 
-CREA_FILE quant/value/value_bet_runner.py
+CREA_FILE quant/clv/clv_runner.py
 from __future__ import annotations
 
-from quant.services.quant_job_runner import QuantJobRunner
-from quant.value.value_bet_engine import ValueBetEngine
-
-
-class ValueBetRunner:
-
-    def __init__(self):
-        self.quant_runner = QuantJobRunner()
-        self.engine = ValueBetEngine()
-
-    def run(self, bankroll: float = 1000.0) -> list[dict]:
-        records = self.quant_runner.run_cycle()
-        return self.engine.run(records, bankroll=bankroll)
-EOF
-
-CREA_FILE app/value_bet_controller.py
+from quant.clv.clv_journal_service import CLVJournalService
 from quant.value.value_bet_runner import ValueBetRunner
 
 
-class AppValueBetController:
+class CLVRunner:
 
     def __init__(self):
-        self.runner = ValueBetRunner()
+        self.value_runner = ValueBetRunner()
+        self.service = CLVJournalService()
+
+    def run(self, bankroll: float = 1000.0) -> dict:
+        bets = self.value_runner.run(bankroll=bankroll)
+        saved = self.service.record_bets(bets)
+        summary = self.service.performance_summary()
+        csv_path = self.service.export_csv()
+
+        return {
+            "bets": saved,
+            "summary": summary,
+            "csv_path": csv_path,
+        }
+EOF
+
+CREA_FILE app/clv_controller.py
+from quant.clv.clv_runner import CLVRunner
+
+
+class AppCLVController:
+
+    def __init__(self):
+        self.runner = CLVRunner()
 
     def run(self, bankroll: float = 1000.0):
         return self.runner.run(bankroll=bankroll)
 EOF
 
-CREA_FILE tests/test_ev_calculator.py
-from quant.value.ev_calculator import EVCalculator
+CREA_FILE tests/test_clv_tracker.py
+from quant.clv.clv_tracker import CLVTracker
 
 
-def test_ev_calculator_outputs():
-    calc = EVCalculator()
+def test_clv_tracker_outputs():
+    tracker = CLVTracker()
 
-    ev = calc.expected_value(0.55, 2.10)
-    fair = calc.fair_odds(0.55)
-    implied = calc.implied_probability(2.10)
+    result = tracker.evaluate(2.10, 1.95)
 
-    assert isinstance(ev, float)
-    assert fair > 0
-    assert 0 < implied < 1
+    assert "clv_abs" in result
+    assert "clv_pct" in result
 EOF
 
-CREA_FILE tests/test_kelly_engine.py
-from quant.value.kelly_engine import KellyEngine
+CREA_FILE tests/test_pnl_calculator.py
+from quant.clv.pnl_calculator import PnLCalculator
 
 
-def test_kelly_engine_positive_fraction():
-    engine = KellyEngine()
+def test_pnl_calculator_settle():
+    calc = PnLCalculator()
 
-    fraction = engine.kelly_fraction(0.55, 2.10)
-
-    assert fraction >= 0.0
+    assert calc.settle(10, 2.00, "WIN") == 10.0
+    assert calc.settle(10, 2.00, "LOSE") == -10.0
+    assert calc.settle(10, 2.00, "VOID") == 0.0
 EOF
 
-CREA_FILE tests/test_value_bet_filter.py
-from quant.value.value_bet_filter import ValueBetFilter
+CREA_FILE tests/test_bet_journal.py
+from quant.clv.bet_journal import BetJournal
 
 
-def test_value_bet_filter_returns_valid_decision():
-    decision = ValueBetFilter().decide(
-        probability=0.58,
-        odds=2.00,
-        ev=0.16,
-        confidence=0.72,
-        agreement=0.68,
-    )
+def test_bet_journal_add_and_list(tmp_path):
+    journal = BetJournal(str(tmp_path / "bet_journal.json"))
 
-    assert decision in ("BET", "WATCHLIST", "NO_BET")
-EOF
-
-CREA_FILE tests/test_value_bet_engine.py
-from quant.value.value_bet_engine import ValueBetEngine
-
-
-def test_value_bet_engine_enriches_records():
-    engine = ValueBetEngine()
-
-    records = [
+    journal.add_bet(
         {
             "fixture_id": "1",
-            "home_team": "TeamA",
-            "away_team": "TeamB",
             "market": "home",
-            "probability": 0.58,
-            "fair_odds": 1.72,
-            "bookmaker_odds": 2.05,
-            "market_edge": 0.06,
-            "model_edge": 0.18,
-            "confidence": 0.72,
-            "agreement": 0.68,
-            "decision": "BET",
+            "stake": 10,
+            "bookmaker_odds": 2.00,
         }
-    ]
+    )
 
-    result = engine.run(records, bankroll=1000.0)
+    rows = journal.list_bets()
 
-    assert isinstance(result, list)
-    assert len(result) == 1
-    assert "ev" in result[0]
-    assert "suggested_stake" in result[0]
-    assert "clv_potential" in result[0]
+    assert len(rows) == 1
+    assert rows[0]["fixture_id"] == "1"
 EOF
 
-CREA_FILE tests/test_value_bet_runner.py
-from quant.value.value_bet_runner import ValueBetRunner
+CREA_FILE tests/test_clv_journal_service.py
+from quant.clv.clv_journal_service import CLVJournalService
 
 
-def test_value_bet_runner_runs():
-    result = ValueBetRunner().run()
+def test_clv_journal_service_record_and_settle(tmp_path):
+    service = CLVJournalService()
+    service.journal.path = str(tmp_path / "bet_journal.json")
+    service.journal.__init__(service.journal.path)
 
-    assert isinstance(result, list)
-    assert len(result) > 0
-    assert "ev" in result[0]
+    service.record_bets(
+        [
+            {
+                "fixture_id": "1",
+                "home_team": "TeamA",
+                "away_team": "TeamB",
+                "market": "home",
+                "probability": 0.58,
+                "fair_odds": 1.72,
+                "bookmaker_odds": 2.05,
+                "ev": 0.18,
+                "confidence": 0.72,
+                "agreement": 0.68,
+                "decision": "BET",
+                "suggested_stake": 10.0,
+            }
+        ]
+    )
+
+    updated = service.settle_bet("1", "home", 1.95, "WIN")
+
+    assert updated is not None
+    assert updated["status"] == "SETTLED"
+    assert "clv_abs" in updated
+    assert "pnl" in updated
 EOF
 
-CREA_FILE tests/test_app_value_bet_controller.py
-from app.value_bet_controller import AppValueBetController
+CREA_FILE tests/test_performance_report.py
+from quant.clv.performance_report import PerformanceReport
 
 
-def test_app_value_bet_controller_runs():
-    result = AppValueBetController().run()
+def test_performance_report_build():
+    report = PerformanceReport().build(
+        [
+            {
+                "stake": 10,
+                "ev": 0.10,
+                "status": "SETTLED",
+                "result": "WIN",
+                "pnl": 10,
+                "clv_abs": 0.02,
+                "clv_pct": 0.05,
+            }
+        ]
+    )
 
-    assert isinstance(result, list)
-    assert len(result) > 0
-    assert "suggested_stake" in result[0]
+    assert report["total_bets"] == 1
+    assert "roi" in report
+    assert "avg_clv_abs" in report
+EOF
+
+CREA_FILE tests/test_clv_runner.py
+from quant.clv.clv_runner import CLVRunner
+
+
+def test_clv_runner_runs():
+    result = CLVRunner().run()
+
+    assert isinstance(result, dict)
+    assert "bets" in result
+    assert "summary" in result
+    assert "csv_path" in result
+EOF
+
+CREA_FILE tests/test_app_clv_controller.py
+from app.clv_controller import AppCLVController
+
+
+def test_app_clv_controller_runs():
+    result = AppCLVController().run()
+
+    assert isinstance(result, dict)
+    assert "summary" in result
 EOF
 
 FIX_WHITESPACE
-

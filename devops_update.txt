@@ -1,481 +1,465 @@
 ############################################
-LIVE FUSION LAYER 1
+VALUE BET ENGINE
 ############################################
 
-CREA_CARTELLA quant/fusion
+CREA_CARTELLA quant/value
 
-CREA_FILE quant/fusion/team_name_normalizer.py
+CREA_FILE quant/value/ev_calculator.py
 from __future__ import annotations
 
-import re
-import unicodedata
 
+class EVCalculator:
 
-class TeamNameNormalizer:
+    def expected_value(self, probability: float, odds: float) -> float:
+        probability = float(probability)
+        odds = float(odds or 0.0)
 
-    DEFAULT_ALIASES = {
-        "inter milan": "inter",
-        "internazionale": "inter",
-        "ac milan": "milan",
-        "juve": "juventus",
-        "man city": "manchester city",
-        "man utd": "manchester united",
-        "psg": "paris saint germain",
-        "atletico madrid": "atletico",
-        "ath madrid": "atletico",
-        "bayern munich": "bayern",
-        "bayern munchen": "bayern",
-    }
+        if odds <= 0.0:
+            return 0.0
 
-    def __init__(self, aliases: dict | None = None):
-        self.aliases = dict(self.DEFAULT_ALIASES)
-        if aliases:
-            for key, value in aliases.items():
-                self.aliases[self.normalize_raw(key)] = self.normalize_raw(value)
+        return (probability * odds) - 1.0
 
-    def normalize_raw(self, value: str) -> str:
-        value = str(value or "").strip().lower()
-        value = unicodedata.normalize("NFKD", value)
-        value = "".join(ch for ch in value if not unicodedata.combining(ch))
-        value = re.sub(r"[^a-z0-9\s]", " ", value)
-        value = re.sub(r"\s+", " ", value).strip()
-        return self.aliases.get(value, value)
+    def fair_odds(self, probability: float) -> float:
+        probability = float(probability)
 
-    def normalize(self, value: str) -> str:
-        return self.normalize_raw(value)
+        if probability <= 0.0:
+            return 999.0
+
+        return 1.0 / probability
+
+    def implied_probability(self, odds: float) -> float:
+        odds = float(odds or 0.0)
+
+        if odds <= 0.0:
+            return 0.0
+
+        return 1.0 / odds
+
+    def probability_edge(self, model_probability: float, odds: float) -> float:
+        return float(model_probability) - self.implied_probability(odds)
 EOF
 
-CREA_FILE quant/fusion/team_mapping_table.py
+CREA_FILE quant/value/kelly_engine.py
 from __future__ import annotations
 
 
-DEFAULT_TEAM_MAPPING = {
-    "inter milan": "inter",
-    "internazionale": "inter",
-    "ac milan": "milan",
-    "man city": "manchester city",
-    "man utd": "manchester united",
-    "psg": "paris saint germain",
-    "juve": "juventus",
-}
-EOF
+class KellyEngine:
 
-CREA_FILE quant/fusion/team_mapper.py
-from __future__ import annotations
+    def kelly_fraction(self, probability: float, odds: float) -> float:
+        probability = float(probability)
+        odds = float(odds or 0.0)
 
-from quant.fusion.team_mapping_table import DEFAULT_TEAM_MAPPING
-from quant.fusion.team_name_normalizer import TeamNameNormalizer
+        if odds <= 1.0:
+            return 0.0
 
+        b = odds - 1.0
+        q = 1.0 - probability
 
-class TeamMapper:
+        value = ((b * probability) - q) / b
 
-    def __init__(self, mapping: dict | None = None):
-        self.normalizer = TeamNameNormalizer()
-        self.mapping = {}
+        return max(0.0, value)
 
-        base_mapping = dict(DEFAULT_TEAM_MAPPING)
-        if mapping:
-            base_mapping.update(mapping)
-
-        for key, value in base_mapping.items():
-            self.mapping[self.normalizer.normalize(key)] = self.normalizer.normalize(value)
-
-    def map_name(self, source_name: str) -> str:
-        normalized = self.normalizer.normalize(source_name)
-        return self.mapping.get(normalized, normalized)
-
-    def build_lookup(self, names: list[str] | tuple[str, ...]) -> dict:
-        lookup = {}
-        for name in names:
-            normalized = self.normalizer.normalize(name)
-            mapped = self.map_name(name)
-            lookup[normalized] = mapped
-        return lookup
-EOF
-
-CREA_FILE quant/fusion/understat_stats_adapter.py
-from __future__ import annotations
-
-from quant.fusion.team_mapper import TeamMapper
-from quant.fusion.team_name_normalizer import TeamNameNormalizer
-
-
-class UnderstatStatsAdapter:
-
-    def __init__(self, mapper: TeamMapper | None = None):
-        self.mapper = mapper or TeamMapper()
-        self.normalizer = TeamNameNormalizer()
-
-    def adapt(self, understat_stats: dict | None) -> dict:
-        understat_stats = understat_stats or {}
-        adapted = {}
-
-        for team_name, payload in understat_stats.items():
-            key = self.mapper.map_name(team_name)
-            adapted[key] = {
-                "source_team_name": team_name,
-                "mapped_team_name": key,
-                "matches": int(payload.get("matches", 0) or 0),
-                "xg_for": float(payload.get("xg_for", 1.2) or 1.2),
-                "xg_against": float(payload.get("xg_against", 1.2) or 1.2),
-                "xpts": float(payload.get("xpts", 1.4) or 1.4),
-                "goals_for": float(payload.get("goals_for", 1.2) or 1.2),
-                "goals_against": float(payload.get("goals_against", 1.2) or 1.2),
-                "shots": float(payload.get("shots", 10.0) or 10.0),
-                "shots_on_target": float(payload.get("shots_on_target", 3.5) or 3.5),
-                "deep": float(payload.get("deep", 8.0) or 8.0),
-                "ppda_att": float(payload.get("ppda_att", 10.0) or 10.0),
-                "ppda_def": float(payload.get("ppda_def", 10.0) or 10.0),
-                "xg_diff": float(payload.get("xg_diff", 0.0) or 0.0),
-                "goal_diff": float(payload.get("goal_diff", 0.0) or 0.0),
-                "finishing_delta": float(payload.get("finishing_delta", 0.0) or 0.0),
-                "defensive_delta": float(payload.get("defensive_delta", 0.0) or 0.0),
-                "form_score": float(payload.get("form_score", 0.5) or 0.5),
-            }
-
-        return adapted
-
-    def get_team_stats(self, adapted_stats: dict, team_name: str) -> dict:
-        key = self.mapper.map_name(team_name)
-
-        if key in adapted_stats:
-            return adapted_stats[key]
-
-        return {
-            "source_team_name": team_name,
-            "mapped_team_name": key,
-            "matches": 0,
-            "xg_for": 1.2,
-            "xg_against": 1.2,
-            "xpts": 1.4,
-            "goals_for": 1.2,
-            "goals_against": 1.2,
-            "shots": 10.0,
-            "shots_on_target": 3.5,
-            "deep": 8.0,
-            "ppda_att": 10.0,
-            "ppda_def": 10.0,
-            "xg_diff": 0.0,
-            "goal_diff": 0.0,
-            "finishing_delta": 0.0,
-            "defensive_delta": 0.0,
-            "form_score": 0.5,
-        }
-EOF
-
-CREA_FILE quant/fusion/live_fusion_layer.py
-from __future__ import annotations
-
-from quant.fusion.team_mapper import TeamMapper
-from quant.fusion.understat_stats_adapter import UnderstatStatsAdapter
-
-
-class LiveFusionLayer:
-
-    def __init__(self, mapper: TeamMapper | None = None):
-        self.mapper = mapper or TeamMapper()
-        self.understat_adapter = UnderstatStatsAdapter(self.mapper)
-
-    def fuse(
+    def fractional_kelly(
         self,
-        fixtures: list[dict] | None,
-        odds_map: dict | None,
-        understat_stats: dict | None,
-    ) -> list[dict]:
-        fixtures = fixtures or []
-        odds_map = odds_map or {}
-        adapted_understat = self.understat_adapter.adapt(understat_stats)
+        probability: float,
+        odds: float,
+        fraction: float = 0.25,
+    ) -> float:
+        base = self.kelly_fraction(probability, odds)
+        return max(0.0, base * float(fraction))
 
-        fused_rows = []
+    def suggested_stake(
+        self,
+        bankroll: float,
+        probability: float,
+        odds: float,
+        fraction: float = 0.25,
+        max_bankroll_pct: float = 0.05,
+    ) -> float:
+        bankroll = float(bankroll or 0.0)
+        max_bankroll_pct = float(max_bankroll_pct)
 
-        for fixture in fixtures:
-            fixture_id = str(fixture.get("fixture_id", ""))
-            home_team = fixture.get("home_team", "")
-            away_team = fixture.get("away_team", "")
+        if bankroll <= 0.0:
+            return 0.0
 
-            home_stats = self.understat_adapter.get_team_stats(adapted_understat, home_team)
-            away_stats = self.understat_adapter.get_team_stats(adapted_understat, away_team)
+        frac = self.fractional_kelly(
+            probability=probability,
+            odds=odds,
+            fraction=fraction,
+        )
 
-            bookmaker_odds = odds_map.get(
-                fixture_id,
-                {
-                    "home": 0.0,
-                    "draw": 0.0,
-                    "away": 0.0,
-                },
-            )
+        frac = min(frac, max_bankroll_pct)
 
-            fused_rows.append(
-                {
-                    "fixture_id": fixture_id,
-                    "home_team": home_team,
-                    "away_team": away_team,
-                    "home_team_key": self.mapper.map_name(home_team),
-                    "away_team_key": self.mapper.map_name(away_team),
-                    "bookmaker_odds_home": float(bookmaker_odds.get("home", 0.0) or 0.0),
-                    "bookmaker_odds_draw": float(bookmaker_odds.get("draw", 0.0) or 0.0),
-                    "bookmaker_odds_away": float(bookmaker_odds.get("away", 0.0) or 0.0),
-                    "home_xg_for": home_stats["xg_for"],
-                    "home_xg_against": home_stats["xg_against"],
-                    "home_xpts": home_stats["xpts"],
-                    "home_shots": home_stats["shots"],
-                    "home_shots_on_target": home_stats["shots_on_target"],
-                    "home_finishing_delta": home_stats["finishing_delta"],
-                    "home_defensive_delta": home_stats["defensive_delta"],
-                    "home_form_score": home_stats["form_score"],
-                    "away_xg_for": away_stats["xg_for"],
-                    "away_xg_against": away_stats["xg_against"],
-                    "away_xpts": away_stats["xpts"],
-                    "away_shots": away_stats["shots"],
-                    "away_shots_on_target": away_stats["shots_on_target"],
-                    "away_finishing_delta": away_stats["finishing_delta"],
-                    "away_defensive_delta": away_stats["defensive_delta"],
-                    "away_form_score": away_stats["form_score"],
-                    "xg_diff": home_stats["xg_for"] - away_stats["xg_for"],
-                    "xga_diff": away_stats["xg_against"] - home_stats["xg_against"],
-                    "xpts_diff": home_stats["xpts"] - away_stats["xpts"],
-                    "shots_diff": home_stats["shots"] - away_stats["shots"],
-                    "shots_on_target_diff": (
-                        home_stats["shots_on_target"] - away_stats["shots_on_target"]
-                    ),
-                    "form_score_diff": home_stats["form_score"] - away_stats["form_score"],
-                    "fusion_status": "ok",
-                }
-            )
-
-        return fused_rows
+        return round(bankroll * frac, 2)
 EOF
 
-CREA_FILE quant/fusion/live_fusion_provider.py
+CREA_FILE quant/value/clv_estimator.py
 from __future__ import annotations
 
-from quant.fusion.live_fusion_layer import LiveFusionLayer
 
+class CLVEstimator:
 
-class LiveFusionProvider:
+    def estimate_clv_edge(
+        self,
+        model_probability: float,
+        opening_odds: float,
+        current_odds: float,
+    ) -> float:
+        model_probability = float(model_probability)
+        opening_odds = float(opening_odds or 0.0)
+        current_odds = float(current_odds or 0.0)
 
-    def __init__(self, fixtures_provider, odds_provider, understat_provider):
-        self.fixtures_provider = fixtures_provider
-        self.odds_provider = odds_provider
-        self.understat_provider = understat_provider
-        self.fusion = LiveFusionLayer()
+        if opening_odds <= 0.0 or current_odds <= 0.0:
+            return 0.0
 
-    def build_fused_fixtures(self, league=None, season=None) -> list[dict]:
-        fixtures = self.fixtures_provider.get_upcoming_matches(
-            league=league,
-            season=season,
-        )
+        opening_ev = (model_probability * opening_odds) - 1.0
+        current_ev = (model_probability * current_odds) - 1.0
 
-        fixture_ids = [str(item.get("fixture_id", "")) for item in fixtures]
+        return current_ev - opening_ev
 
-        odds_map = self.odds_provider.get_prematch_odds(fixture_ids)
-        understat_stats = self.understat_provider.get_team_advanced_stats(
-            league=league,
-            season=season,
-        )
+    def odds_movement_score(self, opening_odds: float, current_odds: float) -> float:
+        opening_odds = float(opening_odds or 0.0)
+        current_odds = float(current_odds or 0.0)
 
-        return self.fusion.fuse(
-            fixtures=fixtures,
-            odds_map=odds_map,
-            understat_stats=understat_stats,
-        )
+        if opening_odds <= 0.0 or current_odds <= 0.0:
+            return 0.0
+
+        return (opening_odds - current_odds) / opening_odds
 EOF
 
-CREA_FILE quant/fusion/live_fusion_exporter.py
+CREA_FILE quant/value/stake_policy.py
 from __future__ import annotations
 
-import json
-import os
+from quant.value.kelly_engine import KellyEngine
 
 
-class LiveFusionExporter:
+class StakePolicy:
 
-    def __init__(self, output_dir: str = "outputs/fusion"):
-        self.output_dir = output_dir
-        os.makedirs(self.output_dir, exist_ok=True)
+    def __init__(self):
+        self.kelly = KellyEngine()
 
-    def save_json(self, fused_rows: list[dict], filename: str = "live_fusion_snapshot.json") -> str:
-        path = os.path.join(self.output_dir, filename)
+    def suggest(
+        self,
+        bankroll: float,
+        probability: float,
+        odds: float,
+        confidence: float,
+        fraction: float = 0.25,
+    ) -> dict:
+        confidence = float(confidence)
 
-        with open(path, "w", encoding="utf-8") as handle:
-            json.dump(fused_rows, handle, indent=2)
+        if confidence >= 0.80:
+            max_cap = 0.05
+        elif confidence >= 0.65:
+            max_cap = 0.035
+        else:
+            max_cap = 0.02
 
-        return path
-EOF
-
-CREA_FILE quant/fusion/live_fusion_runner.py
-from __future__ import annotations
-
-from quant.fusion.live_fusion_exporter import LiveFusionExporter
-from quant.fusion.live_fusion_provider import LiveFusionProvider
-from quant.providers.sample_clients import SampleAPIFootballClient
-from quant.providers.sample_clients import SampleUnderstatClient
-
-
-class LiveFusionRunner:
-
-    def __init__(self, fixtures_provider=None, odds_provider=None, understat_provider=None):
-        fixtures_provider = fixtures_provider or SampleAPIFootballClient()
-        odds_provider = odds_provider or SampleAPIFootballClient()
-        understat_provider = understat_provider or SampleUnderstatClient()
-
-        self.provider = LiveFusionProvider(
-            fixtures_provider=fixtures_provider,
-            odds_provider=odds_provider,
-            understat_provider=understat_provider,
+        stake = self.kelly.suggested_stake(
+            bankroll=bankroll,
+            probability=probability,
+            odds=odds,
+            fraction=fraction,
+            max_bankroll_pct=max_cap,
         )
-        self.exporter = LiveFusionExporter()
-
-    def run(self, league="Serie A", season=2024) -> dict:
-        fused_rows = self.provider.build_fused_fixtures(
-            league=league,
-            season=season,
-        )
-        export_path = self.exporter.save_json(fused_rows)
 
         return {
-            "rows": fused_rows,
-            "count": len(fused_rows),
-            "export_path": export_path,
+            "stake": round(stake, 2),
+            "max_cap_pct": max_cap,
         }
 EOF
 
-CREA_FILE tests/test_team_name_normalizer.py
-from quant.fusion.team_name_normalizer import TeamNameNormalizer
+CREA_FILE quant/value/value_bet_ranker.py
+from __future__ import annotations
 
 
-def test_team_name_normalizer_maps_aliases():
-    normalizer = TeamNameNormalizer()
+class ValueBetRanker:
 
-    assert normalizer.normalize("Inter Milan") == "inter"
-    assert normalizer.normalize("AC Milan") == "milan"
+    def sort(self, rows: list[dict]) -> list[dict]:
+        return sorted(
+            rows,
+            key=lambda row: (
+                row.get("decision") != "BET",
+                -float(row.get("ev", 0.0)),
+                -float(row.get("confidence", 0.0)),
+                -float(row.get("agreement", 0.0)),
+                -float(row.get("clv_potential", 0.0)),
+            ),
+        )
 EOF
 
-CREA_FILE tests/test_team_mapper.py
-from quant.fusion.team_mapper import TeamMapper
+CREA_FILE quant/value/value_bet_filter.py
+from __future__ import annotations
 
 
-def test_team_mapper_returns_mapped_name():
-    mapper = TeamMapper()
+class ValueBetFilter:
 
-    assert mapper.map_name("Inter Milan") == "inter"
-    assert mapper.map_name("Juve") == "juventus"
+    def __init__(
+        self,
+        min_ev: float = 0.02,
+        min_probability: float = 0.50,
+        min_confidence: float = 0.60,
+        min_agreement: float = 0.55,
+        min_odds: float = 1.40,
+        max_odds: float = 8.00,
+    ):
+        self.min_ev = float(min_ev)
+        self.min_probability = float(min_probability)
+        self.min_confidence = float(min_confidence)
+        self.min_agreement = float(min_agreement)
+        self.min_odds = float(min_odds)
+        self.max_odds = float(max_odds)
+
+    def decide(
+        self,
+        probability: float,
+        odds: float,
+        ev: float,
+        confidence: float,
+        agreement: float,
+    ) -> str:
+        probability = float(probability)
+        odds = float(odds)
+        ev = float(ev)
+        confidence = float(confidence)
+        agreement = float(agreement)
+
+        if (
+            probability >= self.min_probability
+            and self.min_odds <= odds <= self.max_odds
+            and ev >= self.min_ev
+            and confidence >= self.min_confidence
+            and agreement >= self.min_agreement
+        ):
+            return "BET"
+
+        if (
+            probability >= self.min_probability * 0.95
+            and self.min_odds <= odds <= (self.max_odds * 1.25)
+            and ev >= self.min_ev * 0.50
+            and confidence >= self.min_confidence * 0.85
+            and agreement >= self.min_agreement * 0.85
+        ):
+            return "WATCHLIST"
+
+        return "NO_BET"
 EOF
 
-CREA_FILE tests/test_live_fusion_layer.py
-from quant.fusion.live_fusion_layer import LiveFusionLayer
+CREA_FILE quant/value/value_bet_engine.py
+from __future__ import annotations
+
+from quant.value.clv_estimator import CLVEstimator
+from quant.value.ev_calculator import EVCalculator
+from quant.value.stake_policy import StakePolicy
+from quant.value.value_bet_filter import ValueBetFilter
+from quant.value.value_bet_ranker import ValueBetRanker
 
 
-def test_live_fusion_layer_merges_sources():
-    layer = LiveFusionLayer()
+class ValueBetEngine:
 
-    fixtures = [
+    def __init__(self):
+        self.ev = EVCalculator()
+        self.clv = CLVEstimator()
+        self.stake_policy = StakePolicy()
+        self.filter = ValueBetFilter()
+        self.ranker = ValueBetRanker()
+
+    def enrich_record(
+        self,
+        record: dict,
+        bankroll: float = 1000.0,
+    ) -> dict:
+        probability = float(record.get("probability", 0.0))
+        bookmaker_odds = float(record.get("bookmaker_odds", 0.0))
+        confidence = float(record.get("confidence", 0.0))
+        agreement = float(record.get("agreement", 0.0))
+        opening_odds = float(record.get("opening_odds", bookmaker_odds))
+
+        ev_value = self.ev.expected_value(probability, bookmaker_odds)
+        fair_odds = self.ev.fair_odds(probability)
+        implied_probability = self.ev.implied_probability(bookmaker_odds)
+        prob_edge = self.ev.probability_edge(probability, bookmaker_odds)
+
+        clv_potential = self.clv.estimate_clv_edge(
+            model_probability=probability,
+            opening_odds=opening_odds,
+            current_odds=bookmaker_odds,
+        )
+        movement_score = self.clv.odds_movement_score(
+            opening_odds=opening_odds,
+            current_odds=bookmaker_odds,
+        )
+
+        decision = self.filter.decide(
+            probability=probability,
+            odds=bookmaker_odds,
+            ev=ev_value,
+            confidence=confidence,
+            agreement=agreement,
+        )
+
+        stake_data = self.stake_policy.suggest(
+            bankroll=bankroll,
+            probability=probability,
+            odds=bookmaker_odds,
+            confidence=confidence,
+        )
+
+        enriched = dict(record)
+        enriched["fair_odds"] = round(fair_odds, 4)
+        enriched["implied_probability"] = round(implied_probability, 6)
+        enriched["probability_edge"] = round(prob_edge, 6)
+        enriched["ev"] = round(ev_value, 6)
+        enriched["clv_potential"] = round(clv_potential, 6)
+        enriched["odds_movement_score"] = round(movement_score, 6)
+        enriched["decision"] = decision
+        enriched["suggested_stake"] = round(stake_data["stake"], 2)
+        enriched["stake_cap_pct"] = round(stake_data["max_cap_pct"], 4)
+
+        return enriched
+
+    def run(
+        self,
+        records: list[dict],
+        bankroll: float = 1000.0,
+    ) -> list[dict]:
+        enriched = [
+            self.enrich_record(record, bankroll=bankroll)
+            for record in records
+        ]
+        return self.ranker.sort(enriched)
+EOF
+
+CREA_FILE quant/value/value_bet_runner.py
+from __future__ import annotations
+
+from quant.services.quant_job_runner import QuantJobRunner
+from quant.value.value_bet_engine import ValueBetEngine
+
+
+class ValueBetRunner:
+
+    def __init__(self):
+        self.quant_runner = QuantJobRunner()
+        self.engine = ValueBetEngine()
+
+    def run(self, bankroll: float = 1000.0) -> list[dict]:
+        records = self.quant_runner.run_cycle()
+        return self.engine.run(records, bankroll=bankroll)
+EOF
+
+CREA_FILE app/value_bet_controller.py
+from quant.value.value_bet_runner import ValueBetRunner
+
+
+class AppValueBetController:
+
+    def __init__(self):
+        self.runner = ValueBetRunner()
+
+    def run(self, bankroll: float = 1000.0):
+        return self.runner.run(bankroll=bankroll)
+EOF
+
+CREA_FILE tests/test_ev_calculator.py
+from quant.value.ev_calculator import EVCalculator
+
+
+def test_ev_calculator_outputs():
+    calc = EVCalculator()
+
+    ev = calc.expected_value(0.55, 2.10)
+    fair = calc.fair_odds(0.55)
+    implied = calc.implied_probability(2.10)
+
+    assert isinstance(ev, float)
+    assert fair > 0
+    assert 0 < implied < 1
+EOF
+
+CREA_FILE tests/test_kelly_engine.py
+from quant.value.kelly_engine import KellyEngine
+
+
+def test_kelly_engine_positive_fraction():
+    engine = KellyEngine()
+
+    fraction = engine.kelly_fraction(0.55, 2.10)
+
+    assert fraction >= 0.0
+EOF
+
+CREA_FILE tests/test_value_bet_filter.py
+from quant.value.value_bet_filter import ValueBetFilter
+
+
+def test_value_bet_filter_returns_valid_decision():
+    decision = ValueBetFilter().decide(
+        probability=0.58,
+        odds=2.00,
+        ev=0.16,
+        confidence=0.72,
+        agreement=0.68,
+    )
+
+    assert decision in ("BET", "WATCHLIST", "NO_BET")
+EOF
+
+CREA_FILE tests/test_value_bet_engine.py
+from quant.value.value_bet_engine import ValueBetEngine
+
+
+def test_value_bet_engine_enriches_records():
+    engine = ValueBetEngine()
+
+    records = [
         {
-            "fixture_id": "u1",
-            "home_team": "Inter Milan",
-            "away_team": "Roma",
+            "fixture_id": "1",
+            "home_team": "TeamA",
+            "away_team": "TeamB",
+            "market": "home",
+            "probability": 0.58,
+            "fair_odds": 1.72,
+            "bookmaker_odds": 2.05,
+            "market_edge": 0.06,
+            "model_edge": 0.18,
+            "confidence": 0.72,
+            "agreement": 0.68,
+            "decision": "BET",
         }
     ]
 
-    odds_map = {
-        "u1": {
-            "home": 1.90,
-            "draw": 3.40,
-            "away": 4.20,
-        }
-    }
+    result = engine.run(records, bankroll=1000.0)
 
-    understat_stats = {
-        "Inter": {
-            "xg_for": 1.85,
-            "xg_against": 0.90,
-            "xpts": 2.10,
-            "shots": 14.0,
-            "shots_on_target": 5.3,
-            "finishing_delta": 0.10,
-            "defensive_delta": 0.05,
-            "form_score": 0.80,
-        },
-        "Roma": {
-            "xg_for": 1.30,
-            "xg_against": 1.20,
-            "xpts": 1.50,
-            "shots": 11.0,
-            "shots_on_target": 4.1,
-            "finishing_delta": 0.03,
-            "defensive_delta": -0.02,
-            "form_score": 0.55,
-        },
-    }
-
-    fused = layer.fuse(fixtures, odds_map, understat_stats)
-
-    assert isinstance(fused, list)
-    assert len(fused) == 1
-    assert fused[0]["fixture_id"] == "u1"
-    assert fused[0]["home_team_key"] == "inter"
-    assert fused[0]["bookmaker_odds_home"] == 1.90
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert "ev" in result[0]
+    assert "suggested_stake" in result[0]
+    assert "clv_potential" in result[0]
 EOF
 
-CREA_FILE tests/test_live_fusion_provider.py
-from quant.fusion.live_fusion_provider import LiveFusionProvider
-from quant.providers.sample_clients import SampleAPIFootballClient
-from quant.providers.sample_clients import SampleUnderstatClient
+CREA_FILE tests/test_value_bet_runner.py
+from quant.value.value_bet_runner import ValueBetRunner
 
 
-def test_live_fusion_provider_builds_rows():
-    provider = LiveFusionProvider(
-        fixtures_provider=SampleAPIFootballClient(),
-        odds_provider=SampleAPIFootballClient(),
-        understat_provider=SampleUnderstatClient(),
-    )
+def test_value_bet_runner_runs():
+    result = ValueBetRunner().run()
 
-    rows = provider.build_fused_fixtures(league="Serie A", season=2024)
-
-    assert isinstance(rows, list)
-    assert len(rows) > 0
-    assert "fixture_id" in rows[0]
-    assert "xg_diff" in rows[0]
+    assert isinstance(result, list)
+    assert len(result) > 0
+    assert "ev" in result[0]
 EOF
 
-CREA_FILE tests/test_live_fusion_runner.py
-from quant.fusion.live_fusion_runner import LiveFusionRunner
+CREA_FILE tests/test_app_value_bet_controller.py
+from app.value_bet_controller import AppValueBetController
 
 
-def test_live_fusion_runner_runs():
-    result = LiveFusionRunner().run()
+def test_app_value_bet_controller_runs():
+    result = AppValueBetController().run()
 
-    assert isinstance(result, dict)
-    assert "rows" in result
-    assert "count" in result
-    assert "export_path" in result
-    assert result["count"] > 0
-EOF
-
-CREA_FILE app/live_fusion.py
-from quant.fusion.live_fusion_runner import LiveFusionRunner
-
-
-class AppLiveFusion:
-
-    def __init__(self):
-        self.runner = LiveFusionRunner()
-
-    def run(self):
-        return self.runner.run()
-EOF
-
-CREA_FILE tests/test_app_live_fusion.py
-from app.live_fusion import AppLiveFusion
-
-
-def test_app_live_fusion_runs():
-    result = AppLiveFusion().run()
-
-    assert isinstance(result, dict)
-    assert "rows" in result
-    assert result["count"] > 0
+    assert isinstance(result, list)
+    assert len(result) > 0
+    assert "suggested_stake" in result[0]
 EOF
 
 FIX_WHITESPACE
-

@@ -83,5 +83,41 @@
     "avg_confidence": 0.479459,
     "avg_agreement": 0.791195,
     "max_market_edge": 0.162716
+  },
+  "baseline": {
+    "has_baseline": true,
+    "degraded": false,
+    "details": [
+      {
+        "metric": "record_count",
+        "current": 9,
+        "baseline": 9,
+        "delta": 0.0
+      },
+      {
+        "metric": "bet_count",
+        "current": 2,
+        "baseline": 2,
+        "delta": 0.0
+      },
+      {
+        "metric": "avg_probability",
+        "current": 0.333333,
+        "baseline": 0.333333,
+        "delta": 0.0
+      },
+      {
+        "metric": "avg_confidence",
+        "current": 0.479459,
+        "baseline": 0.479459,
+        "delta": 0.0
+      },
+      {
+        "metric": "avg_agreement",
+        "current": 0.791195,
+        "baseline": 0.791195,
+        "delta": 0.0
+      }
+    ]
   }
 }

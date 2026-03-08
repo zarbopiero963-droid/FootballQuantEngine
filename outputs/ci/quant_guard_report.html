@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Quant Engine Guard Report</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 24px; }
+table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+th { background: #f4f4f4; }
+.good { color: green; font-weight: bold; }
+.bad { color: red; font-weight: bold; }
+</style>
+</head>
+<body>
+<h1>Quant Engine Guard Report</h1>
+<p><strong>Generated:</strong> 2026-03-08 00:02:52 UTC</p>
+<p><strong>Passed:</strong> <span class="good">True</span></p>
+
+<h2>Summary</h2>
+<table>
+<tr><th>Metric</th><th>Value</th></tr>
+<tr><td>record_count</td><td>9</td></tr><tr><td>bet_count</td><td>2</td></tr><tr><td>watchlist_count</td><td>1</td></tr><tr><td>no_bet_count</td><td>6</td></tr><tr><td>avg_probability</td><td>0.333333</td></tr><tr><td>avg_confidence</td><td>0.479459</td></tr><tr><td>avg_agreement</td><td>0.791195</td></tr><tr><td>max_market_edge</td><td>0.162716</td></tr>
+</table>
+
+<h2>Checks</h2>
+<table>
+<tr><th>Check</th><th>Passed</th><th>Value</th></tr>
+<tr><td>records_is_list</td><td>True</td><td>list</td></tr><tr><td>records_not_empty</td><td>True</td><td>9</td></tr><tr><td>required_fields_present</td><td>True</td><td>[&#x27;agreement&#x27;, &#x27;away_team&#x27;, &#x27;bookmaker_odds&#x27;, &#x27;confidence&#x27;, &#x27;decision&#x27;, &#x27;fair_odds&#x27;, &#x27;fixture_id&#x27;, &#x27;home_team&#x27;, &#x27;market&#x27;, &#x27;market_edge&#x27;, &#x27;model_edge&#x27;, &#x27;probability&#x27;]</td></tr><tr><td>all_required_fields_present_in_all_records</td><td>True</td><td>True</td></tr><tr><td>valid_decisions</td><td>True</td><td>0</td></tr><tr><td>valid_markets</td><td>True</td><td>0</td></tr><tr><td>probabilities_in_range</td><td>True</td><td>0</td></tr><tr><td>confidences_in_range</td><td>True</td><td>0</td></tr><tr><td>agreements_in_range</td><td>True</td><td>0</td></tr><tr><td>odds_positive</td><td>True</td><td>0</td></tr><tr><td>has_any_decision_bucket</td><td>True</td><td>{&#x27;BET&#x27;: 2, &#x27;WATCHLIST&#x27;: 1, &#x27;NO_BET&#x27;: 6}</td></tr>
+</table>
+</body>
+</html>

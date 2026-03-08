@@ -1494,3 +1494,30 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-08_12-24-45.zip
+Backup created backups/backup_2026-03-08_12-24-45.zip
+[WARN] Unknown command: MARKET EXPANSION ENGINE 1
+[CREATE] folder quant/markets
+[CREATE] file quant/markets/over_under_model.py
+[CREATE] file quant/markets/btts_model.py
+[CREATE] file quant/markets/market_probabilities.py
+[CREATE] file quant/markets/market_odds_mapper.py
+[CREATE] file quant/markets/market_value_engine.py
+[CREATE] file quant/markets/market_expansion_engine.py
+[CREATE] file quant/markets/market_expansion_runner.py
+[CREATE] file app/market_expansion_controller.py
+[CREATE] file tests/test_over_under_model.py
+[CREATE] file tests/test_btts_model.py
+[CREATE] file tests/test_market_probabilities.py
+[CREATE] file tests/test_market_odds_mapper.py
+[CREATE] file tests/test_market_value_engine.py
+[CREATE] file tests/test_market_expansion_engine.py
+[CREATE] file tests/test_market_expansion_runner.py
+[CREATE] file tests/test_app_market_expansion_controller.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

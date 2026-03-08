@@ -519,3 +519,4 @@ def test_app_market_expansion_controller_runs():
 EOF
 
 FIX_WHITESPACE
+

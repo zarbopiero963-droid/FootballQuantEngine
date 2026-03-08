@@ -1,163 +1,1259 @@
-CREA_FILE quant/live/closing_odds_collector.py
+############################################
+UNIFIED DATA + ORCHESTRATION BLOCK
+############################################
+
+CREA_CARTELLA quant/runtime
+CREA_CARTELLA outputs/runtime
+
+CREA_FILE quant/runtime/runtime_db.py
 from __future__ import annotations
 
 import json
 import os
+import sqlite3
+from contextlib import contextmanager
+
+
+class RuntimeDB:
+
+    def __init__(self, db_path: str = "outputs/runtime/runtime.db"):
+        self.db_path = db_path
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+
+    def connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+        conn.execute("PRAGMA foreign_keys=ON;")
+        conn.execute("PRAGMA busy_timeout=30000;")
+        return conn
+
+    @contextmanager
+    def cursor(self):
+        conn = self.connect()
+        cur = conn.cursor()
+        try:
+            yield conn, cur
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
+
+    def init_db(self) -> None:
+        with self.cursor() as (_, cur):
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS signals (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    fixture_id TEXT NOT NULL,
+                    home_team TEXT,
+                    away_team TEXT,
+                    league TEXT,
+                    market TEXT NOT NULL,
+                    probability REAL,
+                    fair_odds REAL,
+                    bookmaker_odds REAL,
+                    opening_odds REAL,
+                    ev REAL,
+                    confidence REAL,
+                    agreement REAL,
+                    decision TEXT,
+                    suggested_stake REAL,
+                    status TEXT DEFAULT 'OPEN',
+                    created_at TEXT,
+                    extra_json TEXT
+                )
+                """
+            )
+
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS quotes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    fixture_id TEXT NOT NULL,
+                    market TEXT NOT NULL,
+                    quote_type TEXT NOT NULL,
+                    odds REAL,
+                    source TEXT,
+                    captured_at TEXT,
+                    extra_json TEXT
+                )
+                """
+            )
+
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS results (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    fixture_id TEXT NOT NULL,
+                    market TEXT NOT NULL,
+                    result TEXT,
+                    pnl REAL,
+                    closing_odds REAL,
+                    clv_abs REAL,
+                    clv_pct REAL,
+                    settled_at TEXT,
+                    extra_json TEXT
+                )
+                """
+            )
+
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS scheduler_jobs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_name TEXT UNIQUE NOT NULL,
+                    interval_seconds REAL,
+                    enabled INTEGER DEFAULT 1,
+                    last_run_at TEXT,
+                    next_run_at TEXT,
+                    status TEXT DEFAULT 'idle',
+                    last_error TEXT,
+                    updated_at TEXT
+                )
+                """
+            )
+
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS worker_state (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    worker_name TEXT UNIQUE NOT NULL,
+                    status TEXT,
+                    last_heartbeat TEXT,
+                    current_job TEXT,
+                    last_error TEXT,
+                    updated_at TEXT
+                )
+                """
+            )
+
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS cycle_state (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    cycle_name TEXT,
+                    status TEXT,
+                    last_started_at TEXT,
+                    last_completed_at TEXT,
+                    last_success_at TEXT,
+                    last_error TEXT,
+                    payload_json TEXT
+                )
+                """
+            )
+
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS final_reports (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    report_name TEXT,
+                    report_path TEXT,
+                    report_type TEXT,
+                    created_at TEXT,
+                    payload_json TEXT
+                )
+                """
+            )
+
+            cur.execute(
+                """
+                INSERT OR IGNORE INTO cycle_state (
+                    id,
+                    cycle_name,
+                    status,
+                    last_started_at,
+                    last_completed_at,
+                    last_success_at,
+                    last_error,
+                    payload_json
+                ) VALUES (1, 'main_cycle', 'idle', NULL, NULL, NULL, NULL, NULL)
+                """
+            )
+
+    def execute(self, sql: str, params: tuple = ()) -> None:
+        with self.cursor() as (_, cur):
+            cur.execute(sql, params)
+
+    def executemany(self, sql: str, params_list: list[tuple]) -> None:
+        with self.cursor() as (_, cur):
+            cur.executemany(sql, params_list)
+
+    def fetchall(self, sql: str, params: tuple = ()) -> list[dict]:
+        with self.cursor() as (_, cur):
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+            return [dict(row) for row in rows]
+
+    def fetchone(self, sql: str, params: tuple = ()) -> dict | None:
+        with self.cursor() as (_, cur):
+            cur.execute(sql, params)
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+    def json_dumps(self, payload: dict | list | None) -> str | None:
+        if payload is None:
+            return None
+        return json.dumps(payload, ensure_ascii=False)
+EOF
+
+CREA_FILE quant/runtime/signal_store.py
+from __future__ import annotations
+
 from datetime import datetime
 
+from quant.runtime.runtime_db import RuntimeDB
 
-class ClosingOddsCollector:
 
-    def __init__(self, path: str = "outputs/ops/closing_odds.json"):
-        self.path = path
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+class SignalStore:
 
-        if not os.path.exists(self.path):
-            with open(self.path, "w", encoding="utf-8") as handle:
-                json.dump([], handle, indent=2)
+    def __init__(self, db: RuntimeDB | None = None):
+        self.db = db or RuntimeDB()
+        self.db.init_db()
 
-    def _load(self) -> list[dict]:
-        with open(self.path, "r", encoding="utf-8") as handle:
-            return json.load(handle)
+    def save_signals(self, rows: list[dict]) -> int:
+        now = datetime.utcnow().isoformat() + "Z"
 
-    def _save(self, rows: list[dict]) -> None:
-        with open(self.path, "w", encoding="utf-8") as handle:
-            json.dump(rows, handle, indent=2)
+        payloads = []
+        for row in rows:
+            payloads.append(
+                (
+                    str(row.get("fixture_id", "")),
+                    row.get("home_team", ""),
+                    row.get("away_team", ""),
+                    row.get("league", "UNKNOWN"),
+                    row.get("market", ""),
+                    float(row.get("probability", 0.0) or 0.0),
+                    float(row.get("fair_odds", 0.0) or 0.0),
+                    float(row.get("bookmaker_odds", 0.0) or 0.0),
+                    float(row.get("opening_odds", row.get("bookmaker_odds", 0.0)) or 0.0),
+                    float(row.get("ev", 0.0) or 0.0),
+                    float(row.get("confidence", 0.0) or 0.0),
+                    float(row.get("agreement", 0.0) or 0.0),
+                    row.get("decision", "NO_BET"),
+                    float(row.get("suggested_stake", 0.0) or 0.0),
+                    row.get("status", "OPEN"),
+                    now,
+                    self.db.json_dumps(row),
+                )
+            )
 
-    def collect(self, fixture_id: str, market: str, closing_odds: float) -> dict:
-        rows = self._load()
+        self.db.executemany(
+            """
+            INSERT INTO signals (
+                fixture_id,
+                home_team,
+                away_team,
+                league,
+                market,
+                probability,
+                fair_odds,
+                bookmaker_odds,
+                opening_odds,
+                ev,
+                confidence,
+                agreement,
+                decision,
+                suggested_stake,
+                status,
+                created_at,
+                extra_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            payloads,
+        )
 
-        row = {
-            "fixture_id": str(fixture_id),
-            "market": str(market),
-            "closing_odds": float(closing_odds),
-            "collected_at": datetime.utcnow().isoformat() + "Z",
-        }
+        return len(payloads)
 
-        rows.append(row)
-        self._save(rows)
-
-        return row
-
-    def list_rows(self) -> list[dict]:
-        return self._load()
+    def list_signals(self, limit: int = 200) -> list[dict]:
+        return self.db.fetchall(
+            """
+            SELECT *
+            FROM signals
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (int(limit),),
+        )
 EOF
 
-CREA_FILE quant/live/edge_stability_detector.py
+CREA_FILE quant/runtime/quote_store.py
 from __future__ import annotations
 
-import pandas as pd
+from datetime import datetime
+
+from quant.runtime.runtime_db import RuntimeDB
 
 
-class EdgeStabilityDetector:
+class QuoteStore:
 
-    def analyze(self, rows: list[dict]) -> dict:
-        if not rows:
-            return {
-                "count": 0,
-                "avg_ev": 0.0,
-                "std_ev": 0.0,
-                "stable": False,
-            }
+    def __init__(self, db: RuntimeDB | None = None):
+        self.db = db or RuntimeDB()
+        self.db.init_db()
 
-        df = pd.DataFrame(rows).copy()
+    def save_quote(
+        self,
+        fixture_id: str,
+        market: str,
+        quote_type: str,
+        odds: float,
+        source: str = "system",
+        extra: dict | None = None,
+    ) -> dict:
+        captured_at = datetime.utcnow().isoformat() + "Z"
 
-        if "ev" not in df.columns:
-            df["ev"] = 0.0
-
-        avg_ev = float(df["ev"].astype(float).mean())
-        std_ev = float(df["ev"].astype(float).std(ddof=0))
+        self.db.execute(
+            """
+            INSERT INTO quotes (
+                fixture_id,
+                market,
+                quote_type,
+                odds,
+                source,
+                captured_at,
+                extra_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(fixture_id),
+                str(market),
+                str(quote_type),
+                float(odds),
+                str(source),
+                captured_at,
+                self.db.json_dumps(extra),
+            ),
+        )
 
         return {
-            "count": int(len(df.index)),
-            "avg_ev": round(avg_ev, 6),
-            "std_ev": round(std_ev, 6),
-            "stable": bool(std_ev <= max(0.05, abs(avg_ev))),
+            "fixture_id": str(fixture_id),
+            "market": str(market),
+            "quote_type": str(quote_type),
+            "odds": float(odds),
+            "source": str(source),
+            "captured_at": captured_at,
+        }
+
+    def save_opening_quotes_from_rows(self, rows: list[dict], source: str = "value_engine") -> int:
+        count = 0
+
+        for row in rows:
+            self.save_quote(
+                fixture_id=str(row.get("fixture_id", "")),
+                market=str(row.get("market", "")),
+                quote_type="opening",
+                odds=float(row.get("opening_odds", row.get("bookmaker_odds", 0.0)) or 0.0),
+                source=source,
+                extra=row,
+            )
+            count += 1
+
+        return count
+
+    def save_closing_quote(
+        self,
+        fixture_id: str,
+        market: str,
+        odds: float,
+        source: str = "closing_collector",
+        extra: dict | None = None,
+    ) -> dict:
+        return self.save_quote(
+            fixture_id=fixture_id,
+            market=market,
+            quote_type="closing",
+            odds=odds,
+            source=source,
+            extra=extra,
+        )
+
+    def list_quotes(self, limit: int = 500) -> list[dict]:
+        return self.db.fetchall(
+            """
+            SELECT *
+            FROM quotes
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (int(limit),),
+        )
+EOF
+
+CREA_FILE quant/runtime/result_store.py
+from __future__ import annotations
+
+from datetime import datetime
+
+from quant.runtime.runtime_db import RuntimeDB
+
+
+class ResultStore:
+
+    def __init__(self, db: RuntimeDB | None = None):
+        self.db = db or RuntimeDB()
+        self.db.init_db()
+
+    def save_result(
+        self,
+        fixture_id: str,
+        market: str,
+        result: str,
+        pnl: float,
+        closing_odds: float,
+        clv_abs: float,
+        clv_pct: float,
+        extra: dict | None = None,
+    ) -> dict:
+        settled_at = datetime.utcnow().isoformat() + "Z"
+
+        self.db.execute(
+            """
+            INSERT INTO results (
+                fixture_id,
+                market,
+                result,
+                pnl,
+                closing_odds,
+                clv_abs,
+                clv_pct,
+                settled_at,
+                extra_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(fixture_id),
+                str(market),
+                str(result).upper(),
+                float(pnl),
+                float(closing_odds),
+                float(clv_abs),
+                float(clv_pct),
+                settled_at,
+                self.db.json_dumps(extra),
+            ),
+        )
+
+        return {
+            "fixture_id": str(fixture_id),
+            "market": str(market),
+            "result": str(result).upper(),
+            "pnl": float(pnl),
+            "closing_odds": float(closing_odds),
+            "clv_abs": float(clv_abs),
+            "clv_pct": float(clv_pct),
+            "settled_at": settled_at,
+        }
+
+    def list_results(self, limit: int = 500) -> list[dict]:
+        return self.db.fetchall(
+            """
+            SELECT *
+            FROM results
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (int(limit),),
+        )
+EOF
+
+CREA_FILE quant/runtime/job_registry.py
+from __future__ import annotations
+
+from datetime import datetime
+
+from quant.runtime.runtime_db import RuntimeDB
+
+
+class JobRegistry:
+
+    def __init__(self, db: RuntimeDB | None = None):
+        self.db = db or RuntimeDB()
+        self.db.init_db()
+
+    def upsert_job(
+        self,
+        job_name: str,
+        interval_seconds: float,
+        enabled: bool = True,
+        status: str = "idle",
+    ) -> None:
+        now = datetime.utcnow().isoformat() + "Z"
+
+        existing = self.db.fetchone(
+            "SELECT id FROM scheduler_jobs WHERE job_name = ?",
+            (str(job_name),),
+        )
+
+        if existing:
+            self.db.execute(
+                """
+                UPDATE scheduler_jobs
+                SET interval_seconds = ?,
+                    enabled = ?,
+                    status = ?,
+                    updated_at = ?
+                WHERE job_name = ?
+                """,
+                (
+                    float(interval_seconds),
+                    1 if enabled else 0,
+                    str(status),
+                    now,
+                    str(job_name),
+                ),
+            )
+        else:
+            self.db.execute(
+                """
+                INSERT INTO scheduler_jobs (
+                    job_name,
+                    interval_seconds,
+                    enabled,
+                    status,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    str(job_name),
+                    float(interval_seconds),
+                    1 if enabled else 0,
+                    str(status),
+                    now,
+                ),
+            )
+
+    def mark_started(self, job_name: str) -> None:
+        now = datetime.utcnow().isoformat() + "Z"
+        self.db.execute(
+            """
+            UPDATE scheduler_jobs
+            SET status = 'running',
+                last_run_at = ?,
+                updated_at = ?
+            WHERE job_name = ?
+            """,
+            (now, now, str(job_name)),
+        )
+
+    def mark_finished(self, job_name: str, next_run_at: str | None = None) -> None:
+        now = datetime.utcnow().isoformat() + "Z"
+        self.db.execute(
+            """
+            UPDATE scheduler_jobs
+            SET status = 'idle',
+                next_run_at = ?,
+                last_error = NULL,
+                updated_at = ?
+            WHERE job_name = ?
+            """,
+            (next_run_at, now, str(job_name)),
+        )
+
+    def mark_error(self, job_name: str, error: str) -> None:
+        now = datetime.utcnow().isoformat() + "Z"
+        self.db.execute(
+            """
+            UPDATE scheduler_jobs
+            SET status = 'error',
+                last_error = ?,
+                updated_at = ?
+            WHERE job_name = ?
+            """,
+            (str(error), now, str(job_name)),
+        )
+
+    def list_jobs(self) -> list[dict]:
+        return self.db.fetchall(
+            """
+            SELECT *
+            FROM scheduler_jobs
+            ORDER BY job_name ASC
+            """
+        )
+EOF
+
+CREA_FILE quant/runtime/worker_state_store.py
+from __future__ import annotations
+
+from datetime import datetime
+
+from quant.runtime.runtime_db import RuntimeDB
+
+
+class WorkerStateStore:
+
+    def __init__(self, db: RuntimeDB | None = None):
+        self.db = db or RuntimeDB()
+        self.db.init_db()
+
+    def update_worker(
+        self,
+        worker_name: str,
+        status: str,
+        current_job: str | None = None,
+        last_error: str | None = None,
+    ) -> None:
+        now = datetime.utcnow().isoformat() + "Z"
+
+        existing = self.db.fetchone(
+            "SELECT id FROM worker_state WHERE worker_name = ?",
+            (str(worker_name),),
+        )
+
+        if existing:
+            self.db.execute(
+                """
+                UPDATE worker_state
+                SET status = ?,
+                    last_heartbeat = ?,
+                    current_job = ?,
+                    last_error = ?,
+                    updated_at = ?
+                WHERE worker_name = ?
+                """,
+                (
+                    str(status),
+                    now,
+                    current_job,
+                    last_error,
+                    now,
+                    str(worker_name),
+                ),
+            )
+        else:
+            self.db.execute(
+                """
+                INSERT INTO worker_state (
+                    worker_name,
+                    status,
+                    last_heartbeat,
+                    current_job,
+                    last_error,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    str(worker_name),
+                    str(status),
+                    now,
+                    current_job,
+                    last_error,
+                    now,
+                ),
+            )
+
+    def list_workers(self) -> list[dict]:
+        return self.db.fetchall(
+            """
+            SELECT *
+            FROM worker_state
+            ORDER BY worker_name ASC
+            """
+        )
+EOF
+
+CREA_FILE quant/runtime/cycle_state_store.py
+from __future__ import annotations
+
+from datetime import datetime
+
+from quant.runtime.runtime_db import RuntimeDB
+
+
+class CycleStateStore:
+
+    def __init__(self, db: RuntimeDB | None = None):
+        self.db = db or RuntimeDB()
+        self.db.init_db()
+
+    def mark_started(self, cycle_name: str = "main_cycle") -> None:
+        now = datetime.utcnow().isoformat() + "Z"
+        self.db.execute(
+            """
+            UPDATE cycle_state
+            SET cycle_name = ?,
+                status = 'running',
+                last_started_at = ?,
+                last_error = NULL
+            WHERE id = 1
+            """,
+            (str(cycle_name), now),
+        )
+
+    def mark_completed(self, payload: dict | None = None) -> None:
+        now = datetime.utcnow().isoformat() + "Z"
+        self.db.execute(
+            """
+            UPDATE cycle_state
+            SET status = 'completed',
+                last_completed_at = ?,
+                last_success_at = ?,
+                payload_json = ?,
+                last_error = NULL
+            WHERE id = 1
+            """,
+            (now, now, self.db.json_dumps(payload),),
+        )
+
+    def mark_error(self, error: str, payload: dict | None = None) -> None:
+        now = datetime.utcnow().isoformat() + "Z"
+        self.db.execute(
+            """
+            UPDATE cycle_state
+            SET status = 'error',
+                last_completed_at = ?,
+                last_error = ?,
+                payload_json = ?
+            WHERE id = 1
+            """,
+            (now, str(error), self.db.json_dumps(payload)),
+        )
+
+    def get_state(self) -> dict | None:
+        return self.db.fetchone("SELECT * FROM cycle_state WHERE id = 1")
+EOF
+
+CREA_FILE quant/runtime/report_store.py
+from __future__ import annotations
+
+from datetime import datetime
+
+from quant.runtime.runtime_db import RuntimeDB
+
+
+class ReportStore:
+
+    def __init__(self, db: RuntimeDB | None = None):
+        self.db = db or RuntimeDB()
+        self.db.init_db()
+
+    def save_report(
+        self,
+        report_name: str,
+        report_path: str,
+        report_type: str,
+        payload: dict | None = None,
+    ) -> dict:
+        created_at = datetime.utcnow().isoformat() + "Z"
+
+        self.db.execute(
+            """
+            INSERT INTO final_reports (
+                report_name,
+                report_path,
+                report_type,
+                created_at,
+                payload_json
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                str(report_name),
+                str(report_path),
+                str(report_type),
+                created_at,
+                self.db.json_dumps(payload),
+            ),
+        )
+
+        return {
+            "report_name": str(report_name),
+            "report_path": str(report_path),
+            "report_type": str(report_type),
+            "created_at": created_at,
+        }
+
+    def list_reports(self, limit: int = 100) -> list[dict]:
+        return self.db.fetchall(
+            """
+            SELECT *
+            FROM final_reports
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (int(limit),),
+        )
+EOF
+
+CREA_FILE quant/runtime/unified_runtime.py
+from __future__ import annotations
+
+import json
+import os
+
+from quant.analytics.integrated_analytics import IntegratedAnalytics
+from quant.clv.clv_journal_service import CLVJournalService
+from quant.live.closing_odds_sync import ClosingOddsSync
+from quant.ops.full_integration_runner import FullIntegrationRunner
+from quant.runtime.cycle_state_store import CycleStateStore
+from quant.runtime.job_registry import JobRegistry
+from quant.runtime.quote_store import QuoteStore
+from quant.runtime.report_store import ReportStore
+from quant.runtime.result_store import ResultStore
+from quant.runtime.runtime_db import RuntimeDB
+from quant.runtime.signal_store import SignalStore
+from quant.runtime.worker_state_store import WorkerStateStore
+
+
+class UnifiedRuntime:
+
+    def __init__(self):
+        self.db = RuntimeDB()
+        self.db.init_db()
+
+        self.signal_store = SignalStore(self.db)
+        self.quote_store = QuoteStore(self.db)
+        self.result_store = ResultStore(self.db)
+        self.job_registry = JobRegistry(self.db)
+        self.worker_state = WorkerStateStore(self.db)
+        self.cycle_state = CycleStateStore(self.db)
+        self.report_store = ReportStore(self.db)
+
+        self.integration_runner = FullIntegrationRunner()
+        self.clv_service = CLVJournalService()
+        self.closing_sync = ClosingOddsSync()
+        self.analytics = IntegratedAnalytics()
+
+        self.report_json_path = "outputs/runtime/final_runtime_report.json"
+        os.makedirs(os.path.dirname(self.report_json_path), exist_ok=True)
+
+    def run_full_cycle(
+        self,
+        bankroll: float = 1000.0,
+        league: str = "Serie A",
+        season: int = 2024,
+    ) -> dict:
+        self.worker_state.update_worker(
+            worker_name="main_worker",
+            status="running",
+            current_job="full_cycle",
+            last_error=None,
+        )
+        self.cycle_state.mark_started("full_cycle")
+
+        try:
+            payload = self.integration_runner.run_cycle(
+                bankroll=bankroll,
+                league=league,
+                season=season,
+            )
+
+            ranked_rows = payload.get("ranked_rows", [])
+            self.signal_store.save_signals(ranked_rows)
+            self.quote_store.save_opening_quotes_from_rows(ranked_rows, source="full_integration")
+
+            runtime_report = {
+                "performance_summary": payload.get("performance_summary", {}),
+                "threshold_summary": payload.get("threshold_summary", {}),
+                "analytics": payload.get("analytics", {}),
+                "temporal_guard": payload.get("temporal_guard", {}),
+                "counts": {
+                    "ranked_rows": len(ranked_rows),
+                    "journal_rows": len(payload.get("journal_rows", [])),
+                    "fusion_rows": len(payload.get("fusion", {}).get("rows", [])),
+                },
+            }
+
+            with open(self.report_json_path, "w", encoding="utf-8") as handle:
+                json.dump(runtime_report, handle, indent=2)
+
+            self.report_store.save_report(
+                report_name="final_runtime_report",
+                report_path=self.report_json_path,
+                report_type="json",
+                payload=runtime_report,
+            )
+
+            self.cycle_state.mark_completed(runtime_report)
+            self.worker_state.update_worker(
+                worker_name="main_worker",
+                status="idle",
+                current_job=None,
+                last_error=None,
+            )
+
+            return {
+                "ok": True,
+                "payload": payload,
+                "runtime_report": runtime_report,
+                "report_path": self.report_json_path,
+            }
+
+        except Exception as exc:
+            self.cycle_state.mark_error(str(exc))
+            self.worker_state.update_worker(
+                worker_name="main_worker",
+                status="error",
+                current_job="full_cycle",
+                last_error=str(exc),
+            )
+            raise
+
+    def ingest_closing_and_settle(
+        self,
+        fixture_id: str,
+        market: str,
+        closing_odds: float,
+        result: str,
+    ) -> dict:
+        sync_payload = self.closing_sync.ingest_and_sync(
+            fixture_id=fixture_id,
+            market=market,
+            closing_odds=closing_odds,
+            result=result,
+        )
+
+        journal_update = sync_payload.get("journal_update")
+        if journal_update:
+            self.quote_store.save_closing_quote(
+                fixture_id=fixture_id,
+                market=market,
+                odds=closing_odds,
+                source="closing_sync",
+                extra=sync_payload,
+            )
+
+            self.result_store.save_result(
+                fixture_id=fixture_id,
+                market=market,
+                result=journal_update.get("result", result),
+                pnl=float(journal_update.get("pnl", 0.0) or 0.0),
+                closing_odds=float(journal_update.get("closing_odds", closing_odds) or closing_odds),
+                clv_abs=float(journal_update.get("clv_abs", 0.0) or 0.0),
+                clv_pct=float(journal_update.get("clv_pct", 0.0) or 0.0),
+                extra=journal_update,
+            )
+
+        return sync_payload
+
+    def refresh_final_report(self) -> dict:
+        journal_rows = self.clv_service.journal.list_bets()
+        analytics_payload = self.analytics.build(journal_rows)
+        performance_summary = self.clv_service.performance_summary()
+
+        final_payload = {
+            "performance_summary": performance_summary,
+            "analytics": analytics_payload,
+            "signals_count": len(self.signal_store.list_signals()),
+            "quotes_count": len(self.quote_store.list_quotes()),
+            "results_count": len(self.result_store.list_results()),
+            "jobs": self.job_registry.list_jobs(),
+            "workers": self.worker_state.list_workers(),
+            "cycle_state": self.cycle_state.get_state(),
+        }
+
+        with open(self.report_json_path, "w", encoding="utf-8") as handle:
+            json.dump(final_payload, handle, indent=2)
+
+        self.report_store.save_report(
+            report_name="final_runtime_report_refresh",
+            report_path=self.report_json_path,
+            report_type="json",
+            payload=final_payload,
+        )
+
+        return {
+            "ok": True,
+            "report_path": self.report_json_path,
+            "payload": final_payload,
         }
 EOF
 
-CREA_FILE quant/ml/ml_layer_real.py
+CREA_FILE quant/runtime/orchestration_service.py
 from __future__ import annotations
 
-import numpy as np
-import pandas as pd
-
-try:
-    from sklearn.linear_model import LogisticRegression
-except Exception:
-    LogisticRegression = None
+from quant.ops.scheduler_service import SchedulerService
+from quant.ops.watchdog import Watchdog
+from quant.ops.worker_pool import WorkerPool
+from quant.runtime.unified_runtime import UnifiedRuntime
 
 
-class MLLayerReal:
-
-    FEATURE_COLUMNS = [
-        "elo_diff",
-        "form_diff",
-        "xg_diff",
-        "xga_diff",
-        "xpts_diff",
-        "shots_diff",
-        "shots_on_target_diff",
-        "form_score_diff",
-        "bookmaker_odds_home",
-        "bookmaker_odds_draw",
-        "bookmaker_odds_away",
-    ]
+class OrchestrationService:
 
     def __init__(self):
-        self.model = None
-        self.is_fitted = False
+        self.runtime = UnifiedRuntime()
+        self.scheduler = SchedulerService()
+        self.watchdog = Watchdog()
+        self.worker_pool = WorkerPool(max_workers=2)
 
-    def _build_dataframe(self, rows: list[dict]) -> pd.DataFrame:
-        if not rows:
-            return pd.DataFrame(columns=self.FEATURE_COLUMNS + ["target"])
+    def _cycle_job(self):
+        self.watchdog.ping("orchestration_cycle")
+        return self.runtime.run_full_cycle()
 
-        df = pd.DataFrame(rows).copy()
+    def register_default_jobs(self, interval_seconds: float = 300.0) -> None:
+        self.runtime.job_registry.upsert_job(
+            job_name="full_cycle",
+            interval_seconds=interval_seconds,
+            enabled=True,
+            status="idle",
+        )
 
-        for col in self.FEATURE_COLUMNS:
-            if col not in df.columns:
-                df[col] = 0.0
+        self.scheduler.add_recurring_job(
+            name="full_cycle",
+            callback=lambda: self.worker_pool.submit(self._cycle_job),
+            interval_seconds=interval_seconds,
+            run_immediately=True,
+        )
 
-        if "result" not in df.columns:
-            df["result"] = "D"
+    def start(self, interval_seconds: float = 300.0) -> None:
+        self.register_default_jobs(interval_seconds=interval_seconds)
+        self.scheduler.start()
 
-        df["target"] = (df["result"].astype(str) == "H").astype(int)
+    def stop(self) -> None:
+        self.scheduler.stop()
+        self.worker_pool.shutdown(wait=False)
+EOF
 
-        return df[self.FEATURE_COLUMNS + ["target"]].copy()
+CREA_FILE app/unified_runtime_controller.py
+from quant.runtime.unified_runtime import UnifiedRuntime
 
-    def fit(self, rows: list[dict]) -> None:
-        df = self._build_dataframe(rows)
 
-        if df.empty or LogisticRegression is None:
-            self.model = None
-            self.is_fitted = False
-            return
+class AppUnifiedRuntimeController:
 
-        X = df[self.FEATURE_COLUMNS].astype(float).values
-        y = df["target"].astype(int).values
+    def __init__(self):
+        self.runtime = UnifiedRuntime()
 
-        if len(set(y.tolist())) < 2:
-            self.model = None
-            self.is_fitted = False
-            return
+    def run_full_cycle(self, bankroll: float = 1000.0, league: str = "Serie A", season: int = 2024):
+        return self.runtime.run_full_cycle(
+            bankroll=bankroll,
+            league=league,
+            season=season,
+        )
 
-        self.model = LogisticRegression(max_iter=1000)
-        self.model.fit(X, y)
-        self.is_fitted = True
+    def settle(self, fixture_id: str, market: str, closing_odds: float, result: str):
+        return self.runtime.ingest_closing_and_settle(
+            fixture_id=fixture_id,
+            market=market,
+            closing_odds=closing_odds,
+            result=result,
+        )
 
-    def predict_home_probability(self, row: dict) -> float:
-        if not self.is_fitted or self.model is None:
-            return 0.50
+    def refresh_report(self):
+        return self.runtime.refresh_final_report()
+EOF
 
-        values = []
-        for col in self.FEATURE_COLUMNS:
-            values.append(float(row.get(col, 0.0) or 0.0))
+CREA_FILE ui/unified_runtime_bridge.py
+from __future__ import annotations
 
-        X = np.asarray([values], dtype=float)
-        prob = float(self.model.predict_proba(X)[0, 1])
+from app.unified_runtime_controller import AppUnifiedRuntimeController
 
-        return round(float(min(max(prob, 0.0001), 0.9999)), 6)
+
+class UnifiedRuntimeBridge:
+
+    def __init__(self):
+        self.controller = AppUnifiedRuntimeController()
+
+    def run(self, bankroll: float = 1000.0, league: str = "Serie A", season: int = 2024) -> dict:
+        return self.controller.run_full_cycle(
+            bankroll=bankroll,
+            league=league,
+            season=season,
+        )
+
+    def refresh_report(self) -> dict:
+        return self.controller.refresh_report()
+EOF
+
+CREA_FILE tests/test_runtime_db.py
+from quant.runtime.runtime_db import RuntimeDB
+
+
+def test_runtime_db_init(tmp_path):
+    db = RuntimeDB(str(tmp_path / "runtime.db"))
+    db.init_db()
+
+    row = db.fetchone("SELECT id FROM cycle_state WHERE id = 1")
+    assert row is not None
+EOF
+
+CREA_FILE tests/test_signal_store.py
+from quant.runtime.runtime_db import RuntimeDB
+from quant.runtime.signal_store import SignalStore
+
+
+def test_signal_store_save_and_list(tmp_path):
+    db = RuntimeDB(str(tmp_path / "runtime.db"))
+    store = SignalStore(db)
+
+    saved = store.save_signals(
+        [
+            {
+                "fixture_id": "1",
+                "home_team": "A",
+                "away_team": "B",
+                "league": "Serie A",
+                "market": "home",
+                "probability": 0.58,
+                "fair_odds": 1.72,
+                "bookmaker_odds": 2.05,
+                "opening_odds": 2.05,
+                "ev": 0.18,
+                "confidence": 0.72,
+                "agreement": 0.68,
+                "decision": "BET",
+                "suggested_stake": 10.0,
+            }
+        ]
+    )
+
+    rows = store.list_signals()
+
+    assert saved == 1
+    assert len(rows) == 1
+EOF
+
+CREA_FILE tests/test_quote_store.py
+from quant.runtime.quote_store import QuoteStore
+from quant.runtime.runtime_db import RuntimeDB
+
+
+def test_quote_store_save_and_list(tmp_path):
+    db = RuntimeDB(str(tmp_path / "runtime.db"))
+    store = QuoteStore(db)
+
+    store.save_quote("1", "home", "opening", 2.05, source="test")
+    rows = store.list_quotes()
+
+    assert len(rows) == 1
+    assert rows[0]["market"] == "home"
+EOF
+
+CREA_FILE tests/test_result_store.py
+from quant.runtime.result_store import ResultStore
+from quant.runtime.runtime_db import RuntimeDB
+
+
+def test_result_store_save_and_list(tmp_path):
+    db = RuntimeDB(str(tmp_path / "runtime.db"))
+    store = ResultStore(db)
+
+    store.save_result(
+        fixture_id="1",
+        market="home",
+        result="WIN",
+        pnl=10.0,
+        closing_odds=1.95,
+        clv_abs=0.02,
+        clv_pct=0.05,
+    )
+
+    rows = store.list_results()
+
+    assert len(rows) == 1
+    assert rows[0]["result"] == "WIN"
+EOF
+
+CREA_FILE tests/test_job_registry.py
+from quant.runtime.job_registry import JobRegistry
+from quant.runtime.runtime_db import RuntimeDB
+
+
+def test_job_registry_upsert(tmp_path):
+    db = RuntimeDB(str(tmp_path / "runtime.db"))
+    registry = JobRegistry(db)
+
+    registry.upsert_job("full_cycle", 300.0)
+    rows = registry.list_jobs()
+
+    assert len(rows) == 1
+    assert rows[0]["job_name"] == "full_cycle"
+EOF
+
+CREA_FILE tests/test_worker_state_store.py
+from quant.runtime.runtime_db import RuntimeDB
+from quant.runtime.worker_state_store import WorkerStateStore
+
+
+def test_worker_state_store_update(tmp_path):
+    db = RuntimeDB(str(tmp_path / "runtime.db"))
+    store = WorkerStateStore(db)
+
+    store.update_worker("main_worker", "running", current_job="cycle")
+    rows = store.list_workers()
+
+    assert len(rows) == 1
+    assert rows[0]["worker_name"] == "main_worker"
+EOF
+
+CREA_FILE tests/test_cycle_state_store.py
+from quant.runtime.cycle_state_store import CycleStateStore
+from quant.runtime.runtime_db import RuntimeDB
+
+
+def test_cycle_state_store_marks(tmp_path):
+    db = RuntimeDB(str(tmp_path / "runtime.db"))
+    store = CycleStateStore(db)
+
+    store.mark_started("main_cycle")
+    state = store.get_state()
+
+    assert state is not None
+    assert state["status"] == "running"
+EOF
+
+CREA_FILE tests/test_report_store.py
+from quant.runtime.report_store import ReportStore
+from quant.runtime.runtime_db import RuntimeDB
+
+
+def test_report_store_save(tmp_path):
+    db = RuntimeDB(str(tmp_path / "runtime.db"))
+    store = ReportStore(db)
+
+    store.save_report("r1", "outputs/test.json", "json", {"ok": True})
+    rows = store.list_reports()
+
+    assert len(rows) == 1
+    assert rows[0]["report_name"] == "r1"
+EOF
+
+CREA_FILE tests/test_unified_runtime.py
+from quant.runtime.unified_runtime import UnifiedRuntime
+
+
+def test_unified_runtime_runs():
+    runtime = UnifiedRuntime()
+    result = runtime.run_full_cycle()
+
+    assert result["ok"] is True
+    assert "report_path" in result
+EOF
+
+CREA_FILE tests/test_orchestration_service.py
+from quant.runtime.orchestration_service import OrchestrationService
+
+
+def test_orchestration_service_constructs():
+    service = OrchestrationService()
+
+    assert service.runtime is not None
+    assert service.scheduler is not None
+    assert service.watchdog is not None
+EOF
+
+CREA_FILE tests/test_app_unified_runtime_controller.py
+from app.unified_runtime_controller import AppUnifiedRuntimeController
+
+
+def test_app_unified_runtime_controller_runs():
+    controller = AppUnifiedRuntimeController()
+    result = controller.run_full_cycle()
+
+    assert result["ok"] is True
+EOF
+
+CREA_FILE tests/test_ui_unified_runtime_bridge.py
+from ui.unified_runtime_bridge import UnifiedRuntimeBridge
+
+
+def test_ui_unified_runtime_bridge_runs():
+    bridge = UnifiedRuntimeBridge()
+    result = bridge.run()
+
+    assert result["ok"] is True
 EOF
 
 FIX_WHITESPACE
-

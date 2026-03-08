@@ -1,1 +1,2 @@
-empty
+avg_clv_abs,avg_clv_pct,avg_ev,bet_count,hit_rate,roi,rows,test_end,test_start,train_end,train_start,window_id,yield
+nan,nan,0.189466,6,0.0,0.0,20,2026-03-08 12:46:57.608812+00:00,2026-03-08 12:24:51.792359+00:00,2026-03-08 12:24:51.791251+00:00,2026-03-08 12:09:37.956482+00:00,1,0.0

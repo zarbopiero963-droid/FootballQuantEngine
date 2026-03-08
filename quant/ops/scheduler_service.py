@@ -1,4 +1,3 @@
-CREA_FILE quant/ops/scheduler_service.py
 from __future__ import annotations
 
 from engine.scheduler import Scheduler
@@ -57,7 +56,3 @@ class SchedulerService:
             self.scheduler.stop()
 
         self.monitoring.log("scheduler_stopped", {})
-EOF
-
-FIX_WHITESPACE
-

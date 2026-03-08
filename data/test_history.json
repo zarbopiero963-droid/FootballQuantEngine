@@ -117,5 +117,12 @@
     "yield": 5,
     "hit_rate": 50,
     "timestamp": "2026-03-08T13:56:07.732327"
+  },
+  {
+    "bankroll": 10,
+    "roi": 5,
+    "yield": 5,
+    "hit_rate": 50,
+    "timestamp": "2026-03-08T14:53:56.994025"
   }
 ]

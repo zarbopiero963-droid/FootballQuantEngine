@@ -1,16 +1,12 @@
 import os
 import subprocess
-import sys
 import time
 
 import pytest
 
-if not sys.platform.startswith("win"):
-    pytest.skip("EXE smoke tests run only on Windows", allow_module_level=True)
-
+pytest.importorskip("pywinauto")
 psutil = pytest.importorskip("psutil")
-
-from pywinauto import Desktop
+Desktop = pytest.importorskip("pywinauto").Desktop
 
 EXE_PATH = os.environ.get(
     "APP_EXE_PATH",
@@ -19,46 +15,49 @@ EXE_PATH = os.environ.get(
 
 
 def _start_app():
-    proc = subprocess.Popen(
-        [EXE_PATH],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        stdin=subprocess.DEVNULL,
+    return subprocess.Popen(
+        [EXE_PATH], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
-    time.sleep(8)
-    return proc
 
 
-def _find_main_window(process_id, timeout=30):
-    desktop = Desktop(backend="uia")
+def _wait_for_window(timeout: float = 30.0):
     end_time = time.time() + timeout
 
     while time.time() < end_time:
-        windows = []
-        for win in desktop.windows():
-            try:
-                if win.process_id() == process_id:
-                    windows.append(win)
-            except Exception:
-                continue
+        try:
+            windows = Desktop(backend="uia").windows()
+            for window in windows:
+                try:
+                    title = window.window_text() or ""
+                except Exception:
+                    title = ""
 
-        visible_windows = []
-        for win in windows:
-            try:
-                if win.is_visible():
-                    visible_windows.append(win)
-            except Exception:
-                continue
-
-        if visible_windows:
-            return visible_windows[0]
-
-        if windows:
-            return windows[0]
-
-        time.sleep(1)
+                if "football quant engine" in title.lower():
+                    return window
+            time.sleep(1.0)
+        except Exception:
+            time.sleep(1.0)
 
     return None
+
+
+def _terminate_process_tree(pid: int):
+    try:
+        parent = psutil.Process(pid)
+    except Exception:
+        return
+
+    children = parent.children(recursive=True)
+    for proc in children:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
+    try:
+        parent.kill()
+    except Exception:
+        pass
 
 
 @pytest.mark.windows
@@ -69,49 +68,53 @@ def test_installed_exe_opens_main_window():
     proc = _start_app()
 
     try:
-        main = _find_main_window(proc.pid, timeout=30)
-
+        main = _wait_for_window(timeout=30.0)
         assert main is not None, "No window found for EXE process"
-        assert main.is_visible() or main.is_enabled()
 
         try:
             title = main.window_text()
         except Exception:
             title = ""
 
-        assert isinstance(title, str)
+        assert "football quant engine" in title.lower()
     finally:
-        try:
-            proc.terminate()
-            proc.wait(timeout=10)
-        except Exception:
-            try:
-                proc.kill()
-            except Exception:
-                pass
+        _terminate_process_tree(proc.pid)
 
 
 @pytest.mark.windows
-def test_installed_exe_does_not_exit_immediately():
+def test_installed_exe_has_main_buttons():
     if not os.path.exists(EXE_PATH):
         pytest.skip(f"EXE not found: {EXE_PATH}")
 
     proc = _start_app()
 
     try:
-        assert psutil.pid_exists(proc.pid), "EXE process was not created"
+        main = _wait_for_window(timeout=30.0)
+        assert main is not None, "No window found for EXE process"
 
-        process = psutil.Process(proc.pid)
-        assert process.is_running(), "EXE process is not running"
-
-        return_code = proc.poll()
-        assert return_code is None, f"EXE exited too early with code: {return_code}"
-    finally:
+        descendants = []
         try:
-            proc.terminate()
-            proc.wait(timeout=10)
+            descendants = main.descendants()
         except Exception:
+            descendants = []
+
+        texts = []
+        for item in descendants:
             try:
-                proc.kill()
+                text = (item.window_text() or "").strip()
             except Exception:
-                pass
+                text = ""
+            if text:
+                texts.append(text.lower())
+
+        joined = " | ".join(texts)
+
+        assert (
+            "run" in joined
+            or "start" in joined
+            or "backtest" in joined
+            or "dashboard" in joined
+            or "import" in joined
+        ), f"No expected controls found. Controls: {joined}"
+    finally:
+        _terminate_process_tree(proc.pid)

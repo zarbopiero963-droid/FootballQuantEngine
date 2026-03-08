@@ -1,522 +1,888 @@
 ############################################
-MARKET EXPANSION ENGINE 1
+FULL QUANT OPERATIONS BLOCK
 ############################################
 
-CREA_CARTELLA quant/markets
+CREA_CARTELLA quant/ml
+CREA_CARTELLA quant/live
+CREA_CARTELLA quant/ops
+CREA_CARTELLA outputs/ops
 
-CREA_FILE quant/markets/over_under_model.py
+CREA_FILE quant/ml/ml_dataset.py
 from __future__ import annotations
 
-import math
+import pandas as pd
 
 
-class OverUnderModel:
+class MLDatasetBuilder:
 
-    def __init__(self, max_goals: int = 10):
-        self.max_goals = int(max_goals)
+    FEATURE_COLUMNS = [
+        "elo_diff",
+        "form_diff",
+        "xg_diff",
+        "xga_diff",
+        "xpts_diff",
+        "shots_diff",
+        "shots_on_target_diff",
+        "form_score_diff",
+        "bookmaker_odds_home",
+        "bookmaker_odds_draw",
+        "bookmaker_odds_away",
+    ]
 
-    def _poisson_pmf(self, goals: int, lam: float) -> float:
-        lam = max(0.01, float(lam))
-        return (math.exp(-lam) * (lam ** goals)) / math.factorial(goals)
+    def build_binary_home_dataset(self, rows: list[dict]) -> pd.DataFrame:
+        if not rows:
+            return pd.DataFrame(columns=self.FEATURE_COLUMNS + ["target"])
 
-    def _score_matrix(self, lambda_home: float, lambda_away: float) -> list[list[float]]:
-        matrix = []
+        df = pd.DataFrame(rows).copy()
 
-        home_probs = [self._poisson_pmf(i, lambda_home) for i in range(self.max_goals + 1)]
-        away_probs = [self._poisson_pmf(i, lambda_away) for i in range(self.max_goals + 1)]
+        for col in self.FEATURE_COLUMNS:
+            if col not in df.columns:
+                df[col] = 0.0
 
-        home_total = sum(home_probs) or 1.0
-        away_total = sum(away_probs) or 1.0
+        if "result" not in df.columns:
+            df["result"] = "D"
 
-        home_probs = [x / home_total for x in home_probs]
-        away_probs = [x / away_total for x in away_probs]
+        df["target"] = (df["result"].astype(str) == "H").astype(int)
 
-        for hg in range(self.max_goals + 1):
-            row = []
-            for ag in range(self.max_goals + 1):
-                row.append(home_probs[hg] * away_probs[ag])
-            matrix.append(row)
-
-        return matrix
-
-    def probabilities(self, lambda_home: float, lambda_away: float, line: float = 2.5) -> dict:
-        matrix = self._score_matrix(lambda_home, lambda_away)
-
-        over_prob = 0.0
-        under_prob = 0.0
-
-        for hg, row in enumerate(matrix):
-            for ag, prob in enumerate(row):
-                total_goals = hg + ag
-
-                if total_goals > line:
-                    over_prob += prob
-                else:
-                    under_prob += prob
-
-        total = over_prob + under_prob
-        if total <= 0:
-            return {
-                "over": 0.5,
-                "under": 0.5,
-            }
-
-        return {
-            "over": over_prob / total,
-            "under": under_prob / total,
-        }
-
-    def fair_odds(self, probability: float) -> float:
-        probability = float(probability)
-        if probability <= 0.0:
-            return 999.0
-        return 1.0 / probability
+        return df[self.FEATURE_COLUMNS + ["target"]].copy()
 EOF
 
-CREA_FILE quant/markets/btts_model.py
+CREA_FILE quant/ml/probability_calibrator_real.py
 from __future__ import annotations
 
-import math
+import numpy as np
+
+try:
+    from sklearn.isotonic import IsotonicRegression
+except Exception:
+    IsotonicRegression = None
 
 
-class BTTSModel:
-
-    def __init__(self, max_goals: int = 10):
-        self.max_goals = int(max_goals)
-
-    def _poisson_pmf(self, goals: int, lam: float) -> float:
-        lam = max(0.01, float(lam))
-        return (math.exp(-lam) * (lam ** goals)) / math.factorial(goals)
-
-    def probabilities(self, lambda_home: float, lambda_away: float) -> dict:
-        home_probs = [self._poisson_pmf(i, lambda_home) for i in range(self.max_goals + 1)]
-        away_probs = [self._poisson_pmf(i, lambda_away) for i in range(self.max_goals + 1)]
-
-        home_total = sum(home_probs) or 1.0
-        away_total = sum(away_probs) or 1.0
-
-        home_probs = [x / home_total for x in home_probs]
-        away_probs = [x / away_total for x in away_probs]
-
-        yes_prob = 0.0
-        no_prob = 0.0
-
-        for hg in range(self.max_goals + 1):
-            for ag in range(self.max_goals + 1):
-                prob = home_probs[hg] * away_probs[ag]
-
-                if hg > 0 and ag > 0:
-                    yes_prob += prob
-                else:
-                    no_prob += prob
-
-        total = yes_prob + no_prob
-        if total <= 0:
-            return {
-                "yes": 0.5,
-                "no": 0.5,
-            }
-
-        return {
-            "yes": yes_prob / total,
-            "no": no_prob / total,
-        }
-
-    def fair_odds(self, probability: float) -> float:
-        probability = float(probability)
-        if probability <= 0.0:
-            return 999.0
-        return 1.0 / probability
-EOF
-
-CREA_FILE quant/markets/market_probabilities.py
-from __future__ import annotations
-
-from quant.markets.btts_model import BTTSModel
-from quant.markets.over_under_model import OverUnderModel
-
-
-class MarketProbabilities:
+class ProbabilityCalibratorReal:
 
     def __init__(self):
-        self.ou = OverUnderModel()
-        self.btts = BTTSModel()
+        self.model = None
+        self.is_fitted = False
 
-    def build(self, lambda_home: float, lambda_away: float) -> dict:
-        ou_25 = self.ou.probabilities(lambda_home, lambda_away, line=2.5)
-        btts = self.btts.probabilities(lambda_home, lambda_away)
+    def fit(self, raw_probs, y_true):
+        raw_probs = np.asarray(raw_probs, dtype=float)
+        y_true = np.asarray(y_true, dtype=float)
 
-        return {
-            "over_25": ou_25["over"],
-            "under_25": ou_25["under"],
-            "btts_yes": btts["yes"],
-            "btts_no": btts["no"],
-        }
+        if len(raw_probs) == 0 or len(y_true) == 0 or len(raw_probs) != len(y_true):
+            self.is_fitted = False
+            self.model = None
+            return
+
+        if IsotonicRegression is None:
+            self.is_fitted = False
+            self.model = None
+            return
+
+        self.model = IsotonicRegression(out_of_bounds="clip")
+        self.model.fit(raw_probs, y_true)
+        self.is_fitted = True
+
+    def transform(self, raw_probs):
+        raw_probs = np.asarray(raw_probs, dtype=float)
+
+        if not self.is_fitted or self.model is None:
+            return np.clip(raw_probs, 0.0001, 0.9999)
+
+        calibrated = self.model.predict(raw_probs)
+        return np.clip(calibrated, 0.0001, 0.9999)
+
+    def transform_one(self, raw_prob: float) -> float:
+        return float(self.transform([raw_prob])[0])
 EOF
 
-CREA_FILE quant/markets/market_odds_mapper.py
+CREA_FILE quant/ml/temporal_validator_real.py
 from __future__ import annotations
 
-
-class MarketOddsMapper:
-
-    def odds_for_market(self, odds_payload: dict, market: str) -> float:
-        odds_payload = odds_payload or {}
-        market = str(market)
-
-        mapping = {
-            "home": odds_payload.get("home"),
-            "draw": odds_payload.get("draw"),
-            "away": odds_payload.get("away"),
-            "over_25": odds_payload.get("over_25"),
-            "under_25": odds_payload.get("under_25"),
-            "btts_yes": odds_payload.get("btts_yes"),
-            "btts_no": odds_payload.get("btts_no"),
-        }
-
-        value = mapping.get(market)
-        try:
-            return float(value or 0.0)
-        except Exception:
-            return 0.0
-EOF
-
-CREA_FILE quant/markets/market_value_engine.py
-from __future__ import annotations
-
-from quant.value.clv_estimator import CLVEstimator
-from quant.value.ev_calculator import EVCalculator
-from quant.value.stake_policy import StakePolicy
-from quant.value.value_bet_filter import ValueBetFilter
-from quant.value.value_bet_ranker import ValueBetRanker
+import pandas as pd
 
 
-class MarketValueEngine:
+class TemporalValidatorReal:
 
-    def __init__(self):
-        self.ev = EVCalculator()
-        self.clv = CLVEstimator()
-        self.stake_policy = StakePolicy()
-        self.filter = ValueBetFilter(
-            min_ev=0.015,
-            min_probability=0.48,
-            min_confidence=0.58,
-            min_agreement=0.52,
-            min_odds=1.30,
-            max_odds=8.50,
-        )
-        self.ranker = ValueBetRanker()
+    def validate(self, df: pd.DataFrame, date_col: str = "match_date") -> list[dict]:
+        if df is None or df.empty:
+            return []
 
-    def enrich_market_record(self, record: dict, bankroll: float = 1000.0) -> dict:
-        probability = float(record.get("probability", 0.0))
-        bookmaker_odds = float(record.get("bookmaker_odds", 0.0))
-        confidence = float(record.get("confidence", 0.0))
-        agreement = float(record.get("agreement", 0.0))
-        opening_odds = float(record.get("opening_odds", bookmaker_odds))
+        work = df.copy()
 
-        fair_odds = self.ev.fair_odds(probability)
-        implied_probability = self.ev.implied_probability(bookmaker_odds)
-        probability_edge = self.ev.probability_edge(probability, bookmaker_odds)
-        ev_value = self.ev.expected_value(probability, bookmaker_odds)
-        clv_potential = self.clv.estimate_clv_edge(probability, opening_odds, bookmaker_odds)
-        movement_score = self.clv.odds_movement_score(opening_odds, bookmaker_odds)
+        if date_col not in work.columns:
+            return []
 
-        decision = self.filter.decide(
-            probability=probability,
-            odds=bookmaker_odds,
-            ev=ev_value,
-            confidence=confidence,
-            agreement=agreement,
-        )
+        work[date_col] = pd.to_datetime(work[date_col], errors="coerce")
+        work = work.dropna(subset=[date_col]).sort_values(date_col).reset_index(drop=True)
 
-        stake = self.stake_policy.suggest(
-            bankroll=bankroll,
-            probability=probability,
-            odds=bookmaker_odds,
-            confidence=confidence,
-        )
+        years = sorted(work[date_col].dt.year.unique().tolist())
+        windows = []
 
-        enriched = dict(record)
-        enriched["fair_odds"] = round(fair_odds, 4)
-        enriched["implied_probability"] = round(implied_probability, 6)
-        enriched["probability_edge"] = round(probability_edge, 6)
-        enriched["ev"] = round(ev_value, 6)
-        enriched["clv_potential"] = round(clv_potential, 6)
-        enriched["odds_movement_score"] = round(movement_score, 6)
-        enriched["decision"] = decision
-        enriched["suggested_stake"] = round(stake["stake"], 2)
-        enriched["stake_cap_pct"] = round(stake["max_cap_pct"], 4)
+        for idx in range(2, len(years)):
+            train_years = years[:idx]
+            validation_year = years[idx - 1]
+            test_year = years[idx]
 
-        return enriched
+            train_df = work[work[date_col].dt.year.isin(train_years)].copy()
+            validation_df = work[work[date_col].dt.year == validation_year].copy()
+            test_df = work[work[date_col].dt.year == test_year].copy()
 
-    def rank(self, rows: list[dict]) -> list[dict]:
-        return self.ranker.sort(rows)
-EOF
+            if train_df.empty or validation_df.empty or test_df.empty:
+                continue
 
-CREA_FILE quant/markets/market_expansion_engine.py
-from __future__ import annotations
-
-from quant.markets.market_odds_mapper import MarketOddsMapper
-from quant.markets.market_probabilities import MarketProbabilities
-from quant.markets.market_value_engine import MarketValueEngine
-from quant.services.quant_job_runner import QuantJobRunner
-
-
-class MarketExpansionEngine:
-
-    def __init__(self):
-        self.quant_runner = QuantJobRunner()
-        self.market_probabilities = MarketProbabilities()
-        self.odds_mapper = MarketOddsMapper()
-        self.value_engine = MarketValueEngine()
-
-    def _derive_lambda_pair(self, record: dict) -> tuple[float, float]:
-        home_xg = float(record.get("expected_goals_home", 0.0) or 0.0)
-        away_xg = float(record.get("expected_goals_away", 0.0) or 0.0)
-
-        if home_xg > 0.0 and away_xg > 0.0:
-            return home_xg, away_xg
-
-        probability = float(record.get("probability", 0.33) or 0.33)
-        confidence = float(record.get("confidence", 0.50) or 0.50)
-
-        lambda_home = max(0.8, 1.20 + (probability - 0.33) + (confidence - 0.5))
-        lambda_away = max(0.8, 1.05 + ((1.0 - probability) - 0.33))
-
-        return lambda_home, lambda_away
-
-    def _group_by_fixture(self, records: list[dict]) -> dict:
-        grouped = {}
-
-        for row in records:
-            fixture_id = str(row.get("fixture_id", ""))
-            if fixture_id not in grouped:
-                grouped[fixture_id] = []
-            grouped[fixture_id].append(row)
-
-        return grouped
-
-    def _fixture_meta(self, fixture_rows: list[dict]) -> dict:
-        first = fixture_rows[0]
-
-        bookmaker_odds = {
-            "home": 0.0,
-            "draw": 0.0,
-            "away": 0.0,
-            "over_25": float(first.get("over_25_odds", 0.0) or 0.0),
-            "under_25": float(first.get("under_25_odds", 0.0) or 0.0),
-            "btts_yes": float(first.get("btts_yes_odds", 0.0) or 0.0),
-            "btts_no": float(first.get("btts_no_odds", 0.0) or 0.0),
-        }
-
-        for row in fixture_rows:
-            market = str(row.get("market", ""))
-            if market in ("home", "draw", "away"):
-                bookmaker_odds[market] = float(row.get("bookmaker_odds", 0.0) or 0.0)
-
-        return {
-            "fixture_id": str(first.get("fixture_id", "")),
-            "home_team": first.get("home_team", ""),
-            "away_team": first.get("away_team", ""),
-            "agreement": max(float(r.get("agreement", 0.0) or 0.0) for r in fixture_rows),
-            "confidence": max(float(r.get("confidence", 0.0) or 0.0) for r in fixture_rows),
-            "bookmaker_odds": bookmaker_odds,
-            "lambda_pair": self._derive_lambda_pair(first),
-        }
-
-    def _build_market_rows(self, fixture_meta: dict) -> list[dict]:
-        lambda_home, lambda_away = fixture_meta["lambda_pair"]
-        probs = self.market_probabilities.build(lambda_home, lambda_away)
-        bookmaker_odds = fixture_meta["bookmaker_odds"]
-
-        rows = []
-        for market, probability in probs.items():
-            odds = self.odds_mapper.odds_for_market(bookmaker_odds, market)
-
-            rows.append(
+            windows.append(
                 {
-                    "fixture_id": fixture_meta["fixture_id"],
-                    "home_team": fixture_meta["home_team"],
-                    "away_team": fixture_meta["away_team"],
-                    "market": market,
-                    "probability": round(float(probability), 6),
-                    "bookmaker_odds": round(float(odds), 4),
-                    "opening_odds": round(float(odds), 4),
-                    "confidence": round(float(fixture_meta["confidence"]), 6),
-                    "agreement": round(float(fixture_meta["agreement"]), 6),
-                    "expected_goals_home": round(float(lambda_home), 4),
-                    "expected_goals_away": round(float(lambda_away), 4),
-                    "source": "market_expansion",
+                    "train_years": train_years,
+                    "validation_year": validation_year,
+                    "test_year": test_year,
+                    "train_rows": len(train_df.index),
+                    "validation_rows": len(validation_df.index),
+                    "test_rows": len(test_df.index),
                 }
             )
 
-        return rows
-
-    def run(self, bankroll: float = 1000.0) -> list[dict]:
-        base_records = self.quant_runner.run_cycle()
-        grouped = self._group_by_fixture(base_records)
-
-        expanded = []
-
-        for _, fixture_rows in grouped.items():
-            meta = self._fixture_meta(fixture_rows)
-            market_rows = self._build_market_rows(meta)
-
-            enriched = [
-                self.value_engine.enrich_market_record(row, bankroll=bankroll)
-                for row in market_rows
-            ]
-            expanded.extend(enriched)
-
-        return self.value_engine.rank(expanded)
+        return windows
 EOF
 
-CREA_FILE quant/markets/market_expansion_runner.py
+CREA_FILE quant/ml/threshold_optimizer.py
 from __future__ import annotations
 
-from quant.markets.market_expansion_engine import MarketExpansionEngine
 
+class ThresholdOptimizer:
 
-class MarketExpansionRunner:
+    def optimize(
+        self,
+        rows: list[dict],
+        probability_key: str = "probability",
+        ev_key: str = "ev",
+        confidence_key: str = "confidence",
+        agreement_key: str = "agreement",
+    ) -> dict:
+        if not rows:
+            return {
+                "min_probability": 0.54,
+                "min_ev": 0.02,
+                "min_confidence": 0.60,
+                "min_agreement": 0.55,
+            }
 
-    def __init__(self):
-        self.engine = MarketExpansionEngine()
+        best = None
 
-    def run(self, bankroll: float = 1000.0) -> list[dict]:
-        return self.engine.run(bankroll=bankroll)
+        for p in (0.50, 0.52, 0.54, 0.56, 0.58):
+            for ev in (0.01, 0.015, 0.02, 0.03):
+                for conf in (0.55, 0.60, 0.65, 0.70):
+                    for agree in (0.50, 0.55, 0.60, 0.65):
+                        selected = [
+                            row for row in rows
+                            if float(row.get(probability_key, 0.0)) >= p
+                            and float(row.get(ev_key, 0.0)) >= ev
+                            and float(row.get(confidence_key, 0.0)) >= conf
+                            and float(row.get(agreement_key, 0.0)) >= agree
+                        ]
+
+                        score = sum(float(row.get(ev_key, 0.0)) for row in selected)
+
+                        candidate = {
+                            "min_probability": p,
+                            "min_ev": ev,
+                            "min_confidence": conf,
+                            "min_agreement": agree,
+                            "selected_count": len(selected),
+                            "score": round(score, 6),
+                        }
+
+                        if best is None or candidate["score"] > best["score"]:
+                            best = candidate
+
+        return best or {
+            "min_probability": 0.54,
+            "min_ev": 0.02,
+            "min_confidence": 0.60,
+            "min_agreement": 0.55,
+        }
 EOF
 
-CREA_FILE app/market_expansion_controller.py
-from quant.markets.market_expansion_runner import MarketExpansionRunner
+CREA_FILE quant/ml/ml_layer_real.py
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+
+try:
+    from sklearn.linear_model import LogisticRegression
+except Exception:
+    LogisticRegression = None
+
+from quant.ml.ml_dataset import MLDatasetBuilder
+from quant.ml.probability_calibrator_real import ProbabilityCalibratorReal
 
 
-class AppMarketExpansionController:
+class MLLayerReal:
 
     def __init__(self):
-        self.runner = MarketExpansionRunner()
+        self.dataset_builder = MLDatasetBuilder()
+        self.calibrator = ProbabilityCalibratorReal()
+        self.model = None
+        self.feature_columns = list(self.dataset_builder.FEATURE_COLUMNS)
+        self.is_fitted = False
+
+    def fit(self, rows: list[dict]):
+        df = self.dataset_builder.build_binary_home_dataset(rows)
+
+        if df.empty or LogisticRegression is None:
+            self.model = None
+            self.is_fitted = False
+            return
+
+        X = df[self.feature_columns].astype(float).values
+        y = df["target"].astype(int).values
+
+        if len(set(y.tolist())) < 2:
+            self.model = None
+            self.is_fitted = False
+            return
+
+        self.model = LogisticRegression(max_iter=1000)
+        self.model.fit(X, y)
+
+        raw_probs = self.model.predict_proba(X)[:, 1]
+        self.calibrator.fit(raw_probs, y)
+
+        self.is_fitted = True
+
+    def predict_home_probability(self, row: dict) -> float:
+        if not self.is_fitted or self.model is None:
+            return 0.50
+
+        values = []
+        for col in self.feature_columns:
+            values.append(float(row.get(col, 0.0) or 0.0))
+
+        X = np.asarray([values], dtype=float)
+        raw_prob = float(self.model.predict_proba(X)[0, 1])
+        calibrated = self.calibrator.transform_one(raw_prob)
+
+        return round(float(calibrated), 6)
+EOF
+
+CREA_FILE quant/live/closing_odds_collector.py
+from __future__ import annotations
+
+import json
+import os
+from datetime import datetime
+
+
+class ClosingOddsCollector:
+
+    def __init__(self, path: str = "outputs/ops/closing_odds.json"):
+        self.path = path
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+
+        if not os.path.exists(self.path):
+            with open(self.path, "w", encoding="utf-8") as handle:
+                json.dump([], handle, indent=2)
+
+    def _load(self) -> list[dict]:
+        with open(self.path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+
+    def _save(self, rows: list[dict]) -> None:
+        with open(self.path, "w", encoding="utf-8") as handle:
+            json.dump(rows, handle, indent=2)
+
+    def collect(self, fixture_id: str, market: str, closing_odds: float) -> dict:
+        rows = self._load()
+
+        row = {
+            "fixture_id": str(fixture_id),
+            "market": str(market),
+            "closing_odds": float(closing_odds),
+            "collected_at": datetime.utcnow().isoformat() + "Z",
+        }
+
+        rows.append(row)
+        self._save(rows)
+        return row
+
+    def list_rows(self) -> list[dict]:
+        return self._load()
+EOF
+
+CREA_FILE quant/live/league_performance_analyzer.py
+from __future__ import annotations
+
+import pandas as pd
+
+
+class LeaguePerformanceAnalyzer:
+
+    def analyze(self, rows: list[dict]) -> list[dict]:
+        if not rows:
+            return []
+
+        df = pd.DataFrame(rows).copy()
+
+        if "league" not in df.columns:
+            df["league"] = "UNKNOWN"
+
+        if "pnl" not in df.columns:
+            df["pnl"] = 0.0
+
+        if "stake" not in df.columns:
+            df["stake"] = 0.0
+
+        if "ev" not in df.columns:
+            df["ev"] = 0.0
+
+        grouped = (
+            df.groupby("league")
+            .agg(
+                bets=("league", "count"),
+                total_pnl=("pnl", "sum"),
+                total_stake=("stake", "sum"),
+                avg_ev=("ev", "mean"),
+            )
+            .reset_index()
+        )
+
+        grouped["roi"] = grouped.apply(
+            lambda row: (row["total_pnl"] / row["total_stake"]) if row["total_stake"] > 0 else 0.0,
+            axis=1,
+        )
+
+        return grouped.to_dict("records")
+EOF
+
+CREA_FILE quant/live/edge_stability_detector.py
+from __future__ import annotations
+
+import pandas as pd
+
+
+class EdgeStabilityDetector:
+
+    def analyze(self, rows: list[dict]) -> dict:
+        if not rows:
+            return {
+                "count": 0,
+                "avg_ev": 0.0,
+                "std_ev": 0.0,
+                "stable": False,
+            }
+
+        df = pd.DataFrame(rows).copy()
+
+        if "ev" not in df.columns:
+            df["ev"] = 0.0
+
+        avg_ev = float(df["ev"].astype(float).mean())
+        std_ev = float(df["ev"].astype(float).std(ddof=0))
+
+        return {
+            "count": int(len(df.index)),
+            "avg_ev": round(avg_ev, 6),
+            "std_ev": round(std_ev, 6),
+            "stable": bool(std_ev <= max(0.05, abs(avg_ev))),
+        }
+EOF
+
+CREA_FILE quant/live/live_odds_scanner.py
+from __future__ import annotations
+
+from quant.value.value_bet_engine import ValueBetEngine
+
+
+class LiveOddsScanner:
+
+    def __init__(self):
+        self.value_engine = ValueBetEngine()
+
+    def scan(self, rows: list[dict], bankroll: float = 1000.0) -> list[dict]:
+        if not rows:
+            return []
+
+        enriched = [
+            self.value_engine.enrich_record(row, bankroll=bankroll)
+            for row in rows
+        ]
+
+        return self.value_engine.ranker.sort(enriched)
+EOF
+
+CREA_FILE quant/live/market_optimizer.py
+from __future__ import annotations
+
+import pandas as pd
+
+
+class LeagueMarketPerformanceOptimizer:
+
+    def optimize(self, rows: list[dict]) -> list[dict]:
+        if not rows:
+            return []
+
+        df = pd.DataFrame(rows).copy()
+
+        if "league" not in df.columns:
+            df["league"] = "UNKNOWN"
+
+        if "market" not in df.columns:
+            df["market"] = "UNKNOWN"
+
+        if "pnl" not in df.columns:
+            df["pnl"] = 0.0
+
+        if "stake" not in df.columns:
+            df["stake"] = 0.0
+
+        grouped = (
+            df.groupby(["league", "market"])
+            .agg(
+                bets=("market", "count"),
+                total_pnl=("pnl", "sum"),
+                total_stake=("stake", "sum"),
+            )
+            .reset_index()
+        )
+
+        grouped["roi"] = grouped.apply(
+            lambda row: (row["total_pnl"] / row["total_stake"]) if row["total_stake"] > 0 else 0.0,
+            axis=1,
+        )
+
+        grouped = grouped.sort_values(["roi", "bets"], ascending=[False, False]).reset_index(drop=True)
+
+        return grouped.to_dict("records")
+EOF
+
+CREA_FILE quant/ops/heartbeat.py
+from __future__ import annotations
+
+import json
+import os
+from datetime import datetime
+
+
+class Heartbeat:
+
+    def __init__(self, path: str = "outputs/ops/heartbeat.json"):
+        self.path = path
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+
+    def beat(self, component: str, status: str = "running") -> str:
+        payload = {
+            "component": str(component),
+            "status": str(status),
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+
+        with open(self.path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+
+        return self.path
+EOF
+
+CREA_FILE quant/ops/monitoring.py
+from __future__ import annotations
+
+import json
+import os
+from datetime import datetime
+
+
+class Monitoring:
+
+    def __init__(self, path: str = "outputs/ops/monitoring_log.json"):
+        self.path = path
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+
+        if not os.path.exists(self.path):
+            with open(self.path, "w", encoding="utf-8") as handle:
+                json.dump([], handle, indent=2)
+
+    def log(self, event: str, payload: dict | None = None) -> dict:
+        with open(self.path, "r", encoding="utf-8") as handle:
+            rows = json.load(handle)
+
+        row = {
+            "event": str(event),
+            "payload": payload or {},
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+
+        rows.append(row)
+
+        with open(self.path, "w", encoding="utf-8") as handle:
+            json.dump(rows[-500:], handle, indent=2)
+
+        return row
+EOF
+
+CREA_FILE quant/ops/worker_pool.py
+from __future__ import annotations
+
+from concurrent.futures import ThreadPoolExecutor
+
+
+class WorkerPool:
+
+    def __init__(self, max_workers: int = 4):
+        self.executor = ThreadPoolExecutor(max_workers=max_workers)
+
+    def submit(self, fn, *args, **kwargs):
+        return self.executor.submit(fn, *args, **kwargs)
+
+    def shutdown(self, wait: bool = True):
+        self.executor.shutdown(wait=wait)
+EOF
+
+CREA_FILE quant/ops/scheduler_service.py
+from __future__ import annotations
+
+from engine.scheduler import Scheduler
+from quant.ops.monitoring import Monitoring
+
+
+class SchedulerService:
+
+    def __init__(self):
+        self.scheduler = Scheduler(poll_interval_seconds=1.0)
+        self.monitoring = Monitoring()
+
+    def add_recurring_job(self, name: str, callback, interval_seconds: float, run_immediately: bool = False):
+        self.scheduler.add_job(
+            name=name,
+            callback=callback,
+            interval_seconds=interval_seconds,
+            run_immediately=run_immediately,
+        )
+        self.monitoring.log("scheduler_job_added", {"name": name, "interval_seconds": interval_seconds})
+
+    def start(self):
+        self.monitoring.log("scheduler_started", {})
+        self.scheduler.start_background()
+
+    def stop(self):
+        self.scheduler.shutdown()
+        self.monitoring.log("scheduler_stopped", {})
+EOF
+
+CREA_FILE quant/ops/watchdog.py
+from __future__ import annotations
+
+import time
+
+from quant.ops.heartbeat import Heartbeat
+from quant.ops.monitoring import Monitoring
+
+
+class Watchdog:
+
+    def __init__(self, stale_after_seconds: int = 120):
+        self.stale_after_seconds = int(stale_after_seconds)
+        self.heartbeat = Heartbeat()
+        self.monitoring = Monitoring()
+
+    def ping(self, component: str):
+        path = self.heartbeat.beat(component, "running")
+        self.monitoring.log("watchdog_ping", {"component": component, "heartbeat_path": path})
+        return path
+
+    def loop_ping(self, component: str, interval_seconds: float = 30.0, cycles: int = 1):
+        for _ in range(max(1, int(cycles))):
+            self.ping(component)
+            time.sleep(float(interval_seconds))
+EOF
+
+CREA_FILE quant/ops/full_system_runner.py
+from __future__ import annotations
+
+from quant.clv.bet_journal import BetJournal
+from quant.live.closing_odds_collector import ClosingOddsCollector
+from quant.live.edge_stability_detector import EdgeStabilityDetector
+from quant.live.league_performance_analyzer import LeaguePerformanceAnalyzer
+from quant.live.live_odds_scanner import LiveOddsScanner
+from quant.live.market_optimizer import LeagueMarketPerformanceOptimizer
+from quant.markets.market_expansion_runner import MarketExpansionRunner
+from quant.ml.threshold_optimizer import ThresholdOptimizer
+from quant.ops.heartbeat import Heartbeat
+from quant.ops.monitoring import Monitoring
+
+
+class FullSystemRunner:
+
+    def __init__(self):
+        self.market_runner = MarketExpansionRunner()
+        self.live_scanner = LiveOddsScanner()
+        self.league_analyzer = LeaguePerformanceAnalyzer()
+        self.edge_detector = EdgeStabilityDetector()
+        self.market_optimizer = LeagueMarketPerformanceOptimizer()
+        self.threshold_optimizer = ThresholdOptimizer()
+        self.closing_collector = ClosingOddsCollector()
+        self.journal = BetJournal()
+        self.heartbeat = Heartbeat()
+        self.monitoring = Monitoring()
+
+    def run_cycle(self, bankroll: float = 1000.0) -> dict:
+        self.heartbeat.beat("full_system_runner", "running")
+        self.monitoring.log("cycle_started", {"bankroll": bankroll})
+
+        market_rows = self.market_runner.run(bankroll=bankroll)
+        scanned_rows = self.live_scanner.scan(market_rows, bankroll=bankroll)
+
+        threshold_summary = self.threshold_optimizer.optimize(scanned_rows)
+
+        journal_rows = self.journal.list_bets()
+        league_summary = self.league_analyzer.analyze(journal_rows)
+        edge_summary = self.edge_detector.analyze(scanned_rows)
+        market_summary = self.market_optimizer.optimize(journal_rows)
+
+        payload = {
+            "market_rows": market_rows,
+            "scanned_rows": scanned_rows,
+            "threshold_summary": threshold_summary,
+            "league_summary": league_summary,
+            "edge_summary": edge_summary,
+            "market_summary": market_summary,
+        }
+
+        self.monitoring.log(
+            "cycle_completed",
+            {
+                "market_rows": len(market_rows),
+                "scanned_rows": len(scanned_rows),
+            },
+        )
+
+        return payload
+EOF
+
+CREA_FILE app/full_system_controller.py
+from quant.ops.full_system_runner import FullSystemRunner
+
+
+class AppFullSystemController:
+
+    def __init__(self):
+        self.runner = FullSystemRunner()
 
     def run(self, bankroll: float = 1000.0):
-        return self.runner.run(bankroll=bankroll)
+        return self.runner.run_cycle(bankroll=bankroll)
 EOF
 
-CREA_FILE tests/test_over_under_model.py
-from quant.markets.over_under_model import OverUnderModel
+CREA_FILE tests/test_ml_layer_real.py
+from quant.ml.ml_layer_real import MLLayerReal
 
 
-def test_over_under_model_probabilities_sum_to_one():
-    model = OverUnderModel()
-    probs = model.probabilities(1.5, 1.2, line=2.5)
+def test_ml_layer_real_runs():
+    rows = [
+        {
+            "elo_diff": 10,
+            "form_diff": 0.1,
+            "xg_diff": 0.2,
+            "xga_diff": 0.1,
+            "xpts_diff": 0.3,
+            "shots_diff": 2,
+            "shots_on_target_diff": 1,
+            "form_score_diff": 0.1,
+            "bookmaker_odds_home": 2.0,
+            "bookmaker_odds_draw": 3.2,
+            "bookmaker_odds_away": 3.8,
+            "result": "H",
+        },
+        {
+            "elo_diff": -8,
+            "form_diff": -0.1,
+            "xg_diff": -0.2,
+            "xga_diff": -0.1,
+            "xpts_diff": -0.2,
+            "shots_diff": -2,
+            "shots_on_target_diff": -1,
+            "form_score_diff": -0.1,
+            "bookmaker_odds_home": 2.4,
+            "bookmaker_odds_draw": 3.1,
+            "bookmaker_odds_away": 2.9,
+            "result": "A",
+        },
+    ]
 
-    total = probs["over"] + probs["under"]
+    layer = MLLayerReal()
+    layer.fit(rows)
 
-    assert 0.999 <= total <= 1.001
+    prob = layer.predict_home_probability(rows[0])
+
+    assert 0.0 <= prob <= 1.0
 EOF
 
-CREA_FILE tests/test_btts_model.py
-from quant.markets.btts_model import BTTSModel
+CREA_FILE tests/test_threshold_optimizer.py
+from quant.ml.threshold_optimizer import ThresholdOptimizer
 
 
-def test_btts_model_probabilities_sum_to_one():
-    model = BTTSModel()
-    probs = model.probabilities(1.4, 1.1)
+def test_threshold_optimizer_runs():
+    rows = [
+        {"probability": 0.58, "ev": 0.08, "confidence": 0.70, "agreement": 0.66},
+        {"probability": 0.54, "ev": 0.04, "confidence": 0.63, "agreement": 0.60},
+    ]
 
-    total = probs["yes"] + probs["no"]
+    result = ThresholdOptimizer().optimize(rows)
 
-    assert 0.999 <= total <= 1.001
+    assert "min_probability" in result
+    assert "selected_count" in result
 EOF
 
-CREA_FILE tests/test_market_probabilities.py
-from quant.markets.market_probabilities import MarketProbabilities
+CREA_FILE tests/test_closing_odds_collector.py
+from quant.live.closing_odds_collector import ClosingOddsCollector
 
 
-def test_market_probabilities_build():
-    result = MarketProbabilities().build(1.6, 1.2)
+def test_closing_odds_collector_collects(tmp_path):
+    collector = ClosingOddsCollector(str(tmp_path / "closing_odds.json"))
 
-    assert "over_25" in result
-    assert "under_25" in result
-    assert "btts_yes" in result
-    assert "btts_no" in result
+    row = collector.collect("1", "home", 1.95)
+
+    assert row["fixture_id"] == "1"
+    assert row["market"] == "home"
 EOF
 
-CREA_FILE tests/test_market_odds_mapper.py
-from quant.markets.market_odds_mapper import MarketOddsMapper
+CREA_FILE tests/test_league_performance_analyzer.py
+from quant.live.league_performance_analyzer import LeaguePerformanceAnalyzer
 
 
-def test_market_odds_mapper_reads_market_odds():
-    mapper = MarketOddsMapper()
+def test_league_performance_analyzer_runs():
+    rows = [
+        {"league": "Serie A", "stake": 10, "pnl": 5, "ev": 0.10},
+        {"league": "Serie A", "stake": 10, "pnl": -10, "ev": 0.02},
+    ]
 
-    odds = {
-        "over_25": 1.88,
-        "under_25": 1.92,
-        "btts_yes": 1.75,
-        "btts_no": 2.05,
-    }
+    result = LeaguePerformanceAnalyzer().analyze(rows)
 
-    assert mapper.odds_for_market(odds, "over_25") == 1.88
-    assert mapper.odds_for_market(odds, "btts_no") == 2.05
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert result[0]["league"] == "Serie A"
 EOF
 
-CREA_FILE tests/test_market_value_engine.py
-from quant.markets.market_value_engine import MarketValueEngine
+CREA_FILE tests/test_edge_stability_detector.py
+from quant.live.edge_stability_detector import EdgeStabilityDetector
 
 
-def test_market_value_engine_enriches_record():
-    engine = MarketValueEngine()
+def test_edge_stability_detector_runs():
+    rows = [
+        {"ev": 0.05},
+        {"ev": 0.04},
+        {"ev": 0.06},
+    ]
 
-    result = engine.enrich_market_record(
+    result = EdgeStabilityDetector().analyze(rows)
+
+    assert "stable" in result
+    assert "avg_ev" in result
+EOF
+
+CREA_FILE tests/test_live_odds_scanner.py
+from quant.live.live_odds_scanner import LiveOddsScanner
+
+
+def test_live_odds_scanner_runs():
+    rows = [
         {
             "fixture_id": "1",
-            "home_team": "TeamA",
-            "away_team": "TeamB",
-            "market": "over_25",
-            "probability": 0.61,
-            "bookmaker_odds": 1.90,
-            "opening_odds": 1.95,
-            "confidence": 0.70,
-            "agreement": 0.66,
-        },
-        bankroll=1000.0,
-    )
+            "home_team": "A",
+            "away_team": "B",
+            "market": "home",
+            "probability": 0.58,
+            "fair_odds": 1.72,
+            "bookmaker_odds": 2.05,
+            "market_edge": 0.06,
+            "model_edge": 0.18,
+            "confidence": 0.72,
+            "agreement": 0.68,
+            "decision": "BET",
+        }
+    ]
 
-    assert "ev" in result
-    assert "decision" in result
-    assert "suggested_stake" in result
+    result = LiveOddsScanner().scan(rows)
+
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert "ev" in result[0]
 EOF
 
-CREA_FILE tests/test_market_expansion_engine.py
-from quant.markets.market_expansion_engine import MarketExpansionEngine
+CREA_FILE tests/test_market_optimizer.py
+from quant.live.market_optimizer import LeagueMarketPerformanceOptimizer
 
 
-def test_market_expansion_engine_runs():
-    rows = MarketExpansionEngine().run()
+def test_market_optimizer_runs():
+    rows = [
+        {"league": "Serie A", "market": "home", "stake": 10, "pnl": 5},
+        {"league": "Serie A", "market": "home", "stake": 10, "pnl": -10},
+    ]
 
-    assert isinstance(rows, list)
-    assert len(rows) > 0
-    assert "market" in rows[0]
-    assert rows[0]["market"] in {"over_25", "under_25", "btts_yes", "btts_no"}
+    result = LeagueMarketPerformanceOptimizer().optimize(rows)
+
+    assert isinstance(result, list)
+    assert len(result) == 1
 EOF
 
-CREA_FILE tests/test_market_expansion_runner.py
-from quant.markets.market_expansion_runner import MarketExpansionRunner
+CREA_FILE tests/test_worker_pool.py
+from quant.ops.worker_pool import WorkerPool
 
 
-def test_market_expansion_runner_runs():
-    rows = MarketExpansionRunner().run()
+def test_worker_pool_submit():
+    pool = WorkerPool(max_workers=2)
 
-    assert isinstance(rows, list)
-    assert len(rows) > 0
+    future = pool.submit(lambda: 123)
+    result = future.result(timeout=5)
+
+    pool.shutdown()
+
+    assert result == 123
 EOF
 
-CREA_FILE tests/test_app_market_expansion_controller.py
-from app.market_expansion_controller import AppMarketExpansionController
+CREA_FILE tests/test_scheduler_service.py
+from quant.ops.scheduler_service import SchedulerService
 
 
-def test_app_market_expansion_controller_runs():
-    rows = AppMarketExpansionController().run()
+def test_scheduler_service_add_job():
+    service = SchedulerService()
 
-    assert isinstance(rows, list)
-    assert len(rows) > 0
+    service.add_recurring_job("sample", lambda: None, 5, run_immediately=False)
+
+    assert "sample" in service.scheduler.jobs
+EOF
+
+CREA_FILE tests/test_watchdog.py
+from quant.ops.watchdog import Watchdog
+
+
+def test_watchdog_ping(tmp_path):
+    watchdog = Watchdog()
+    path = watchdog.ping("quant_engine")
+
+    assert path
+EOF
+
+CREA_FILE tests/test_full_system_runner.py
+from quant.ops.full_system_runner import FullSystemRunner
+
+
+def test_full_system_runner_runs():
+    result = FullSystemRunner().run_cycle()
+
+    assert isinstance(result, dict)
+    assert "market_rows" in result
+    assert "scanned_rows" in result
+    assert "threshold_summary" in result
+EOF
+
+CREA_FILE tests/test_app_full_system_controller.py
+from app.full_system_controller import AppFullSystemController
+
+
+def test_app_full_system_controller_runs():
+    result = AppFullSystemController().run()
+
+    assert isinstance(result, dict)
+    assert "market_rows" in result
 EOF
 
 FIX_WHITESPACE
-

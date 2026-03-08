@@ -1417,3 +1417,29 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-08_11-18-51.zip
+Backup created backups/backup_2026-03-08_11-18-51.zip
+[WARN] Unknown command: VALUE BET ENGINE
+[CREATE] folder quant/value
+[CREATE] file quant/value/ev_calculator.py
+[CREATE] file quant/value/kelly_engine.py
+[CREATE] file quant/value/clv_estimator.py
+[CREATE] file quant/value/stake_policy.py
+[CREATE] file quant/value/value_bet_ranker.py
+[CREATE] file quant/value/value_bet_filter.py
+[CREATE] file quant/value/value_bet_engine.py
+[CREATE] file quant/value/value_bet_runner.py
+[CREATE] file app/value_bet_controller.py
+[CREATE] file tests/test_ev_calculator.py
+[CREATE] file tests/test_kelly_engine.py
+[CREATE] file tests/test_value_bet_filter.py
+[CREATE] file tests/test_value_bet_engine.py
+[CREATE] file tests/test_value_bet_runner.py
+[CREATE] file tests/test_app_value_bet_controller.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

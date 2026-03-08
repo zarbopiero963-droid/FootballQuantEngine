@@ -463,3 +463,4 @@ def test_app_value_bet_controller_runs():
 EOF
 
 FIX_WHITESPACE
+

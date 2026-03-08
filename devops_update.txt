@@ -1,970 +1,170 @@
-############################################
-INDUSTRIAL ML BLOCK 1
-############################################
-
-CREA_CARTELLA quant/ml/industrial
-CREA_CARTELLA outputs/ml
-
-CREA_FILE quant/ml/industrial/feature_store.py
-from __future__ import annotations
-
-import json
-import os
-from datetime import datetime
-
-import pandas as pd
-
-
-class FeatureStore:
-
-    def __init__(self, path: str = "outputs/ml/feature_store.parquet"):
-        self.path = path
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
-
-    def save_rows(self, rows: list[dict]) -> str:
-        df = pd.DataFrame(rows or [])
-        if "saved_at" not in df.columns:
-            df["saved_at"] = datetime.utcnow().isoformat() + "Z"
-
-        try:
-            df.to_parquet(self.path, index=False)
-        except Exception:
-            fallback = self.path.replace(".parquet", ".json")
-            with open(fallback, "w", encoding="utf-8") as handle:
-                json.dump(df.to_dict("records"), handle, indent=2)
-            return fallback
-
-        return self.path
-
-    def load_dataframe(self) -> pd.DataFrame:
-        if os.path.exists(self.path):
-            try:
-                return pd.read_parquet(self.path)
-            except Exception:
-                pass
-
-        fallback = self.path.replace(".parquet", ".json")
-        if os.path.exists(fallback):
-            with open(fallback, "r", encoding="utf-8") as handle:
-                rows = json.load(handle)
-            return pd.DataFrame(rows)
-
-        return pd.DataFrame()
-EOF
-
-CREA_FILE quant/ml/industrial/model_registry.py
-from __future__ import annotations
-
-import json
-import os
-from datetime import datetime
-
-
-class ModelRegistry:
-
-    def __init__(self, path: str = "outputs/ml/model_registry.json"):
-        self.path = path
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
-
-        if not os.path.exists(self.path):
-            with open(self.path, "w", encoding="utf-8") as handle:
-                json.dump([], handle, indent=2)
-
-    def _load(self) -> list[dict]:
-        with open(self.path, "r", encoding="utf-8") as handle:
-            return json.load(handle)
-
-    def _save(self, rows: list[dict]) -> None:
-        with open(self.path, "w", encoding="utf-8") as handle:
-            json.dump(rows, handle, indent=2)
-
-    def register(
-        self,
-        model_name: str,
-        model_path: str,
-        metrics: dict,
-        league: str = "GLOBAL",
-        market: str = "home",
-        active: bool = False,
-    ) -> dict:
-        rows = self._load()
-
-        if active:
-            for row in rows:
-                if row.get("league") == league and row.get("market") == market:
-                    row["active"] = False
-
-        entry = {
-            "model_name": str(model_name),
-            "model_path": str(model_path),
-            "metrics": metrics or {},
-            "league": str(league),
-            "market": str(market),
-            "active": bool(active),
-            "created_at": datetime.utcnow().isoformat() + "Z",
-        }
-
-        rows.append(entry)
-        self._save(rows)
-        return entry
-
-    def get_active(self, league: str = "GLOBAL", market: str = "home") -> dict | None:
-        rows = self._load()
-
-        for row in reversed(rows):
-            if row.get("league") == league and row.get("market") == market and bool(row.get("active")):
-                return row
-
-        for row in reversed(rows):
-            if row.get("league") == "GLOBAL" and row.get("market") == market and bool(row.get("active")):
-                return row
-
-        return None
-
-    def list_models(self) -> list[dict]:
-        return self._load()
-EOF
-
-CREA_FILE quant/ml/industrial/threshold_store.py
-from __future__ import annotations
-
-import json
-import os
-
-
-class ThresholdStore:
-
-    def __init__(self, path: str = "outputs/ml/thresholds.json"):
-        self.path = path
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
-
-        if not os.path.exists(self.path):
-            with open(self.path, "w", encoding="utf-8") as handle:
-                json.dump({}, handle, indent=2)
-
-    def load_all(self) -> dict:
-        with open(self.path, "r", encoding="utf-8") as handle:
-            return json.load(handle)
-
-    def save_thresholds(self, league: str, market: str, payload: dict) -> None:
-        rows = self.load_all()
-        rows.setdefault(str(league), {})
-        rows[str(league)][str(market)] = payload
-
-        with open(self.path, "w", encoding="utf-8") as handle:
-            json.dump(rows, handle, indent=2)
-
-    def get_thresholds(self, league: str = "GLOBAL", market: str = "home") -> dict | None:
-        rows = self.load_all()
-
-        if league in rows and market in rows[league]:
-            return rows[league][market]
-
-        if "GLOBAL" in rows and market in rows["GLOBAL"]:
-            return rows["GLOBAL"][market]
-
-        return None
-EOF
-
-CREA_FILE quant/ml/industrial/temporal_baseline_store.py
-from __future__ import annotations
-
-import json
-import os
-
-
-class TemporalBaselineStore:
-
-    def __init__(self, path: str = "outputs/ml/temporal_baselines.json"):
-        self.path = path
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
-
-        if not os.path.exists(self.path):
-            with open(self.path, "w", encoding="utf-8") as handle:
-                json.dump({}, handle, indent=2)
-
-    def load(self) -> dict:
-        with open(self.path, "r", encoding="utf-8") as handle:
-            return json.load(handle)
-
-    def save(self, league: str, market: str, payload: dict) -> None:
-        rows = self.load()
-        rows.setdefault(str(league), {})
-        rows[str(league)][str(market)] = payload
-
-        with open(self.path, "w", encoding="utf-8") as handle:
-            json.dump(rows, handle, indent=2)
-
-    def get(self, league: str = "GLOBAL", market: str = "home") -> dict | None:
-        rows = self.load()
-
-        if league in rows and market in rows[league]:
-            return rows[league][market]
-
-        if "GLOBAL" in rows and market in rows["GLOBAL"]:
-            return rows["GLOBAL"][market]
-
-        return None
-EOF
-
-CREA_FILE quant/ml/industrial/multi_model_ensemble.py
+CREA_FILE quant/ml/probability_calibrator_real.py
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
 
 try:
-    from sklearn.ensemble import GradientBoostingClassifier
+    from sklearn.isotonic import IsotonicRegression
 except Exception:
-    GradientBoostingClassifier = None
-
-try:
-    from sklearn.linear_model import LogisticRegression
-except Exception:
-    LogisticRegression = None
+    IsotonicRegression = None
 
 
-class MultiModelEnsemble:
-
-    FEATURE_COLUMNS = [
-        "elo_diff",
-        "form_diff",
-        "xg_diff",
-        "xga_diff",
-        "xpts_diff",
-        "shots_diff",
-        "shots_on_target_diff",
-        "form_score_diff",
-        "bookmaker_odds_home",
-        "bookmaker_odds_draw",
-        "bookmaker_odds_away",
-    ]
+class ProbabilityCalibratorReal:
 
     def __init__(self):
-        self.logreg = None
-        self.gbm = None
+        self.model = None
         self.is_fitted = False
 
-    def _prepare(self, df: pd.DataFrame):
-        work = df.copy()
+    def fit(self, raw_probs, y_true):
+        raw_probs = np.asarray(raw_probs, dtype=float)
+        y_true = np.asarray(y_true, dtype=float)
 
-        for col in self.FEATURE_COLUMNS:
-            if col not in work.columns:
-                work[col] = 0.0
-
-        if "target" not in work.columns:
-            if "result" in work.columns:
-                work["target"] = (work["result"].astype(str) == "H").astype(int)
-            else:
-                work["target"] = 0
-
-        X = work[self.FEATURE_COLUMNS].astype(float).values
-        y = work["target"].astype(int).values
-        return X, y
-
-    def fit(self, df: pd.DataFrame) -> None:
-        if df is None or df.empty:
+        if len(raw_probs) == 0 or len(y_true) == 0 or len(raw_probs) != len(y_true):
             self.is_fitted = False
+            self.model = None
             return
 
-        X, y = self._prepare(df)
-
-        if len(set(y.tolist())) < 2:
+        if IsotonicRegression is None:
             self.is_fitted = False
+            self.model = None
             return
 
-        if LogisticRegression is not None:
-            self.logreg = LogisticRegression(max_iter=1000)
-            self.logreg.fit(X, y)
+        self.model = IsotonicRegression(out_of_bounds="clip")
+        self.model.fit(raw_probs, y_true)
+        self.is_fitted = True
 
-        if GradientBoostingClassifier is not None:
-            self.gbm = GradientBoostingClassifier(random_state=42)
-            self.gbm.fit(X, y)
+    def transform(self, raw_probs):
+        raw_probs = np.asarray(raw_probs, dtype=float)
 
-        self.is_fitted = bool(self.logreg is not None or self.gbm is not None)
+        if not self.is_fitted or self.model is None:
+            return np.clip(raw_probs, 0.0001, 0.9999)
 
-    def predict_proba_one(self, row: dict) -> float:
-        values = []
-        for col in self.FEATURE_COLUMNS:
-            values.append(float(row.get(col, 0.0) or 0.0))
+        calibrated = self.model.predict(raw_probs)
+        return np.clip(calibrated, 0.0001, 0.9999)
 
-        X = np.asarray([values], dtype=float)
-
-        probs = []
-
-        if self.logreg is not None:
-            probs.append(float(self.logreg.predict_proba(X)[0, 1]))
-
-        if self.gbm is not None:
-            probs.append(float(self.gbm.predict_proba(X)[0, 1]))
-
-        if not probs:
-            return 0.50
-
-        prob = sum(probs) / len(probs)
-        return float(min(max(prob, 0.0001), 0.9999))
+    def transform_one(self, raw_prob: float) -> float:
+        return float(self.transform([raw_prob])[0])
 EOF
 
-CREA_FILE quant/ml/industrial/calibration_report.py
-from __future__ import annotations
-
-import json
-import math
+CREA_FILE tests/exe/test_installed_exe_smoke.py
 import os
+import subprocess
+import time
 
+import pytest
 
-class CalibrationReport:
+pytest.importorskip("pywinauto")
+psutil = pytest.importorskip("psutil")
+Desktop = pytest.importorskip("pywinauto").Desktop
 
-    def __init__(self, output_dir: str = "outputs/ml"):
-        self.output_dir = output_dir
-        os.makedirs(self.output_dir, exist_ok=True)
-
-    def _brier(self, probs: list[float], y_true: list[int]) -> float:
-        if not probs or not y_true or len(probs) != len(y_true):
-            return 0.0
-        return sum((float(p) - int(y)) ** 2 for p, y in zip(probs, y_true)) / len(probs)
-
-    def _log_loss(self, probs: list[float], y_true: list[int]) -> float:
-        if not probs or not y_true or len(probs) != len(y_true):
-            return 0.0
-
-        eps = 1e-9
-        total = 0.0
-        for p, y in zip(probs, y_true):
-            p = min(max(float(p), eps), 1.0 - eps)
-            y = int(y)
-            total += -(y * math.log(p) + (1 - y) * math.log(1 - p))
-        return total / len(probs)
-
-    def build(self, raw_probs: list[float], calibrated_probs: list[float], y_true: list[int]) -> dict:
-        payload = {
-            "count": len(raw_probs),
-            "raw_brier": round(self._brier(raw_probs, y_true), 6),
-            "calibrated_brier": round(self._brier(calibrated_probs, y_true), 6),
-            "raw_log_loss": round(self._log_loss(raw_probs, y_true), 6),
-            "calibrated_log_loss": round(self._log_loss(calibrated_probs, y_true), 6),
-        }
-        return payload
-
-    def save(self, payload: dict, filename: str = "calibration_report.json") -> str:
-        path = os.path.join(self.output_dir, filename)
-        with open(path, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2)
-        return path
-EOF
-
-CREA_FILE quant/ml/industrial/train_pipeline.py
-from __future__ import annotations
-
-import json
-import os
-
-import joblib
-import pandas as pd
-
-from quant.ml.industrial.calibration_report import CalibrationReport
-from quant.ml.industrial.feature_store import FeatureStore
-from quant.ml.industrial.model_registry import ModelRegistry
-from quant.ml.industrial.multi_model_ensemble import MultiModelEnsemble
-from quant.ml.industrial.temporal_baseline_store import TemporalBaselineStore
-from quant.ml.industrial.threshold_store import ThresholdStore
-from quant.ml.probability_calibrator_real import ProbabilityCalibratorReal
-from quant.ml.temporal_validator_real import TemporalValidatorReal
-from quant.ml.threshold_optimizer import ThresholdOptimizer
-
-
-class IndustrialTrainPipeline:
-
-    def __init__(self):
-        self.feature_store = FeatureStore()
-        self.registry = ModelRegistry()
-        self.threshold_store = ThresholdStore()
-        self.baseline_store = TemporalBaselineStore()
-        self.temporal_validator = TemporalValidatorReal()
-        self.threshold_optimizer = ThresholdOptimizer()
-        self.calibration_report = CalibrationReport()
-        self.output_dir = "outputs/ml/models"
-        os.makedirs(self.output_dir, exist_ok=True)
-
-    def _prepare_df(self, rows: list[dict]) -> pd.DataFrame:
-        df = pd.DataFrame(rows or []).copy()
-
-        if df.empty:
-            return df
-
-        if "target" not in df.columns:
-            if "result" in df.columns:
-                df["target"] = (df["result"].astype(str) == "H").astype(int)
-            else:
-                df["target"] = 0
-
-        if "match_date" not in df.columns:
-            df["match_date"] = pd.date_range("2024-01-01", periods=len(df.index), freq="D")
-
-        if "league" not in df.columns:
-            df["league"] = "GLOBAL"
-
-        if "market" not in df.columns:
-            df["market"] = "home"
-
-        return df
-
-    def train(
-        self,
-        rows: list[dict],
-        league: str = "GLOBAL",
-        market: str = "home",
-        activate: bool = True,
-    ) -> dict:
-        df = self._prepare_df(rows)
-        self.feature_store.save_rows(df.to_dict("records"))
-
-        if df.empty:
-            return {
-                "trained": False,
-                "reason": "empty_dataset",
-            }
-
-        ensemble = MultiModelEnsemble()
-        ensemble.fit(df)
-
-        calibrator = ProbabilityCalibratorReal()
-
-        raw_probs = []
-        for _, row in df.iterrows():
-            raw_probs.append(ensemble.predict_proba_one(row.to_dict()))
-
-        y_true = df["target"].astype(int).tolist()
-        calibrator.fit(raw_probs, y_true)
-        calibrated_probs = calibrator.transform(raw_probs).tolist()
-
-        calibration_payload = self.calibration_report.build(
-            raw_probs=raw_probs,
-            calibrated_probs=calibrated_probs,
-            y_true=y_true,
-        )
-        calibration_path = self.calibration_report.save(
-            calibration_payload,
-            filename=f"calibration_report_{league}_{market}.json",
-        )
-
-        threshold_rows = []
-        for idx, row in df.iterrows():
-            threshold_rows.append(
-                {
-                    "probability": float(calibrated_probs[idx]),
-                    "ev": float(row.get("ev", 0.0) or 0.0),
-                    "confidence": float(row.get("confidence", 0.5) or 0.5),
-                    "agreement": float(row.get("agreement", 0.5) or 0.5),
-                }
-            )
-
-        thresholds = self.threshold_optimizer.optimize(threshold_rows)
-        self.threshold_store.save_thresholds(league, market, thresholds)
-
-        temporal_windows = self.temporal_validator.validate(df)
-        baseline_payload = {
-            "windows": temporal_windows,
-            "calibration": calibration_payload,
-            "thresholds": thresholds,
-            "rows": len(df.index),
-        }
-        self.baseline_store.save(league, market, baseline_payload)
-
-        model_path = os.path.join(self.output_dir, f"{league}_{market}_ensemble.joblib")
-        bundle = {
-            "ensemble": ensemble,
-            "calibrator": calibrator,
-            "league": league,
-            "market": market,
-            "feature_columns": ensemble.FEATURE_COLUMNS,
-        }
-        joblib.dump(bundle, model_path)
-
-        registry_entry = self.registry.register(
-            model_name=f"{league}_{market}_ensemble",
-            model_path=model_path,
-            metrics={
-                "rows": len(df.index),
-                "raw_brier": calibration_payload["raw_brier"],
-                "calibrated_brier": calibration_payload["calibrated_brier"],
-                "raw_log_loss": calibration_payload["raw_log_loss"],
-                "calibrated_log_loss": calibration_payload["calibrated_log_loss"],
-            },
-            league=league,
-            market=market,
-            active=activate,
-        )
-
-        summary_path = os.path.join(self.output_dir, f"{league}_{market}_train_summary.json")
-        with open(summary_path, "w", encoding="utf-8") as handle:
-            json.dump(
-                {
-                    "registry_entry": registry_entry,
-                    "thresholds": thresholds,
-                    "calibration_report": calibration_payload,
-                    "temporal_windows": temporal_windows,
-                    "model_path": model_path,
-                    "calibration_path": calibration_path,
-                },
-                handle,
-                indent=2,
-            )
-
-        return {
-            "trained": True,
-            "model_path": model_path,
-            "calibration_path": calibration_path,
-            "summary_path": summary_path,
-            "thresholds": thresholds,
-            "temporal_windows": temporal_windows,
-            "registry_entry": registry_entry,
-        }
-EOF
-
-CREA_FILE quant/ml/industrial/inference_pipeline.py
-from __future__ import annotations
-
-import joblib
-
-from quant.ml.industrial.model_registry import ModelRegistry
-from quant.ml.industrial.threshold_store import ThresholdStore
-
-
-class IndustrialInferencePipeline:
-
-    def __init__(self):
-        self.registry = ModelRegistry()
-        self.threshold_store = ThresholdStore()
-
-    def _load_active_bundle(self, league: str = "GLOBAL", market: str = "home") -> dict | None:
-        active = self.registry.get_active(league=league, market=market)
-        if not active:
-            return None
-
-        model_path = active.get("model_path")
-        if not model_path:
-            return None
-
-        return joblib.load(model_path)
-
-    def predict_home_probability(self, row: dict, league: str = "GLOBAL", market: str = "home") -> float:
-        bundle = self._load_active_bundle(league=league, market=market)
-        if not bundle:
-            return 0.50
-
-        ensemble = bundle["ensemble"]
-        calibrator = bundle["calibrator"]
-
-        raw = float(ensemble.predict_proba_one(row))
-        calibrated = float(calibrator.transform_one(raw))
-
-        return round(calibrated, 6)
-
-    def get_thresholds(self, league: str = "GLOBAL", market: str = "home") -> dict | None:
-        return self.threshold_store.get_thresholds(league=league, market=market)
-EOF
-
-CREA_FILE quant/ml/industrial/model_policy_guard.py
-from __future__ import annotations
-
-from quant.ml.industrial.temporal_baseline_store import TemporalBaselineStore
-
-
-class ModelPolicyGuard:
-
-    def __init__(self):
-        self.baselines = TemporalBaselineStore()
-
-    def should_activate(
-        self,
-        league: str,
-        market: str,
-        candidate_metrics: dict,
-    ) -> dict:
-        baseline = self.baselines.get(league, market)
-
-        if not baseline:
-            return {
-                "activate": True,
-                "reason": "no_baseline",
-            }
-
-        calibration = baseline.get("calibration", {})
-        baseline_brier = float(calibration.get("calibrated_brier", 999.0))
-        candidate_brier = float(candidate_metrics.get("calibrated_brier", 999.0))
-
-        activate = candidate_brier <= baseline_brier
-
-        return {
-            "activate": activate,
-            "reason": "improved_or_equal" if activate else "degraded_brier",
-            "baseline_brier": baseline_brier,
-            "candidate_brier": candidate_brier,
-        }
-EOF
-
-CREA_FILE app/industrial_ml_controller.py
-from quant.ml.industrial.inference_pipeline import IndustrialInferencePipeline
-from quant.ml.industrial.train_pipeline import IndustrialTrainPipeline
-
-
-class AppIndustrialMLController:
-
-    def __init__(self):
-        self.train_pipeline = IndustrialTrainPipeline()
-        self.inference_pipeline = IndustrialInferencePipeline()
-
-    def train(self, rows: list[dict], league: str = "GLOBAL", market: str = "home"):
-        return self.train_pipeline.train(rows, league=league, market=market)
-
-    def predict(self, row: dict, league: str = "GLOBAL", market: str = "home"):
-        return self.inference_pipeline.predict_home_probability(row, league=league, market=market)
-EOF
-
-CREA_FILE tests/test_feature_store.py
-from quant.ml.industrial.feature_store import FeatureStore
-
-
-def test_feature_store_save_and_load(tmp_path):
-    store = FeatureStore(str(tmp_path / "feature_store.parquet"))
-    store.save_rows([{"elo_diff": 1, "result": "H"}])
-
-    df = store.load_dataframe()
-
-    assert len(df.index) == 1
-EOF
-
-CREA_FILE tests/test_model_registry.py
-from quant.ml.industrial.model_registry import ModelRegistry
-
-
-def test_model_registry_register_and_get_active(tmp_path):
-    registry = ModelRegistry(str(tmp_path / "registry.json"))
-
-    registry.register(
-        model_name="m1",
-        model_path="a.joblib",
-        metrics={"score": 1},
-        league="GLOBAL",
-        market="home",
-        active=True,
-    )
-
-    active = registry.get_active("GLOBAL", "home")
-
-    assert active is not None
-    assert active["model_name"] == "m1"
-EOF
-
-CREA_FILE tests/test_threshold_store.py
-from quant.ml.industrial.threshold_store import ThresholdStore
-
-
-def test_threshold_store_save_and_get(tmp_path):
-    store = ThresholdStore(str(tmp_path / "thresholds.json"))
-    store.save_thresholds("GLOBAL", "home", {"min_probability": 0.55})
-
-    payload = store.get_thresholds("GLOBAL", "home")
-
-    assert payload["min_probability"] == 0.55
-EOF
-
-CREA_FILE tests/test_temporal_baseline_store.py
-from quant.ml.industrial.temporal_baseline_store import TemporalBaselineStore
-
-
-def test_temporal_baseline_store_save_and_get(tmp_path):
-    store = TemporalBaselineStore(str(tmp_path / "baselines.json"))
-    store.save("GLOBAL", "home", {"rows": 10})
-
-    payload = store.get("GLOBAL", "home")
-
-    assert payload["rows"] == 10
-EOF
-
-CREA_FILE tests/test_multi_model_ensemble.py
-import pandas as pd
-
-from quant.ml.industrial.multi_model_ensemble import MultiModelEnsemble
-
-
-def test_multi_model_ensemble_fit_and_predict():
-    df = pd.DataFrame(
-        [
-            {
-                "elo_diff": 10,
-                "form_diff": 0.1,
-                "xg_diff": 0.2,
-                "xga_diff": 0.1,
-                "xpts_diff": 0.3,
-                "shots_diff": 2,
-                "shots_on_target_diff": 1,
-                "form_score_diff": 0.1,
-                "bookmaker_odds_home": 2.0,
-                "bookmaker_odds_draw": 3.2,
-                "bookmaker_odds_away": 3.8,
-                "result": "H",
-            },
-            {
-                "elo_diff": -8,
-                "form_diff": -0.1,
-                "xg_diff": -0.2,
-                "xga_diff": -0.1,
-                "xpts_diff": -0.2,
-                "shots_diff": -2,
-                "shots_on_target_diff": -1,
-                "form_score_diff": -0.1,
-                "bookmaker_odds_home": 2.4,
-                "bookmaker_odds_draw": 3.1,
-                "bookmaker_odds_away": 2.9,
-                "result": "A",
-            },
-        ]
-    )
-
-    model = MultiModelEnsemble()
-    model.fit(df)
-
-    prob = model.predict_proba_one(df.iloc[0].to_dict())
-
-    assert 0.0 <= prob <= 1.0
-EOF
-
-CREA_FILE tests/test_calibration_report.py
-from quant.ml.industrial.calibration_report import CalibrationReport
-
-
-def test_calibration_report_build():
-    report = CalibrationReport()
-    payload = report.build(
-        raw_probs=[0.6, 0.4],
-        calibrated_probs=[0.58, 0.42],
-        y_true=[1, 0],
-    )
-
-    assert "raw_brier" in payload
-    assert "calibrated_brier" in payload
-EOF
-
-CREA_FILE tests/test_industrial_train_pipeline.py
-from quant.ml.industrial.train_pipeline import IndustrialTrainPipeline
-
-
-def test_industrial_train_pipeline_runs():
-    rows = [
-        {
-            "elo_diff": 10,
-            "form_diff": 0.1,
-            "xg_diff": 0.2,
-            "xga_diff": 0.1,
-            "xpts_diff": 0.3,
-            "shots_diff": 2,
-            "shots_on_target_diff": 1,
-            "form_score_diff": 0.1,
-            "bookmaker_odds_home": 2.0,
-            "bookmaker_odds_draw": 3.2,
-            "bookmaker_odds_away": 3.8,
-            "result": "H",
-            "league": "GLOBAL",
-            "market": "home",
-            "match_date": "2024-01-01",
-            "ev": 0.05,
-            "confidence": 0.70,
-            "agreement": 0.65,
-        },
-        {
-            "elo_diff": -8,
-            "form_diff": -0.1,
-            "xg_diff": -0.2,
-            "xga_diff": -0.1,
-            "xpts_diff": -0.2,
-            "shots_diff": -2,
-            "shots_on_target_diff": -1,
-            "form_score_diff": -0.1,
-            "bookmaker_odds_home": 2.4,
-            "bookmaker_odds_draw": 3.1,
-            "bookmaker_odds_away": 2.9,
-            "result": "A",
-            "league": "GLOBAL",
-            "market": "home",
-            "match_date": "2024-01-02",
-            "ev": 0.03,
-            "confidence": 0.65,
-            "agreement": 0.60,
-        },
-    ]
-
-    payload = IndustrialTrainPipeline().train(rows, league="GLOBAL", market="home")
-
-    assert payload["trained"] is True
-    assert "model_path" in payload
-EOF
-
-CREA_FILE tests/test_industrial_inference_pipeline.py
-from quant.ml.industrial.inference_pipeline import IndustrialInferencePipeline
-from quant.ml.industrial.train_pipeline import IndustrialTrainPipeline
-
-
-def test_industrial_inference_pipeline_predicts():
-    rows = [
-        {
-            "elo_diff": 10,
-            "form_diff": 0.1,
-            "xg_diff": 0.2,
-            "xga_diff": 0.1,
-            "xpts_diff": 0.3,
-            "shots_diff": 2,
-            "shots_on_target_diff": 1,
-            "form_score_diff": 0.1,
-            "bookmaker_odds_home": 2.0,
-            "bookmaker_odds_draw": 3.2,
-            "bookmaker_odds_away": 3.8,
-            "result": "H",
-            "league": "GLOBAL",
-            "market": "home",
-            "match_date": "2024-01-01",
-            "ev": 0.05,
-            "confidence": 0.70,
-            "agreement": 0.65,
-        },
-        {
-            "elo_diff": -8,
-            "form_diff": -0.1,
-            "xg_diff": -0.2,
-            "xga_diff": -0.1,
-            "xpts_diff": -0.2,
-            "shots_diff": -2,
-            "shots_on_target_diff": -1,
-            "form_score_diff": -0.1,
-            "bookmaker_odds_home": 2.4,
-            "bookmaker_odds_draw": 3.1,
-            "bookmaker_odds_away": 2.9,
-            "result": "A",
-            "league": "GLOBAL",
-            "market": "home",
-            "match_date": "2024-01-02",
-            "ev": 0.03,
-            "confidence": 0.65,
-            "agreement": 0.60,
-        },
-    ]
-
-    IndustrialTrainPipeline().train(rows, league="GLOBAL", market="home")
-
-    prob = IndustrialInferencePipeline().predict_home_probability(
-        {
-            "elo_diff": 5,
-            "form_diff": 0.1,
-            "xg_diff": 0.1,
-            "xga_diff": 0.1,
-            "xpts_diff": 0.2,
-            "shots_diff": 1,
-            "shots_on_target_diff": 1,
-            "form_score_diff": 0.1,
-            "bookmaker_odds_home": 2.0,
-            "bookmaker_odds_draw": 3.0,
-            "bookmaker_odds_away": 3.5,
-        },
-        league="GLOBAL",
-        market="home",
-    )
-
-    assert 0.0 <= prob <= 1.0
-EOF
-
-CREA_FILE tests/test_model_policy_guard.py
-from quant.ml.industrial.model_policy_guard import ModelPolicyGuard
-from quant.ml.industrial.temporal_baseline_store import TemporalBaselineStore
-
-
-def test_model_policy_guard_works(tmp_path):
-    store = TemporalBaselineStore(str(tmp_path / "baselines.json"))
-    store.save("GLOBAL", "home", {"calibration": {"calibrated_brier": 0.20}})
-
-    guard = ModelPolicyGuard()
-    guard.baselines = store
-
-    result = guard.should_activate(
-        "GLOBAL",
-        "home",
-        {"calibrated_brier": 0.18},
-    )
-
-    assert result["activate"] is True
-EOF
-
-CREA_FILE tests/test_app_industrial_ml_controller.py
-from app.industrial_ml_controller import AppIndustrialMLController
-
-
-def test_app_industrial_ml_controller_runs():
-    controller = AppIndustrialMLController()
-
-    rows = [
-        {
-            "elo_diff": 10,
-            "form_diff": 0.1,
-            "xg_diff": 0.2,
-            "xga_diff": 0.1,
-            "xpts_diff": 0.3,
-            "shots_diff": 2,
-            "shots_on_target_diff": 1,
-            "form_score_diff": 0.1,
-            "bookmaker_odds_home": 2.0,
-            "bookmaker_odds_draw": 3.2,
-            "bookmaker_odds_away": 3.8,
-            "result": "H",
-            "league": "GLOBAL",
-            "market": "home",
-            "match_date": "2024-01-01",
-            "ev": 0.05,
-            "confidence": 0.70,
-            "agreement": 0.65,
-        },
-        {
-            "elo_diff": -8,
-            "form_diff": -0.1,
-            "xg_diff": -0.2,
-            "xga_diff": -0.1,
-            "xpts_diff": -0.2,
-            "shots_diff": -2,
-            "shots_on_target_diff": -1,
-            "form_score_diff": -0.1,
-            "bookmaker_odds_home": 2.4,
-            "bookmaker_odds_draw": 3.1,
-            "bookmaker_odds_away": 2.9,
-            "result": "A",
-            "league": "GLOBAL",
-            "market": "home",
-            "match_date": "2024-01-02",
-            "ev": 0.03,
-            "confidence": 0.65,
-            "agreement": 0.60,
-        },
-    ]
-
-    train_payload = controller.train(rows, league="GLOBAL", market="home")
-    prob = controller.predict(
-        {
-            "elo_diff": 5,
-            "form_diff": 0.1,
-            "xg_diff": 0.1,
-            "xga_diff": 0.1,
-            "xpts_diff": 0.2,
-            "shots_diff": 1,
-            "shots_on_target_diff": 1,
-            "form_score_diff": 0.1,
-            "bookmaker_odds_home": 2.0,
-            "bookmaker_odds_draw": 3.0,
-            "bookmaker_odds_away": 3.5,
-        },
-        league="GLOBAL",
-        market="home",
-    )
-
-    assert train_payload["trained"] is True
-    assert 0.0 <= prob <= 1.0
+EXE_PATH = os.environ.get(
+    "APP_EXE_PATH",
+    r"dist\FootballQuantEngine\FootballQuantEngine.exe",
+)
+
+
+def _start_app():
+    return subprocess.Popen([EXE_PATH], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def _wait_for_window(timeout: float = 30.0):
+    end_time = time.time() + timeout
+
+    while time.time() < end_time:
+        try:
+            windows = Desktop(backend="uia").windows()
+            for window in windows:
+                try:
+                    title = window.window_text() or ""
+                except Exception:
+                    title = ""
+
+                if "football quant engine" in title.lower():
+                    return window
+            time.sleep(1.0)
+        except Exception:
+            time.sleep(1.0)
+
+    return None
+
+
+def _terminate_process_tree(pid: int):
+    try:
+        parent = psutil.Process(pid)
+    except Exception:
+        return
+
+    children = parent.children(recursive=True)
+    for proc in children:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
+    try:
+        parent.kill()
+    except Exception:
+        pass
+
+
+@pytest.mark.windows
+def test_installed_exe_opens_main_window():
+    if not os.path.exists(EXE_PATH):
+        pytest.skip(f"EXE not found: {EXE_PATH}")
+
+    proc = _start_app()
+
+    try:
+        main = _wait_for_window(timeout=30.0)
+        assert main is not None, "No window found for EXE process"
+
+        try:
+            title = main.window_text()
+        except Exception:
+            title = ""
+
+        assert "football quant engine" in title.lower()
+    finally:
+        _terminate_process_tree(proc.pid)
+
+
+@pytest.mark.windows
+def test_installed_exe_has_main_buttons():
+    if not os.path.exists(EXE_PATH):
+        pytest.skip(f"EXE not found: {EXE_PATH}")
+
+    proc = _start_app()
+
+    try:
+        main = _wait_for_window(timeout=30.0)
+        assert main is not None, "No window found for EXE process"
+
+        descendants = []
+        try:
+            descendants = main.descendants()
+        except Exception:
+            descendants = []
+
+        texts = []
+        for item in descendants:
+            try:
+                text = (item.window_text() or "").strip()
+            except Exception:
+                text = ""
+            if text:
+                texts.append(text.lower())
+
+        joined = " | ".join(texts)
+
+        assert (
+            "run" in joined
+            or "start" in joined
+            or "backtest" in joined
+            or "dashboard" in joined
+            or "import" in joined
+        ), f"No expected controls found. Controls: {joined}"
+    finally:
+        _terminate_process_tree(proc.pid)
 EOF
 
 FIX_WHITESPACE

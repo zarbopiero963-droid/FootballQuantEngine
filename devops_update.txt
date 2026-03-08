@@ -1,291 +1,480 @@
 ############################################
-QUANT GUARD REPORTING 2
+LIVE FUSION LAYER 1
 ############################################
 
-CREA_FILE quant/guard/quant_guard_reporter.py
+CREA_CARTELLA quant/fusion
+
+CREA_FILE quant/fusion/team_name_normalizer.py
 from __future__ import annotations
 
-import html
-import json
-import os
-from datetime import datetime
+import re
+import unicodedata
 
 
-class QuantGuardReporter:
+class TeamNameNormalizer:
 
-    def __init__(self, output_dir: str = "outputs/ci"):
-        self.output_dir = output_dir
-        os.makedirs(self.output_dir, exist_ok=True)
+    DEFAULT_ALIASES = {
+        "inter milan": "inter",
+        "internazionale": "inter",
+        "ac milan": "milan",
+        "juve": "juventus",
+        "man city": "manchester city",
+        "man utd": "manchester united",
+        "psg": "paris saint germain",
+        "atletico madrid": "atletico",
+        "ath madrid": "atletico",
+        "bayern munich": "bayern",
+        "bayern munchen": "bayern",
+    }
 
-    def _timestamp(self) -> str:
-        return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    def __init__(self, aliases: dict | None = None):
+        self.aliases = dict(self.DEFAULT_ALIASES)
+        if aliases:
+            for key, value in aliases.items():
+                self.aliases[self.normalize_raw(key)] = self.normalize_raw(value)
 
-    def build_markdown(self, payload: dict) -> str:
-        checks = payload.get("checks", [])
-        summary = payload.get("summary", {})
-        passed = bool(payload.get("passed", False))
+    def normalize_raw(self, value: str) -> str:
+        value = str(value or "").strip().lower()
+        value = unicodedata.normalize("NFKD", value)
+        value = "".join(ch for ch in value if not unicodedata.combining(ch))
+        value = re.sub(r"[^a-z0-9\s]", " ", value)
+        value = re.sub(r"\s+", " ", value).strip()
+        return self.aliases.get(value, value)
 
-        lines = []
-        lines.append("# Quant Engine Guard Report")
-        lines.append("")
-        lines.append(f"- Generated: {self._timestamp()}")
-        lines.append(f"- Passed: **{passed}**")
-        lines.append("")
-        lines.append("## Summary")
-        lines.append("")
-        for key, value in summary.items():
-            lines.append(f"- {key}: `{value}`")
+    def normalize(self, value: str) -> str:
+        return self.normalize_raw(value)
+EOF
 
-        lines.append("")
-        lines.append("## Checks")
-        lines.append("")
-        lines.append("| Check | Passed | Value |")
-        lines.append("|---|---:|---|")
-        for check in checks:
-            lines.append(
-                f"| {check.get('name','')} | {check.get('passed', False)} | {check.get('value','')} |"
-            )
+CREA_FILE quant/fusion/team_mapping_table.py
+from __future__ import annotations
 
-        return "\n".join(lines)
 
-    def build_html(self, payload: dict) -> str:
-        checks = payload.get("checks", [])
-        summary = payload.get("summary", {})
-        passed = bool(payload.get("passed", False))
+DEFAULT_TEAM_MAPPING = {
+    "inter milan": "inter",
+    "internazionale": "inter",
+    "ac milan": "milan",
+    "man city": "manchester city",
+    "man utd": "manchester united",
+    "psg": "paris saint germain",
+    "juve": "juventus",
+}
+EOF
 
-        rows = []
-        for check in checks:
-            rows.append(
-                "<tr>"
-                f"<td>{html.escape(str(check.get('name', '')))}</td>"
-                f"<td>{html.escape(str(check.get('passed', False)))}</td>"
-                f"<td>{html.escape(str(check.get('value', '')))}</td>"
-                "</tr>"
-            )
+CREA_FILE quant/fusion/team_mapper.py
+from __future__ import annotations
 
-        summary_rows = []
-        for key, value in summary.items():
-            summary_rows.append(
-                "<tr>"
-                f"<td>{html.escape(str(key))}</td>"
-                f"<td>{html.escape(str(value))}</td>"
-                "</tr>"
-            )
+from quant.fusion.team_mapping_table import DEFAULT_TEAM_MAPPING
+from quant.fusion.team_name_normalizer import TeamNameNormalizer
 
-        return f"""<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>Quant Engine Guard Report</title>
-<style>
-body {{ font-family: Arial, sans-serif; margin: 24px; }}
-table {{ border-collapse: collapse; width: 100%; margin-top: 12px; }}
-th, td {{ border: 1px solid #ccc; padding: 8px; text-align: left; }}
-th {{ background: #f4f4f4; }}
-.good {{ color: green; font-weight: bold; }}
-.bad {{ color: red; font-weight: bold; }}
-</style>
-</head>
-<body>
-<h1>Quant Engine Guard Report</h1>
-<p><strong>Generated:</strong> {html.escape(self._timestamp())}</p>
-<p><strong>Passed:</strong> <span class="{'good' if passed else 'bad'}">{html.escape(str(passed))}</span></p>
 
-<h2>Summary</h2>
-<table>
-<tr><th>Metric</th><th>Value</th></tr>
-{''.join(summary_rows)}
-</table>
+class TeamMapper:
 
-<h2>Checks</h2>
-<table>
-<tr><th>Check</th><th>Passed</th><th>Value</th></tr>
-{''.join(rows)}
-</table>
-</body>
-</html>"""
+    def __init__(self, mapping: dict | None = None):
+        self.normalizer = TeamNameNormalizer()
+        self.mapping = {}
 
-    def save_bundle(self, payload: dict) -> dict:
-        json_path = os.path.join(self.output_dir, "quant_guard_report.json")
-        md_path = os.path.join(self.output_dir, "quant_guard_report.md")
-        html_path = os.path.join(self.output_dir, "quant_guard_report.html")
+        base_mapping = dict(DEFAULT_TEAM_MAPPING)
+        if mapping:
+            base_mapping.update(mapping)
 
-        with open(json_path, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2)
+        for key, value in base_mapping.items():
+            self.mapping[self.normalizer.normalize(key)] = self.normalizer.normalize(value)
 
-        with open(md_path, "w", encoding="utf-8") as handle:
-            handle.write(self.build_markdown(payload))
+    def map_name(self, source_name: str) -> str:
+        normalized = self.normalizer.normalize(source_name)
+        return self.mapping.get(normalized, normalized)
 
-        with open(html_path, "w", encoding="utf-8") as handle:
-            handle.write(self.build_html(payload))
+    def build_lookup(self, names: list[str] | tuple[str, ...]) -> dict:
+        lookup = {}
+        for name in names:
+            normalized = self.normalizer.normalize(name)
+            mapped = self.map_name(name)
+            lookup[normalized] = mapped
+        return lookup
+EOF
+
+CREA_FILE quant/fusion/understat_stats_adapter.py
+from __future__ import annotations
+
+from quant.fusion.team_mapper import TeamMapper
+from quant.fusion.team_name_normalizer import TeamNameNormalizer
+
+
+class UnderstatStatsAdapter:
+
+    def __init__(self, mapper: TeamMapper | None = None):
+        self.mapper = mapper or TeamMapper()
+        self.normalizer = TeamNameNormalizer()
+
+    def adapt(self, understat_stats: dict | None) -> dict:
+        understat_stats = understat_stats or {}
+        adapted = {}
+
+        for team_name, payload in understat_stats.items():
+            key = self.mapper.map_name(team_name)
+            adapted[key] = {
+                "source_team_name": team_name,
+                "mapped_team_name": key,
+                "matches": int(payload.get("matches", 0) or 0),
+                "xg_for": float(payload.get("xg_for", 1.2) or 1.2),
+                "xg_against": float(payload.get("xg_against", 1.2) or 1.2),
+                "xpts": float(payload.get("xpts", 1.4) or 1.4),
+                "goals_for": float(payload.get("goals_for", 1.2) or 1.2),
+                "goals_against": float(payload.get("goals_against", 1.2) or 1.2),
+                "shots": float(payload.get("shots", 10.0) or 10.0),
+                "shots_on_target": float(payload.get("shots_on_target", 3.5) or 3.5),
+                "deep": float(payload.get("deep", 8.0) or 8.0),
+                "ppda_att": float(payload.get("ppda_att", 10.0) or 10.0),
+                "ppda_def": float(payload.get("ppda_def", 10.0) or 10.0),
+                "xg_diff": float(payload.get("xg_diff", 0.0) or 0.0),
+                "goal_diff": float(payload.get("goal_diff", 0.0) or 0.0),
+                "finishing_delta": float(payload.get("finishing_delta", 0.0) or 0.0),
+                "defensive_delta": float(payload.get("defensive_delta", 0.0) or 0.0),
+                "form_score": float(payload.get("form_score", 0.5) or 0.5),
+            }
+
+        return adapted
+
+    def get_team_stats(self, adapted_stats: dict, team_name: str) -> dict:
+        key = self.mapper.map_name(team_name)
+
+        if key in adapted_stats:
+            return adapted_stats[key]
 
         return {
-            "json": json_path,
-            "markdown": md_path,
-            "html": html_path,
+            "source_team_name": team_name,
+            "mapped_team_name": key,
+            "matches": 0,
+            "xg_for": 1.2,
+            "xg_against": 1.2,
+            "xpts": 1.4,
+            "goals_for": 1.2,
+            "goals_against": 1.2,
+            "shots": 10.0,
+            "shots_on_target": 3.5,
+            "deep": 8.0,
+            "ppda_att": 10.0,
+            "ppda_def": 10.0,
+            "xg_diff": 0.0,
+            "goal_diff": 0.0,
+            "finishing_delta": 0.0,
+            "defensive_delta": 0.0,
+            "form_score": 0.5,
         }
 EOF
 
-CREA_FILE quant/guard/quant_guard_baseline.py
+CREA_FILE quant/fusion/live_fusion_layer.py
 from __future__ import annotations
 
-import json
-import os
+from quant.fusion.team_mapper import TeamMapper
+from quant.fusion.understat_stats_adapter import UnderstatStatsAdapter
 
 
-class QuantGuardBaseline:
+class LiveFusionLayer:
 
-    def __init__(self, path: str = "outputs/ci/quant_guard_baseline.json"):
-        self.path = path
+    def __init__(self, mapper: TeamMapper | None = None):
+        self.mapper = mapper or TeamMapper()
+        self.understat_adapter = UnderstatStatsAdapter(self.mapper)
 
-    def load(self) -> dict | None:
-        if not os.path.exists(self.path):
-            return None
+    def fuse(
+        self,
+        fixtures: list[dict] | None,
+        odds_map: dict | None,
+        understat_stats: dict | None,
+    ) -> list[dict]:
+        fixtures = fixtures or []
+        odds_map = odds_map or {}
+        adapted_understat = self.understat_adapter.adapt(understat_stats)
 
-        with open(self.path, "r", encoding="utf-8") as handle:
-            return json.load(handle)
+        fused_rows = []
 
-    def save(self, summary: dict) -> str:
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        for fixture in fixtures:
+            fixture_id = str(fixture.get("fixture_id", ""))
+            home_team = fixture.get("home_team", "")
+            away_team = fixture.get("away_team", "")
 
-        with open(self.path, "w", encoding="utf-8") as handle:
-            json.dump(summary, handle, indent=2)
+            home_stats = self.understat_adapter.get_team_stats(adapted_understat, home_team)
+            away_stats = self.understat_adapter.get_team_stats(adapted_understat, away_team)
 
-        return self.path
-
-    def compare(self, current: dict, baseline: dict | None) -> dict:
-        if not baseline:
-            return {
-                "has_baseline": False,
-                "degraded": False,
-                "details": [],
-            }
-
-        details = []
-
-        for key in ("record_count", "bet_count", "avg_probability", "avg_confidence", "avg_agreement"):
-            current_value = current.get(key, 0)
-            baseline_value = baseline.get(key, 0)
-
-            details.append(
+            bookmaker_odds = odds_map.get(
+                fixture_id,
                 {
-                    "metric": key,
-                    "current": current_value,
-                    "baseline": baseline_value,
-                    "delta": round(float(current_value) - float(baseline_value), 6),
+                    "home": 0.0,
+                    "draw": 0.0,
+                    "away": 0.0,
+                },
+            )
+
+            fused_rows.append(
+                {
+                    "fixture_id": fixture_id,
+                    "home_team": home_team,
+                    "away_team": away_team,
+                    "home_team_key": self.mapper.map_name(home_team),
+                    "away_team_key": self.mapper.map_name(away_team),
+                    "bookmaker_odds_home": float(bookmaker_odds.get("home", 0.0) or 0.0),
+                    "bookmaker_odds_draw": float(bookmaker_odds.get("draw", 0.0) or 0.0),
+                    "bookmaker_odds_away": float(bookmaker_odds.get("away", 0.0) or 0.0),
+                    "home_xg_for": home_stats["xg_for"],
+                    "home_xg_against": home_stats["xg_against"],
+                    "home_xpts": home_stats["xpts"],
+                    "home_shots": home_stats["shots"],
+                    "home_shots_on_target": home_stats["shots_on_target"],
+                    "home_finishing_delta": home_stats["finishing_delta"],
+                    "home_defensive_delta": home_stats["defensive_delta"],
+                    "home_form_score": home_stats["form_score"],
+                    "away_xg_for": away_stats["xg_for"],
+                    "away_xg_against": away_stats["xg_against"],
+                    "away_xpts": away_stats["xpts"],
+                    "away_shots": away_stats["shots"],
+                    "away_shots_on_target": away_stats["shots_on_target"],
+                    "away_finishing_delta": away_stats["finishing_delta"],
+                    "away_defensive_delta": away_stats["defensive_delta"],
+                    "away_form_score": away_stats["form_score"],
+                    "xg_diff": home_stats["xg_for"] - away_stats["xg_for"],
+                    "xga_diff": away_stats["xg_against"] - home_stats["xg_against"],
+                    "xpts_diff": home_stats["xpts"] - away_stats["xpts"],
+                    "shots_diff": home_stats["shots"] - away_stats["shots"],
+                    "shots_on_target_diff": (
+                        home_stats["shots_on_target"] - away_stats["shots_on_target"]
+                    ),
+                    "form_score_diff": home_stats["form_score"] - away_stats["form_score"],
+                    "fusion_status": "ok",
                 }
             )
 
-        degraded = bool(current.get("record_count", 0) == 0)
-
-        return {
-            "has_baseline": True,
-            "degraded": degraded,
-            "details": details,
-        }
+        return fused_rows
 EOF
 
-CREA_FILE quant/guard/quant_guard_runner.py
+CREA_FILE quant/fusion/live_fusion_provider.py
 from __future__ import annotations
 
-from quant.guard.quant_guard import QuantEngineGuard
-from quant.guard.quant_guard_baseline import QuantGuardBaseline
-from quant.guard.quant_guard_reporter import QuantGuardReporter
-from quant.guard.quant_snapshot import QuantSnapshotManager
-from quant.services.quant_job_runner import QuantJobRunner
+from quant.fusion.live_fusion_layer import LiveFusionLayer
 
 
-class QuantGuardRunner:
+class LiveFusionProvider:
 
-    def __init__(self):
-        self.runner = QuantJobRunner()
-        self.guard = QuantEngineGuard()
-        self.snapshot = QuantSnapshotManager()
-        self.reporter = QuantGuardReporter()
-        self.baseline = QuantGuardBaseline()
+    def __init__(self, fixtures_provider, odds_provider, understat_provider):
+        self.fixtures_provider = fixtures_provider
+        self.odds_provider = odds_provider
+        self.understat_provider = understat_provider
+        self.fusion = LiveFusionLayer()
 
-    def run(self) -> dict:
-        records = self.runner.run_cycle()
+    def build_fused_fixtures(self, league=None, season=None) -> list[dict]:
+        fixtures = self.fixtures_provider.get_upcoming_matches(
+            league=league,
+            season=season,
+        )
 
-        result = self.guard.validate_records(records)
-        snapshot_path = self.snapshot.save(result.summary)
+        fixture_ids = [str(item.get("fixture_id", "")) for item in fixtures]
 
-        baseline_before = self.baseline.load()
-        baseline_compare = self.baseline.compare(result.summary, baseline_before)
+        odds_map = self.odds_provider.get_prematch_odds(fixture_ids)
+        understat_stats = self.understat_provider.get_team_advanced_stats(
+            league=league,
+            season=season,
+        )
 
-        if baseline_before is None:
-            baseline_path = self.baseline.save(result.summary)
-        else:
-            baseline_path = self.baseline.path
-
-        payload = {
-            "passed": result.passed,
-            "checks": result.checks,
-            "summary": result.summary,
-            "baseline": baseline_compare,
-        }
-
-        report_paths = self.reporter.save_bundle(payload)
-
-        return {
-            "passed": result.passed,
-            "checks": result.checks,
-            "summary": result.summary,
-            "baseline": baseline_compare,
-            "report_path": report_paths["json"],
-            "report_markdown_path": report_paths["markdown"],
-            "report_html_path": report_paths["html"],
-            "snapshot_path": snapshot_path,
-            "baseline_path": baseline_path,
-        }
+        return self.fusion.fuse(
+            fixtures=fixtures,
+            odds_map=odds_map,
+            understat_stats=understat_stats,
+        )
 EOF
 
-CREA_FILE tests/test_quant_guard_reporter.py
+CREA_FILE quant/fusion/live_fusion_exporter.py
+from __future__ import annotations
+
+import json
 import os
 
-from quant.guard.quant_guard_reporter import QuantGuardReporter
+
+class LiveFusionExporter:
+
+    def __init__(self, output_dir: str = "outputs/fusion"):
+        self.output_dir = output_dir
+        os.makedirs(self.output_dir, exist_ok=True)
+
+    def save_json(self, fused_rows: list[dict], filename: str = "live_fusion_snapshot.json") -> str:
+        path = os.path.join(self.output_dir, filename)
+
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(fused_rows, handle, indent=2)
+
+        return path
+EOF
+
+CREA_FILE quant/fusion/live_fusion_runner.py
+from __future__ import annotations
+
+from quant.fusion.live_fusion_exporter import LiveFusionExporter
+from quant.fusion.live_fusion_provider import LiveFusionProvider
+from quant.providers.sample_clients import SampleAPIFootballClient
+from quant.providers.sample_clients import SampleUnderstatClient
 
 
-def test_quant_guard_reporter_saves_bundle(tmp_path):
-    reporter = QuantGuardReporter(str(tmp_path))
+class LiveFusionRunner:
 
-    payload = {
-        "passed": True,
-        "checks": [{"name": "records_not_empty", "passed": True, "value": 3}],
-        "summary": {"record_count": 3, "bet_count": 1},
+    def __init__(self, fixtures_provider=None, odds_provider=None, understat_provider=None):
+        fixtures_provider = fixtures_provider or SampleAPIFootballClient()
+        odds_provider = odds_provider or SampleAPIFootballClient()
+        understat_provider = understat_provider or SampleUnderstatClient()
+
+        self.provider = LiveFusionProvider(
+            fixtures_provider=fixtures_provider,
+            odds_provider=odds_provider,
+            understat_provider=understat_provider,
+        )
+        self.exporter = LiveFusionExporter()
+
+    def run(self, league="Serie A", season=2024) -> dict:
+        fused_rows = self.provider.build_fused_fixtures(
+            league=league,
+            season=season,
+        )
+        export_path = self.exporter.save_json(fused_rows)
+
+        return {
+            "rows": fused_rows,
+            "count": len(fused_rows),
+            "export_path": export_path,
+        }
+EOF
+
+CREA_FILE tests/test_team_name_normalizer.py
+from quant.fusion.team_name_normalizer import TeamNameNormalizer
+
+
+def test_team_name_normalizer_maps_aliases():
+    normalizer = TeamNameNormalizer()
+
+    assert normalizer.normalize("Inter Milan") == "inter"
+    assert normalizer.normalize("AC Milan") == "milan"
+EOF
+
+CREA_FILE tests/test_team_mapper.py
+from quant.fusion.team_mapper import TeamMapper
+
+
+def test_team_mapper_returns_mapped_name():
+    mapper = TeamMapper()
+
+    assert mapper.map_name("Inter Milan") == "inter"
+    assert mapper.map_name("Juve") == "juventus"
+EOF
+
+CREA_FILE tests/test_live_fusion_layer.py
+from quant.fusion.live_fusion_layer import LiveFusionLayer
+
+
+def test_live_fusion_layer_merges_sources():
+    layer = LiveFusionLayer()
+
+    fixtures = [
+        {
+            "fixture_id": "u1",
+            "home_team": "Inter Milan",
+            "away_team": "Roma",
+        }
+    ]
+
+    odds_map = {
+        "u1": {
+            "home": 1.90,
+            "draw": 3.40,
+            "away": 4.20,
+        }
     }
 
-    paths = reporter.save_bundle(payload)
+    understat_stats = {
+        "Inter": {
+            "xg_for": 1.85,
+            "xg_against": 0.90,
+            "xpts": 2.10,
+            "shots": 14.0,
+            "shots_on_target": 5.3,
+            "finishing_delta": 0.10,
+            "defensive_delta": 0.05,
+            "form_score": 0.80,
+        },
+        "Roma": {
+            "xg_for": 1.30,
+            "xg_against": 1.20,
+            "xpts": 1.50,
+            "shots": 11.0,
+            "shots_on_target": 4.1,
+            "finishing_delta": 0.03,
+            "defensive_delta": -0.02,
+            "form_score": 0.55,
+        },
+    }
 
-    assert os.path.exists(paths["json"])
-    assert os.path.exists(paths["markdown"])
-    assert os.path.exists(paths["html"])
+    fused = layer.fuse(fixtures, odds_map, understat_stats)
+
+    assert isinstance(fused, list)
+    assert len(fused) == 1
+    assert fused[0]["fixture_id"] == "u1"
+    assert fused[0]["home_team_key"] == "inter"
+    assert fused[0]["bookmaker_odds_home"] == 1.90
 EOF
 
-CREA_FILE tests/test_quant_guard_baseline.py
-from quant.guard.quant_guard_baseline import QuantGuardBaseline
+CREA_FILE tests/test_live_fusion_provider.py
+from quant.fusion.live_fusion_provider import LiveFusionProvider
+from quant.providers.sample_clients import SampleAPIFootballClient
+from quant.providers.sample_clients import SampleUnderstatClient
 
 
-def test_quant_guard_baseline_compare_without_existing_file(tmp_path):
-    baseline = QuantGuardBaseline(str(tmp_path / "baseline.json"))
+def test_live_fusion_provider_builds_rows():
+    provider = LiveFusionProvider(
+        fixtures_provider=SampleAPIFootballClient(),
+        odds_provider=SampleAPIFootballClient(),
+        understat_provider=SampleUnderstatClient(),
+    )
 
-    result = baseline.compare({"record_count": 3}, None)
+    rows = provider.build_fused_fixtures(league="Serie A", season=2024)
 
-    assert result["has_baseline"] is False
-    assert result["degraded"] is False
+    assert isinstance(rows, list)
+    assert len(rows) > 0
+    assert "fixture_id" in rows[0]
+    assert "xg_diff" in rows[0]
 EOF
 
-CREA_FILE tests/test_quant_guard_runner_reporting.py
-from quant.guard.quant_guard_runner import QuantGuardRunner
+CREA_FILE tests/test_live_fusion_runner.py
+from quant.fusion.live_fusion_runner import LiveFusionRunner
 
 
-def test_quant_guard_runner_reporting_fields():
-    result = QuantGuardRunner().run()
+def test_live_fusion_runner_runs():
+    result = LiveFusionRunner().run()
 
-    assert "report_markdown_path" in result
-    assert "report_html_path" in result
-    assert "baseline" in result
+    assert isinstance(result, dict)
+    assert "rows" in result
+    assert "count" in result
+    assert "export_path" in result
+    assert result["count"] > 0
+EOF
+
+CREA_FILE app/live_fusion.py
+from quant.fusion.live_fusion_runner import LiveFusionRunner
+
+
+class AppLiveFusion:
+
+    def __init__(self):
+        self.runner = LiveFusionRunner()
+
+    def run(self):
+        return self.runner.run()
+EOF
+
+CREA_FILE tests/test_app_live_fusion.py
+from app.live_fusion import AppLiveFusion
+
+
+def test_app_live_fusion_runs():
+    result = AppLiveFusion().run()
+
+    assert isinstance(result, dict)
+    assert "rows" in result
+    assert result["count"] > 0
 EOF
 
 FIX_WHITESPACE
-

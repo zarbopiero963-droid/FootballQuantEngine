@@ -1,0 +1,51 @@
+{
+  "passed": false,
+  "guard": {
+    "passed": false,
+    "checks": [
+      {
+        "name": "rows_minimum",
+        "passed": false,
+        "value": 0
+      },
+      {
+        "name": "bet_count_minimum",
+        "passed": true,
+        "value": 0
+      },
+      {
+        "name": "roi_threshold",
+        "passed": true,
+        "value": 0.0
+      },
+      {
+        "name": "yield_threshold",
+        "passed": true,
+        "value": 0.0
+      },
+      {
+        "name": "hit_rate_threshold",
+        "passed": true,
+        "value": 0.0
+      },
+      {
+        "name": "avg_ev_threshold",
+        "passed": true,
+        "value": 0.0
+      }
+    ],
+    "metrics": {
+      "rows": 0,
+      "bet_count": 0,
+      "total_stake": 0.0,
+      "total_pnl": 0.0,
+      "roi": 0.0,
+      "yield": 0.0,
+      "hit_rate": 0.0,
+      "avg_ev": 0.0,
+      "avg_clv_abs": 0.0,
+      "avg_clv_pct": 0.0
+    }
+  },
+  "windows": []
+}

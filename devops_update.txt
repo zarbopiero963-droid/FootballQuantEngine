@@ -707,3 +707,4 @@ def test_app_temporal_guard_controller_runs():
 EOF
 
 FIX_WHITESPACE
+

@@ -1469,3 +1469,28 @@ Running isort
 Running ruff
 Running pytest
 Tests PASSED
+Starting backup backups/backup_2026-03-08_12-16-49.zip
+Backup created backups/backup_2026-03-08_12-16-49.zip
+[WARN] Unknown command: TEMPORAL BACKTEST GUARD 1
+[CREATE] folder quant/temporal
+[CREATE] folder outputs/temporal
+[CREATE] file quant/temporal/time_splitter.py
+[CREATE] file quant/temporal/temporal_metrics.py
+[CREATE] file quant/temporal/temporal_guard.py
+[CREATE] file quant/temporal/temporal_reporter.py
+[CREATE] file quant/temporal/temporal_backtest_guard.py
+[CREATE] file quant/temporal/temporal_guard_runner.py
+[CREATE] file app/temporal_guard_controller.py
+[CREATE] file tests/test_time_splitter.py
+[CREATE] file tests/test_temporal_metrics.py
+[CREATE] file tests/test_temporal_guard.py
+[CREATE] file tests/test_temporal_backtest_guard.py
+[CREATE] file tests/test_temporal_guard_runner.py
+[CREATE] file tests/test_app_temporal_guard_controller.py
+Whitespace fixed
+Whitespace fixed
+Running Black
+Running isort
+Running ruff
+Running pytest
+Tests PASSED

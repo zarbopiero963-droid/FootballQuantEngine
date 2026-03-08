@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Temporal Backtest Guard</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 24px; }
+table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+th, td { border: 1px solid #ccc; padding: 8px; }
+th { background: #f4f4f4; }
+</style>
+</head>
+<body>
+<h1>Temporal Backtest Guard</h1>
+
+<h2>Aggregate Metrics</h2>
+<table>
+<tr><th>Metric</th><th>Value</th></tr>
+<tr><td>rows</td><td>0</td></tr><tr><td>bet_count</td><td>0</td></tr><tr><td>total_stake</td><td>0.0</td></tr><tr><td>total_pnl</td><td>0.0</td></tr><tr><td>roi</td><td>0.0</td></tr><tr><td>yield</td><td>0.0</td></tr><tr><td>hit_rate</td><td>0.0</td></tr><tr><td>avg_ev</td><td>0.0</td></tr><tr><td>avg_clv_abs</td><td>0.0</td></tr><tr><td>avg_clv_pct</td><td>0.0</td></tr>
+</table>
+
+<h2>Guard Checks</h2>
+<table>
+<tr><th>Check</th><th>Passed</th><th>Value</th></tr>
+<tr><td>rows_minimum</td><td>False</td><td>0</td></tr><tr><td>bet_count_minimum</td><td>True</td><td>0</td></tr><tr><td>roi_threshold</td><td>True</td><td>0.0</td></tr><tr><td>yield_threshold</td><td>True</td><td>0.0</td></tr><tr><td>hit_rate_threshold</td><td>True</td><td>0.0</td></tr><tr><td>avg_ev_threshold</td><td>True</td><td>0.0</td></tr>
+</table>
+
+<h2>Rolling Windows</h2>
+<table>
+<tr>
+<th>Window</th>
+<th>Train Start</th>
+<th>Train End</th>
+<th>Test Start</th>
+<th>Test End</th>
+<th>Bet Count</th>
+<th>ROI</th>
+<th>Yield</th>
+<th>Hit Rate</th>
+<th>Avg EV</th>
+<th>Avg CLV Abs</th>
+</tr>
+
+</table>
+</body>
+</html>

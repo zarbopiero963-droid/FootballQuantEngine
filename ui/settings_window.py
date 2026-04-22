@@ -25,6 +25,8 @@ class SettingsWindow(QWidget):
         self.league_id_input.setPlaceholderText("e.g. 135 = Serie A, 39 = Premier League")
         self.season_input = QLineEdit()
         self.season_input.setPlaceholderText("e.g. 2024")
+        self.openweather_input = QLineEdit()
+        self.openweather_input.setPlaceholderText("Optional — openweathermap.org free key")
 
         self.save_button = QPushButton("Save")
         self.save_button.clicked.connect(self.save)
@@ -35,6 +37,7 @@ class SettingsWindow(QWidget):
         form.addRow("Telegram Chat ID", self.telegram_chat_id_input)
         form.addRow("League ID (numeric)", self.league_id_input)
         form.addRow("Season", self.season_input)
+        form.addRow("OpenWeather API Key", self.openweather_input)
 
         layout = QVBoxLayout()
         layout.addLayout(form)
@@ -53,6 +56,7 @@ class SettingsWindow(QWidget):
         self.telegram_chat_id_input.setText(settings.telegram_chat_id)
         self.league_id_input.setText(str(settings.league_id))
         self.season_input.setText(str(settings.season))
+        self.openweather_input.setText(settings.openweather_key)
 
     def save(self):
 
@@ -60,6 +64,7 @@ class SettingsWindow(QWidget):
         settings.api_football_key = self.api_football_input.text().strip()
         settings.telegram_token = self.telegram_token_input.text().strip()
         settings.telegram_chat_id = self.telegram_chat_id_input.text().strip()
+        settings.openweather_key = self.openweather_input.text().strip()
 
         try:
             settings.league_id = int(self.league_id_input.text().strip() or 135)

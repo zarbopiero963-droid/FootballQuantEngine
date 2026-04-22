@@ -13,6 +13,7 @@ class Settings:
         self.telegram_chat_id = ""
         self.league_id = 135  # API-Football numeric ID (default: Serie A)
         self.season = 2024
+        self.openweather_key = ""  # OpenWeatherMap API key (free tier)
 
 
 def load_settings():
@@ -38,6 +39,9 @@ def load_settings():
     )
     s.league_id = int(data.get("league_id", 135))
     s.season = int(data.get("season", 2024))
+    s.openweather_key = (
+        os.getenv("OPENWEATHER_KEY") or data.get("openweather_key", "")
+    )
 
     return s
 
@@ -50,6 +54,7 @@ def save_settings(settings):
         "telegram_chat_id": settings.telegram_chat_id,
         "league_id": settings.league_id,
         "season": settings.season,
+        "openweather_key": settings.openweather_key,
     }
 
     with open(SETTINGS_FILE, "w") as f:

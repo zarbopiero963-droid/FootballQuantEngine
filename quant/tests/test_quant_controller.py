@@ -5,7 +5,7 @@ from quant.services.quant_controller import QuantController
 def test_quant_controller_returns_records():
     controller = QuantController(api_client=SampleAPIFootballClient())
 
-    records = controller.run(league="Serie A", season=2024)
+    records = controller.run(league=135, season=2024)
 
     assert isinstance(records, list)
     assert len(records) > 0

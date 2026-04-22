@@ -60,6 +60,32 @@ class APIFootballClient:
 
         return fixtures
 
+    def get_upcoming_matches(self, league, season):
+        data = self._get(
+            "/fixtures",
+            {
+                "league": league,
+                "season": season,
+                "status": "NS",
+            },
+        )
+
+        upcoming = []
+
+        for item in data:
+            upcoming.append(
+                {
+                    "fixture_id": str(item["fixture"]["id"]),
+                    "home_team": item["teams"]["home"]["name"],
+                    "away_team": item["teams"]["away"]["name"],
+                }
+            )
+
+        return upcoming
+
+    def get_prematch_odds(self, fixture_ids):
+        return self.get_odds(fixture_ids)
+
     def get_completed_matches(self, league, season):
         data = self._get(
             "/fixtures",

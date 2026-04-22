@@ -1,7 +1,4 @@
-from quant.providers.sample_clients import (
-    SampleAPIFootballClient,
-    SampleUnderstatClient,
-)
+from quant.providers.sample_clients import SampleAPIFootballClient
 from quant.services.quant_engine import QuantEngine
 
 
@@ -9,7 +6,6 @@ def test_quant_engine_predicts():
     engine = QuantEngine(
         fixtures_provider=SampleAPIFootballClient(),
         odds_provider=SampleAPIFootballClient(),
-        advanced_provider=SampleUnderstatClient(),
     )
 
     engine.fit(league="Serie A", season=2024)

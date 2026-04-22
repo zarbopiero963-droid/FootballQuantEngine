@@ -1,15 +1,9 @@
-from quant.providers.sample_clients import (
-    SampleAPIFootballClient,
-    SampleUnderstatClient,
-)
+from quant.providers.sample_clients import SampleAPIFootballClient
 from quant.services.quant_controller import QuantController
 
 
 def test_quant_controller_returns_records():
-    controller = QuantController(
-        api_client=SampleAPIFootballClient(),
-        understat_client=SampleUnderstatClient(),
-    )
+    controller = QuantController(api_client=SampleAPIFootballClient())
 
     records = controller.run(league="Serie A", season=2024)
 

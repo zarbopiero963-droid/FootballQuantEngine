@@ -9,7 +9,6 @@ class Settings:
     def __init__(self):
 
         self.api_football_key = ""
-        self.odds_api_key = ""
         self.telegram_token = ""
         self.telegram_chat_id = ""
         self.league_id = 135  # API-Football numeric ID (default: Serie A)
@@ -31,9 +30,6 @@ def load_settings():
     s.api_football_key = (
         os.getenv("API_FOOTBALL_KEY") or data.get("api_football_key", "")
     )
-    s.odds_api_key = (
-        os.getenv("ODDS_API_KEY") or data.get("odds_api_key", "")
-    )
     s.telegram_token = (
         os.getenv("TELEGRAM_TOKEN") or data.get("telegram_token", "")
     )
@@ -50,7 +46,6 @@ def save_settings(settings):
 
     data = {
         "api_football_key": settings.api_football_key,
-        "odds_api_key": settings.odds_api_key,
         "telegram_token": settings.telegram_token,
         "telegram_chat_id": settings.telegram_chat_id,
         "league_id": settings.league_id,

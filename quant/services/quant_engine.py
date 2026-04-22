@@ -15,11 +15,10 @@ from quant.services.ranker import QuantRanker
 
 class QuantEngine:
 
-    def __init__(self, fixtures_provider, odds_provider, advanced_provider):
+    def __init__(self, fixtures_provider, odds_provider):
         self.dataset_builder = QuantDatasetBuilder(
             fixtures_provider=fixtures_provider,
             odds_provider=odds_provider,
-            advanced_provider=advanced_provider,
         )
         self.elo_engine = EloEngine()
         self.poisson_engine = PoissonEngine()

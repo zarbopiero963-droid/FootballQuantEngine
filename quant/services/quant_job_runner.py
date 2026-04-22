@@ -1,9 +1,6 @@
 from config.settings_manager import load_settings
 from quant.providers.api_football_client import APIFootballClient
-from quant.providers.sample_clients import (
-    SampleAPIFootballClient,
-    SampleUnderstatClient,
-)
+from quant.providers.sample_clients import SampleAPIFootballClient
 from quant.services.quant_controller import QuantController
 
 
@@ -17,11 +14,7 @@ class QuantJobRunner:
         else:
             api_client = SampleAPIFootballClient()
 
-        self.controller = QuantController(
-            api_client=api_client,
-            understat_client=SampleUnderstatClient(),
-        )
-
+        self.controller = QuantController(api_client=api_client)
         self._settings = settings
 
     def run_cycle(self, league=None, season=None):

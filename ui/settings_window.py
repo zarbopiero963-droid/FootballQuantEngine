@@ -19,7 +19,6 @@ class SettingsWindow(QWidget):
         self.setWindowTitle("Settings")
 
         self.api_football_input = QLineEdit()
-        self.odds_api_input = QLineEdit()
         self.telegram_token_input = QLineEdit()
         self.telegram_chat_id_input = QLineEdit()
         self.league_id_input = QLineEdit()
@@ -32,7 +31,6 @@ class SettingsWindow(QWidget):
 
         form = QFormLayout()
         form.addRow("API-Football Key", self.api_football_input)
-        form.addRow("Odds API Key", self.odds_api_input)
         form.addRow("Telegram Token", self.telegram_token_input)
         form.addRow("Telegram Chat ID", self.telegram_chat_id_input)
         form.addRow("League ID (numeric)", self.league_id_input)
@@ -51,7 +49,6 @@ class SettingsWindow(QWidget):
         settings = load_settings()
 
         self.api_football_input.setText(settings.api_football_key)
-        self.odds_api_input.setText(settings.odds_api_key)
         self.telegram_token_input.setText(settings.telegram_token)
         self.telegram_chat_id_input.setText(settings.telegram_chat_id)
         self.league_id_input.setText(str(settings.league_id))
@@ -61,7 +58,6 @@ class SettingsWindow(QWidget):
 
         settings = Settings()
         settings.api_football_key = self.api_football_input.text().strip()
-        settings.odds_api_key = self.odds_api_input.text().strip()
         settings.telegram_token = self.telegram_token_input.text().strip()
         settings.telegram_chat_id = self.telegram_chat_id_input.text().strip()
 

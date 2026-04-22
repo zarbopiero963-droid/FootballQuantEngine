@@ -24,20 +24,25 @@ class CsvImporter:
 
         imported = 0
 
-        for _, row in df.iterrows():
-            self.fixtures_repo.save_fixture(
-                {
-                    "fixture_id": int(row["fixture_id"]),
-                    "league": row["league"],
-                    "season": int(row["season"]),
-                    "home": row["home"],
-                    "away": row["away"],
-                    "match_date": row["match_date"],
-                    "home_goals": int(row["home_goals"]),
-                    "away_goals": int(row["away_goals"]),
-                    "status": row["status"],
-                }
-            )
+        for row_idx, row in df.iterrows():
+            try:
+                self.fixtures_repo.save_fixture(
+                    {
+                        "fixture_id": int(row["fixture_id"]),
+                        "league": row["league"],
+                        "season": int(row["season"]),
+                        "home": row["home"],
+                        "away": row["away"],
+                        "match_date": row["match_date"],
+                        "home_goals": int(row["home_goals"]),
+                        "away_goals": int(row["away_goals"]),
+                        "status": row["status"],
+                    }
+                )
+            except (ValueError, TypeError) as exc:
+                raise ValueError(
+                    f"Invalid data at row {row_idx + 1}: {exc}"
+                ) from exc
             imported += 1
 
         return {
@@ -59,13 +64,25 @@ class CsvImporter:
 
         imported = 0
 
-        for _, row in df.iterrows():
-            self.odds_repo.save_odds(
-                fixture_id=int(row["fixture_id"]),
-                home_odds=float(row["home_odds"]),
-                draw_odds=float(row["draw_odds"]),
-                away_odds=float(row["away_odds"]),
-            )
+        for row_idx, row in df.iterrows():
+            try:
+                home_odds = float(row["home_odds"])
+                draw_odds = float(row["draw_odds"])
+                away_odds = float(row["away_odds"])
+                if home_odds <= 1.0 or draw_odds <= 1.0 or away_odds <= 1.0:
+                    raise ValueError(
+                        f"Odds must be > 1.0 (got home={home_odds}, draw={draw_odds}, away={away_odds})"
+                    )
+                self.odds_repo.save_odds(
+                    fixture_id=int(row["fixture_id"]),
+                    home_odds=home_odds,
+                    draw_odds=draw_odds,
+                    away_odds=away_odds,
+                )
+            except (ValueError, TypeError) as exc:
+                raise ValueError(
+                    f"Invalid odds data at row {row_idx + 1}: {exc}"
+                ) from exc
             imported += 1
 
         return {

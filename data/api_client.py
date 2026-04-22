@@ -22,10 +22,12 @@ class ApiClient:
 
         url = f"{self.base_url}/{endpoint}"
 
-        response = requests.get(url, params=params, headers=headers)
+        response = requests.get(url, params=params, headers=headers, timeout=30)
 
         if response.status_code != 200:
             logger.error(f"API error {response.status_code}: {response.text}")
-            raise Exception("API request failed")
+            raise RuntimeError(
+                f"API request failed with status {response.status_code}"
+            )
 
         return response.json()

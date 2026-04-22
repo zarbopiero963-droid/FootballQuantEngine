@@ -16,18 +16,28 @@ class Settings:
 
 def load_settings():
 
-    if not os.path.exists(SETTINGS_FILE):
-        return Settings()
+    data: dict = {}
 
-    with open(SETTINGS_FILE) as f:
-        data = json.load(f)
+    if os.path.exists(SETTINGS_FILE):
+        with open(SETTINGS_FILE) as f:
+            data = json.load(f)
 
     s = Settings()
 
-    s.api_football_key = data.get("api_football_key", "")
-    s.odds_api_key = data.get("odds_api_key", "")
-    s.telegram_token = data.get("telegram_token", "")
-    s.telegram_chat_id = data.get("telegram_chat_id", "")
+    # Env vars take precedence over the settings file so secrets don't have
+    # to be stored on disk (set API_FOOTBALL_KEY, ODDS_API_KEY, etc.).
+    s.api_football_key = (
+        os.getenv("API_FOOTBALL_KEY") or data.get("api_football_key", "")
+    )
+    s.odds_api_key = (
+        os.getenv("ODDS_API_KEY") or data.get("odds_api_key", "")
+    )
+    s.telegram_token = (
+        os.getenv("TELEGRAM_TOKEN") or data.get("telegram_token", "")
+    )
+    s.telegram_chat_id = (
+        os.getenv("TELEGRAM_CHAT_ID") or data.get("telegram_chat_id", "")
+    )
 
     return s
 

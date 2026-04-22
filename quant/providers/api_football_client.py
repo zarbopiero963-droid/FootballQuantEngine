@@ -135,7 +135,11 @@ class APIFootballClient:
                 if odds:
                     odds_map[str(fixture_id)] = odds
 
-            except Exception:
+            except (KeyError, IndexError, ValueError, TypeError) as exc:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "Failed to parse odds for fixture %s: %s", fixture_id, exc
+                )
                 continue
 
         return odds_map

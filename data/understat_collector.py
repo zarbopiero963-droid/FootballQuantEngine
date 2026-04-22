@@ -7,18 +7,24 @@ import requests
 class UnderstatCollector:
 
     BASE_URL = "https://understat.com"
+    _TEAMS_PATTERN = re.compile(r"teamsData\s+=\s+JSON.parse\('(.*)'\)")
+    _MATCHES_PATTERN = re.compile(r"matchesData\s+=\s+JSON.parse\('(.*)'\)")
+    _REQUEST_TIMEOUT = 30
 
     def get_league_data(self, league):
 
         url = f"{self.BASE_URL}/league/{league}"
 
-        response = requests.get(url)
+        response = requests.get(url, timeout=self._REQUEST_TIMEOUT)
+        response.raise_for_status()
 
-        pattern = re.compile(r"teamsData\s+=\s+JSON.parse\('(.*)'\)")
+        match = self._TEAMS_PATTERN.search(response.text)
+        if match is None:
+            raise ValueError(
+                f"Could not find teamsData in Understat response for league '{league}'"
+            )
 
-        data = pattern.search(response.text).group(1)
-
-        decoded = json.loads(data.encode("utf-8").decode("unicode_escape"))
+        decoded = json.loads(match.group(1).encode("utf-8").decode("unicode_escape"))
 
         return decoded
 
@@ -26,12 +32,15 @@ class UnderstatCollector:
 
         url = f"{self.BASE_URL}/team/{team}/{season}"
 
-        response = requests.get(url)
+        response = requests.get(url, timeout=self._REQUEST_TIMEOUT)
+        response.raise_for_status()
 
-        pattern = re.compile(r"matchesData\s+=\s+JSON.parse\('(.*)'\)")
+        match = self._MATCHES_PATTERN.search(response.text)
+        if match is None:
+            raise ValueError(
+                f"Could not find matchesData in Understat response for team '{team}' season '{season}'"
+            )
 
-        data = pattern.search(response.text).group(1)
-
-        decoded = json.loads(data.encode("utf-8").decode("unicode_escape"))
+        decoded = json.loads(match.group(1).encode("utf-8").decode("unicode_escape"))
 
         return decoded

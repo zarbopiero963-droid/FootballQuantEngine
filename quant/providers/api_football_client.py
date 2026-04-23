@@ -10,7 +10,6 @@ _log = logging.getLogger(__name__)
 
 
 class APIFootballClient:
-
     def __init__(self, api_key: str | None = None):
         self.api_key = api_key or os.getenv("API_FOOTBALL_KEY")
         if not self.api_key:
@@ -142,7 +141,9 @@ class APIFootballClient:
                 result: dict = {}
                 for team_block in data:
                     team_name = team_block["team"]["name"]
-                    raw = {s["type"]: s["value"] for s in team_block.get("statistics", [])}
+                    raw = {
+                        s["type"]: s["value"] for s in team_block.get("statistics", [])
+                    }
                     result[team_name] = {
                         "shots": float(raw.get("Total Shots") or 0),
                         "shots_on_target": float(raw.get("Shots on Goal") or 0),
@@ -150,7 +151,9 @@ class APIFootballClient:
                     }
                 stats_map[str(fixture_id)] = result
             except (KeyError, IndexError, TypeError, ValueError) as exc:
-                _log.warning("Failed to parse stats for fixture %s: %s", fixture_id, exc)
+                _log.warning(
+                    "Failed to parse stats for fixture %s: %s", fixture_id, exc
+                )
         return stats_map
 
     def get_team_xg_averages(self, league, season) -> dict[str, dict]:
@@ -279,9 +282,7 @@ class APIFootballClient:
         for ref, acc in ref_acc.items():
             n = max(acc["n"], 1)
             total_cards = acc["home_cards"] + acc["away_cards"]
-            home_bias = (
-                (acc["home_cards"] - acc["away_cards"]) / n if n else 0.0
-            )
+            home_bias = (acc["home_cards"] - acc["away_cards"]) / n if n else 0.0
             stats[ref] = {
                 "home_bias": round(home_bias, 3),
                 "strictness": round(total_cards / n, 2),

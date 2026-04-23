@@ -1,5 +1,4 @@
 class QuantDatasetBuilder:
-
     def __init__(self, fixtures_provider, odds_provider):
         self.fixtures_provider = fixtures_provider
         self.odds_provider = odds_provider
@@ -26,9 +25,10 @@ class QuantDatasetBuilder:
         standings = []
         if hasattr(self.fixtures_provider, "get_standings"):
             try:
-                standings = self.fixtures_provider.get_standings(
-                    league=league, season=season
-                ) or []
+                standings = (
+                    self.fixtures_provider.get_standings(league=league, season=season)
+                    or []
+                )
             except Exception:
                 pass
 
@@ -36,9 +36,7 @@ class QuantDatasetBuilder:
         if hasattr(self.fixtures_provider, "get_injuries"):
             try:
                 injuries = (
-                    self.fixtures_provider.get_injuries(
-                        league=league, season=season
-                    )
+                    self.fixtures_provider.get_injuries(league=league, season=season)
                     or {}
                 )
             except Exception:

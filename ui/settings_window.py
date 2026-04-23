@@ -11,7 +11,6 @@ from config.settings_manager import Settings, load_settings, save_settings
 
 
 class SettingsWindow(QWidget):
-
     def __init__(self):
 
         super().__init__()
@@ -22,11 +21,15 @@ class SettingsWindow(QWidget):
         self.telegram_token_input = QLineEdit()
         self.telegram_chat_id_input = QLineEdit()
         self.league_id_input = QLineEdit()
-        self.league_id_input.setPlaceholderText("e.g. 135 = Serie A, 39 = Premier League")
+        self.league_id_input.setPlaceholderText(
+            "e.g. 135 = Serie A, 39 = Premier League"
+        )
         self.season_input = QLineEdit()
         self.season_input.setPlaceholderText("e.g. 2024")
         self.openweather_input = QLineEdit()
-        self.openweather_input.setPlaceholderText("Optional — openweathermap.org free key")
+        self.openweather_input.setPlaceholderText(
+            "Optional — openweathermap.org free key"
+        )
 
         self.save_button = QPushButton("Save")
         self.save_button.clicked.connect(self.save)
@@ -70,7 +73,9 @@ class SettingsWindow(QWidget):
             settings.league_id = int(self.league_id_input.text().strip() or 135)
             settings.season = int(self.season_input.text().strip() or 2024)
         except ValueError:
-            QMessageBox.warning(self, "Settings", "League ID and Season must be integers.")
+            QMessageBox.warning(
+                self, "Settings", "League ID and Season must be integers."
+            )
             return
 
         save_settings(settings)

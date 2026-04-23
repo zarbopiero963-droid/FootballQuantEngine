@@ -5,7 +5,6 @@ SETTINGS_FILE = "settings.json"
 
 
 class Settings:
-
     def __init__(self):
 
         self.api_football_key = ""
@@ -28,20 +27,16 @@ def load_settings():
 
     # Env vars take precedence over the settings file so secrets don't have
     # to be stored on disk (set API_FOOTBALL_KEY, ODDS_API_KEY, etc.).
-    s.api_football_key = (
-        os.getenv("API_FOOTBALL_KEY") or data.get("api_football_key", "")
+    s.api_football_key = os.getenv("API_FOOTBALL_KEY") or data.get(
+        "api_football_key", ""
     )
-    s.telegram_token = (
-        os.getenv("TELEGRAM_TOKEN") or data.get("telegram_token", "")
-    )
-    s.telegram_chat_id = (
-        os.getenv("TELEGRAM_CHAT_ID") or data.get("telegram_chat_id", "")
+    s.telegram_token = os.getenv("TELEGRAM_TOKEN") or data.get("telegram_token", "")
+    s.telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID") or data.get(
+        "telegram_chat_id", ""
     )
     s.league_id = int(data.get("league_id", 135))
     s.season = int(data.get("season", 2024))
-    s.openweather_key = (
-        os.getenv("OPENWEATHER_KEY") or data.get("openweather_key", "")
-    )
+    s.openweather_key = os.getenv("OPENWEATHER_KEY") or data.get("openweather_key", "")
 
     return s
 

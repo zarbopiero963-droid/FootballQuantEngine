@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import requests
 
-
 _DEFAULT_WEATHER = {
     "temperature_c": 15.0,
     "wind_speed_ms": 3.0,
@@ -46,9 +45,7 @@ class WeatherClient:
             return {
                 "temperature_c": float(forecast["main"]["temp"]),
                 "wind_speed_ms": float(forecast["wind"]["speed"]),
-                "precipitation_mm": float(
-                    forecast.get("rain", {}).get("3h", 0.0)
-                ),
+                "precipitation_mm": float(forecast.get("rain", {}).get("3h", 0.0)),
                 "condition": self._classify(forecast),
             }
         except Exception:

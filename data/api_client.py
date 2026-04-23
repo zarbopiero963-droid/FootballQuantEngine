@@ -6,7 +6,6 @@ logger = get_logger()
 
 
 class ApiClient:
-
     def __init__(self, base_url, api_key=None):
 
         self.base_url = base_url
@@ -26,8 +25,6 @@ class ApiClient:
 
         if response.status_code != 200:
             logger.error(f"API error {response.status_code}: {response.text}")
-            raise RuntimeError(
-                f"API request failed with status {response.status_code}"
-            )
+            raise RuntimeError(f"API request failed with status {response.status_code}")
 
         return response.json()

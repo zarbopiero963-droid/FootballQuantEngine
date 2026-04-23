@@ -20,7 +20,6 @@ from quant.services.ranker import QuantRanker
 
 
 class QuantEngine:
-
     def __init__(self, fixtures_provider, odds_provider, weather_engine=None):
         self.dataset_builder = QuantDatasetBuilder(
             fixtures_provider=fixtures_provider,
@@ -82,9 +81,6 @@ class QuantEngine:
         )
 
     def _three_way_component_bundle(self, features, bookmaker_odds):
-        home_team = features["home_team"]
-        away_team = features["away_team"]
-
         dc_probs = features["dc_probs"]
         market_probs = self.market_tools.normalize_implied_probs_1x2(bookmaker_odds)
 
@@ -181,11 +177,17 @@ class QuantEngine:
                         "xg_diff": round(features.get("xg_diff", 0.0), 4),
                         "h2h_diff": round(features.get("h2h_diff", 0.0), 4),
                         "momentum_diff": round(features.get("momentum_diff", 0.0), 4),
-                        "motivation_diff": round(features.get("motivation_diff", 0.0), 4),
+                        "motivation_diff": round(
+                            features.get("motivation_diff", 0.0), 4
+                        ),
                         "rest_diff": round(features.get("rest_diff", 0.0), 4),
                         "injury_diff": round(features.get("injury_diff", 0.0), 4),
-                        "expected_goals_home": round(features["expected_goals_home"], 4),
-                        "expected_goals_away": round(features["expected_goals_away"], 4),
+                        "expected_goals_home": round(
+                            features["expected_goals_home"], 4
+                        ),
+                        "expected_goals_away": round(
+                            features["expected_goals_away"], 4
+                        ),
                         "dc_rho": round(self.dc_engine.rho, 4),
                         "referee": features.get("referee", ""),
                     },

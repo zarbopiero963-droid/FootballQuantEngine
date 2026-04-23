@@ -33,9 +33,7 @@ class RefereeEngine:
             return 1.0
         return float(self._stats.get(referee_name, {}).get("strictness", 1.0))
 
-    def get_lambda_modifiers(
-        self, referee_name: str | None
-    ) -> tuple[float, float]:
+    def get_lambda_modifiers(self, referee_name: str | None) -> tuple[float, float]:
         """
         Returns (home_modifier, away_modifier).
         A positive home_bias slightly boosts home expected goals.

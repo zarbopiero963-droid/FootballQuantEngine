@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from cache.cache_manager import load_cache, save_cache, TTL
+from cache.cache_manager import TTL, load_cache, save_cache
 
 
 class APIFootballProvider:
@@ -36,11 +36,23 @@ class APIFootballProvider:
 
     def get_completed_matches(self, league=None, season=None) -> list:
         key = f"completed_matches_{league}_{season}"
-        return self._cached(key, "get_completed_matches", league=league, season=season) or []
+        return (
+            self._cached(key, "get_completed_matches", league=league, season=season)
+            or []
+        )
 
     def get_upcoming_matches(self, league=None, season=None) -> list:
         key = f"upcoming_matches_{league}_{season}"
-        return self._cached(key, "get_upcoming_matches", TTL["upcoming_matches"], league=league, season=season) or []
+        return (
+            self._cached(
+                key,
+                "get_upcoming_matches",
+                TTL["upcoming_matches"],
+                league=league,
+                season=season,
+            )
+            or []
+        )
 
     def get_prematch_odds(self, fixture_ids) -> dict:
         key = f"odds_{'_'.join(str(i) for i in sorted(fixture_ids))}"
@@ -61,8 +73,13 @@ class APIFootballProvider:
 
     def get_referee_stats(self, league=None, season=None) -> dict:
         key = f"referee_stats_{league}_{season}"
-        return self._cached(key, "get_referee_stats", league=league, season=season) or {}
+        return (
+            self._cached(key, "get_referee_stats", league=league, season=season) or {}
+        )
 
     def get_team_xg_averages(self, league=None, season=None) -> dict:
         key = f"xg_averages_{league}_{season}"
-        return self._cached(key, "get_team_xg_averages", league=league, season=season) or {}
+        return (
+            self._cached(key, "get_team_xg_averages", league=league, season=season)
+            or {}
+        )

@@ -8,14 +8,14 @@ CACHE_DIR = "cache_data"
 
 # Default TTLs in seconds
 TTL = {
-    "fixture_statistics": 0,        # permanent — completed matches never change
+    "fixture_statistics": 0,  # permanent — completed matches never change
     "completed_matches": 6 * 3600,  # 6 hours
-    "standings": 24 * 3600,         # 24 hours
-    "injuries": 6 * 3600,           # 6 hours
-    "referee_stats": 24 * 3600,     # 24 hours
-    "xg_averages": 6 * 3600,        # 6 hours
-    "upcoming_matches": 3600,        # 1 hour
-    "odds": 10 * 60,                # 10 minutes
+    "standings": 24 * 3600,  # 24 hours
+    "injuries": 6 * 3600,  # 6 hours
+    "referee_stats": 24 * 3600,  # 24 hours
+    "xg_averages": 6 * 3600,  # 6 hours
+    "upcoming_matches": 3600,  # 1 hour
+    "odds": 10 * 60,  # 10 minutes
 }
 
 

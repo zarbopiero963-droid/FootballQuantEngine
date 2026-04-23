@@ -6,7 +6,6 @@ from quant.features.advanced_stats_features import AdvancedStatsFeatureBuilder
 
 
 class FeatureBuilder:
-
     def __init__(
         self,
         elo_engine,
@@ -85,9 +84,7 @@ class FeatureBuilder:
         elo_diff = self.elo_engine.get_elo_diff(home, away)
         form_diff = self.form_engine.get_form_diff(home, away)
 
-        h2h_diff = (
-            self.h2h_engine.get_h2h_diff(home, away) if self.h2h_engine else 0.0
-        )
+        h2h_diff = self.h2h_engine.get_h2h_diff(home, away) if self.h2h_engine else 0.0
         momentum_diff = (
             self.momentum_engine.get_momentum_diff(home, away)
             if self.momentum_engine

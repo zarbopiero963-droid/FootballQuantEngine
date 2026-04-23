@@ -4,7 +4,6 @@ from training.import_validator import ImportValidator
 
 
 class CsvImporter:
-
     def __init__(self):
 
         self.fixtures_repo = FixturesRepository()
@@ -40,9 +39,7 @@ class CsvImporter:
                     }
                 )
             except (ValueError, TypeError) as exc:
-                raise ValueError(
-                    f"Invalid data at row {row_idx + 1}: {exc}"
-                ) from exc
+                raise ValueError(f"Invalid data at row {row_idx + 1}: {exc}") from exc
             imported += 1
 
         return {

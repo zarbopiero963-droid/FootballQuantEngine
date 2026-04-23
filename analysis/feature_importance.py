@@ -59,9 +59,7 @@ class FeatureImportanceAnalyzer:
         import pandas as pd
 
         cols = [
-            c
-            for c in (feature_cols or self.DEFAULT_SIGNAL_COLS)
-            if c in df.columns
+            c for c in (feature_cols or self.DEFAULT_SIGNAL_COLS) if c in df.columns
         ]
 
         if not cols:

@@ -1,5 +1,4 @@
 class SampleAPIFootballClient:
-
     def get_completed_matches(self, league=None, season=None):
         return [
             {
@@ -182,10 +181,40 @@ class SampleAPIFootballClient:
 
     def get_team_xg_averages(self, league=None, season=None):
         return {
-            "Inter": {"xg_for": 1.85, "xg_against": 0.90, "shots": 14.0, "shots_on_target": 5.3},
-            "Roma": {"xg_for": 1.30, "xg_against": 1.20, "shots": 11.0, "shots_on_target": 4.1},
-            "Napoli": {"xg_for": 1.70, "xg_against": 1.00, "shots": 13.2, "shots_on_target": 4.8},
-            "Milan": {"xg_for": 1.48, "xg_against": 1.08, "shots": 12.0, "shots_on_target": 4.4},
-            "Juventus": {"xg_for": 1.42, "xg_against": 0.94, "shots": 11.5, "shots_on_target": 4.0},
-            "Lazio": {"xg_for": 1.18, "xg_against": 1.16, "shots": 10.4, "shots_on_target": 3.7},
+            "Inter": {
+                "xg_for": 1.85,
+                "xg_against": 0.90,
+                "shots": 14.0,
+                "shots_on_target": 5.3,
+            },
+            "Roma": {
+                "xg_for": 1.30,
+                "xg_against": 1.20,
+                "shots": 11.0,
+                "shots_on_target": 4.1,
+            },
+            "Napoli": {
+                "xg_for": 1.70,
+                "xg_against": 1.00,
+                "shots": 13.2,
+                "shots_on_target": 4.8,
+            },
+            "Milan": {
+                "xg_for": 1.48,
+                "xg_against": 1.08,
+                "shots": 12.0,
+                "shots_on_target": 4.4,
+            },
+            "Juventus": {
+                "xg_for": 1.42,
+                "xg_against": 0.94,
+                "shots": 11.5,
+                "shots_on_target": 4.0,
+            },
+            "Lazio": {
+                "xg_for": 1.18,
+                "xg_against": 1.16,
+                "shots": 10.4,
+                "shots_on_target": 3.7,
+            },
         }

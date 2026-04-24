@@ -247,7 +247,7 @@ def _stratified_kfold(
 
 def _sklearn_candidates(n_rows: int) -> list[tuple[str, Any]]:
     """Return list of (name, unfitted_model) using sklearn if available."""
-    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+    from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
     from sklearn.linear_model import LogisticRegression
 
     n_est = min(300, max(50, n_rows // 5))
@@ -341,11 +341,10 @@ def _optuna_tune(
     X_list: list, y_list: list, feature_cols: list[str], n_trials: int = 40
 ) -> tuple[Any, float]:
     """Hyperparameter search with Optuna over RandomForest + GBM."""
-    import optuna
-    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-    from sklearn.model_selection import StratifiedKFold, cross_val_score
-
     import numpy as np
+    import optuna
+    from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+    from sklearn.model_selection import StratifiedKFold, cross_val_score
 
     X = np.array(X_list)
     y = np.array(y_list)

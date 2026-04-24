@@ -44,7 +44,7 @@ from __future__ import annotations
 
 import logging
 import math
-from collections import deque, defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 

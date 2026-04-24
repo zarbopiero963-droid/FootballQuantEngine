@@ -21,7 +21,6 @@ import math
 
 import pandas as pd
 
-
 # ---------------------------------------------------------------------------
 # Pure functions (used both by the class and by ranking/match_ranker.py)
 # ---------------------------------------------------------------------------

@@ -21,4 +21,5 @@ backups/
 .venv/
 venv/
 env/
-ENV/ 
+ENV/
+cache_data/

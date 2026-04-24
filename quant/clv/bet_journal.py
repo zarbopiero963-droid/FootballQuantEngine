@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import tempfile
 from datetime import datetime
 
 
@@ -21,8 +22,13 @@ class BetJournal:
             return json.load(handle)
 
     def _save(self, rows: list[dict]) -> None:
-        with open(self.path, "w", encoding="utf-8") as handle:
-            json.dump(rows, handle, indent=2)
+        dir_ = os.path.dirname(self.path)
+        with tempfile.NamedTemporaryFile(
+            "w", encoding="utf-8", dir=dir_, delete=False, suffix=".tmp"
+        ) as tmp:
+            json.dump(rows, tmp, indent=2)
+            tmp_path = tmp.name
+        os.replace(tmp_path, self.path)
 
     def add_bet(self, payload: dict) -> dict:
         rows = self._load()

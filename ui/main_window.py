@@ -18,7 +18,6 @@ from ui.settings_window import SettingsWindow
 
 
 class MainWindow(QMainWindow):
-
     def __init__(self, controller):
 
         super().__init__()
@@ -69,6 +68,10 @@ class MainWindow(QMainWindow):
         self.project_summary_button.clicked.connect(self.open_project_summary)
         toolbar.addWidget(self.project_summary_button)
 
+        self.analytics_button = QPushButton("Analytics")
+        self.analytics_button.clicked.connect(self.open_analytics)
+        toolbar.addWidget(self.analytics_button)
+
         self.about_button = QPushButton("About")
         self.about_button.clicked.connect(self.open_about)
         toolbar.addWidget(self.about_button)
@@ -81,6 +84,7 @@ class MainWindow(QMainWindow):
         self.final_check_window = None
         self.project_summary_window = None
         self.backtest_window = None
+        self.analytics_window = None
 
         self.dashboard.set_status("Ready")
         self.dashboard.append_log("Application started.")
@@ -120,6 +124,13 @@ class MainWindow(QMainWindow):
 
         self.project_summary_window = ProjectSummaryWindow()
         self.project_summary_window.show()
+
+    def open_analytics(self):
+        from dashboard.analytics_dashboard import AnalyticsDashboard
+
+        self.analytics_window = AnalyticsDashboard(controller=self.controller)
+        self.analytics_window.load_from_controller()
+        self.analytics_window.show()
 
     def open_backtest(self):
 

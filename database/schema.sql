@@ -14,17 +14,19 @@ CREATE TABLE IF NOT EXISTS fixtures(
 CREATE TABLE IF NOT EXISTS odds_history(
 
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    fixture_id INTEGER,
+    fixture_id INTEGER NOT NULL REFERENCES fixtures(fixture_id),
     timestamp TEXT,
     home_odds REAL,
     draw_odds REAL,
     away_odds REAL
 );
 
+CREATE INDEX IF NOT EXISTS idx_odds_history_fixture_id ON odds_history(fixture_id);
+
 CREATE TABLE IF NOT EXISTS predictions(
 
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    fixture_id INTEGER,
+    fixture_id INTEGER NOT NULL REFERENCES fixtures(fixture_id),
     model TEXT,
     home_prob REAL,
     draw_prob REAL,
@@ -32,3 +34,5 @@ CREATE TABLE IF NOT EXISTS predictions(
     edge REAL,
     created_at TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_predictions_fixture_id ON predictions(fixture_id);

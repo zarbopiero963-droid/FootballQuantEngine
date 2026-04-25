@@ -23,3 +23,7 @@ venv/
 env/
 ENV/
 cache_data/
+
+# User settings — may contain API keys and tokens; never commit
+settings.json
+outputs/*.json

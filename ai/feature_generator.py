@@ -626,8 +626,8 @@ class FeatureGenerator:
                 vals = [float(r.get(key, 0.0) or 0.0) for r in records]
                 mi = _mutual_information(vals, target_vals, _MI_BINS)
                 mi_scores[key] = round(mi, 6)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("MI calculation skipped for feature '%s': %s", key, exc)
 
         return dict(sorted(mi_scores.items(), key=lambda x: x[1], reverse=True))
 

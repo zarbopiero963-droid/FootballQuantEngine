@@ -6,7 +6,7 @@ import requests
 
 class ClubEloCollector:
 
-    BASE_URL = "http://api.clubelo.com"
+    BASE_URL = "https://api.clubelo.com"
 
     def get_team_history(self, team):
 

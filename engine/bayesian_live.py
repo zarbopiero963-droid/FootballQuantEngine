@@ -246,10 +246,10 @@ class BayesianLiveEngine:
         ah = max(_MIN_ALPHA, ah + delta_h)
         aa = max(_MIN_ALPHA, aa + delta_a)
 
-        # Update rate parameter: β += elapsed_fraction
-        elapsed_frac = event.minute / 90.0
-        bh_new = bh + elapsed_frac
-        ba_new = ba + elapsed_frac
+        # Update rate parameter: β += incremental elapsed fraction since last event
+        incremental_frac = (event.minute - last_event_minute) / 90.0
+        bh_new = bh + incremental_frac
+        ba_new = ba + incremental_frac
 
         return self._build_state(
             minute=event.minute,
@@ -461,30 +461,32 @@ class BayesianLiveEngine:
         """
         filtered = [ev for ev in events_so_far if ev.minute <= minute]
         if not filtered:
-            # No events yet — return prior-only state
+            # No events yet — advance β for elapsed time with no observations
+            elapsed_frac = minute / 90.0
             return self._build_state(
                 minute=minute,
                 home_score=score[0],
                 away_score=score[1],
                 alpha_home=self._init_alpha_home,
-                beta_home=self._init_beta_home,
+                beta_home=self._init_beta_home + elapsed_frac,
                 alpha_away=self._init_alpha_away,
-                beta_away=self._init_beta_away,
+                beta_away=self._init_beta_away + elapsed_frac,
                 events_processed=0,
                 last_event_minute=0,
             )
         interim = self.process_events(filtered, score)
         if interim.minute == minute:
             return interim
-        # Rebuild with the requested minute so remaining-time probabilities are correct
+        # Advance β for the quiet stretch from the last event to the requested minute
+        extra_frac = max(0.0, (minute - interim.last_event_minute) / 90.0)
         return self._build_state(
             minute=minute,
             home_score=score[0],
             away_score=score[1],
             alpha_home=interim.alpha_home,
-            beta_home=interim.beta_home,
+            beta_home=interim.beta_home + extra_frac,
             alpha_away=interim.alpha_away,
-            beta_away=interim.beta_away,
+            beta_away=interim.beta_away + extra_frac,
             events_processed=interim.events_processed,
             last_event_minute=interim.last_event_minute,
         )

@@ -61,9 +61,10 @@ jobs:
           pytest -q
 
       - name: Clean previous builds
+        shell: pwsh
         run: |
-          if exist build rmdir /s /q build
-          if exist dist rmdir /s /q dist
+          if (Test-Path build) { Remove-Item -Recurse -Force build }
+          if (Test-Path dist)  { Remove-Item -Recurse -Force dist }
 
       - name: Build EXE
         run: |

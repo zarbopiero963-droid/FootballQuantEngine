@@ -21,12 +21,15 @@ Architecture
 from __future__ import annotations
 
 import importlib.util
+import logging
 import math
 import os
 import pickle
 import random
 from collections import defaultdict
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 MODEL_PATH = "outputs/automl_best_model.pkl"
 _MIN_ROWS = 20  # minimum rows needed for meaningful CV
@@ -468,6 +471,12 @@ def load_best_model() -> dict | None:
         return joblib.load(MODEL_PATH)
     except Exception:
         pass
+    # pickle fallback: only load files written by this process (same host, same user)
+    logger.warning(
+        "joblib unavailable or failed; falling back to pickle for %s — "
+        "ensure this file originates from a trusted source",
+        MODEL_PATH,
+    )
     try:
         with open(MODEL_PATH, "rb") as fh:
             return pickle.load(fh)

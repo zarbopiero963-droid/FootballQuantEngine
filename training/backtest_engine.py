@@ -25,18 +25,14 @@ class BacktestEngine:
         FROM predictions p
         JOIN fixtures f
             ON p.fixture_id = f.fixture_id
-        LEFT JOIN (
-            SELECT o1.*
-            FROM odds_history o1
-            JOIN (
-                SELECT fixture_id, MAX(timestamp) AS max_ts
-                FROM odds_history
-                GROUP BY fixture_id
-            ) o2
-                ON o1.fixture_id = o2.fixture_id
-               AND o1.timestamp = o2.max_ts
-        ) oh
-            ON p.fixture_id = oh.fixture_id
+        LEFT JOIN odds_history oh
+            ON oh.fixture_id = p.fixture_id
+           AND oh.timestamp = (
+               SELECT MAX(o2.timestamp)
+               FROM odds_history o2
+               WHERE o2.fixture_id = p.fixture_id
+                 AND o2.timestamp < f.match_date
+           )
         WHERE f.status = 'FT'
         """
 

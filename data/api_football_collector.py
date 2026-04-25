@@ -147,8 +147,6 @@ def _parse_fixture(raw: Dict) -> Optional[Dict]:
         teams = raw["teams"]
         goals = raw.get("goals") or {}
         league = raw.get("league") or {}
-        score = raw.get("score") or {}
-
         status_short = fix["status"]["short"]
 
         return {

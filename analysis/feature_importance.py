@@ -110,7 +110,6 @@ class FeatureImportanceAnalyzer:
         market : str
             'home', 'draw', or 'away' — which market to evaluate.
         """
-        import pandas as pd
 
         df = predictions_df.copy()
 

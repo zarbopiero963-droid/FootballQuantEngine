@@ -300,10 +300,10 @@ class BayesianLiveEngine:
             ah = max(_MIN_ALPHA, ah + delta_h)
             aa = max(_MIN_ALPHA, aa + delta_a)
 
-            # Update β with full elapsed fraction at this event minute
-            elapsed_frac = ev.minute / 90.0
-            bh = bh + elapsed_frac
-            ba = ba + elapsed_frac
+            # Update β with incremental time elapsed since the previous event
+            incremental_frac = (ev.minute - last_event_min) / 90.0
+            bh += incremental_frac
+            ba += incremental_frac
 
             if is_shot:
                 last_shot_minute = ev.minute
@@ -473,7 +473,21 @@ class BayesianLiveEngine:
                 events_processed=0,
                 last_event_minute=0,
             )
-        return self.process_events(filtered, score)
+        interim = self.process_events(filtered, score)
+        if interim.minute == minute:
+            return interim
+        # Rebuild with the requested minute so remaining-time probabilities are correct
+        return self._build_state(
+            minute=minute,
+            home_score=score[0],
+            away_score=score[1],
+            alpha_home=interim.alpha_home,
+            beta_home=interim.beta_home,
+            alpha_away=interim.alpha_away,
+            beta_away=interim.beta_away,
+            events_processed=interim.events_processed,
+            last_event_minute=interim.last_event_minute,
+        )
 
     # ------------------------------------------------------------------
     # Private helpers

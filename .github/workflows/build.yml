@@ -56,9 +56,9 @@ jobs:
           black --check .
           isort --check-only .
 
-      - name: Run tests
+      - name: Run unit tests
         run: |
-          pytest -q
+          pytest -q --ignore=tests/exe
 
       - name: Clean previous builds
         shell: pwsh
@@ -72,6 +72,12 @@ jobs:
 
       - name: Verify build
         run: dir dist\FootballQuantEngine
+
+      - name: Run EXE smoke tests
+        env:
+          APP_EXE_PATH: dist\FootballQuantEngine\FootballQuantEngine.exe
+        run: |
+          pytest tests/exe -q -m windows
 
       - name: Zip Portable App
         shell: pwsh

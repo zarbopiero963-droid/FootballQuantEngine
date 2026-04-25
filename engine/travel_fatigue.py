@@ -336,6 +336,7 @@ class TravelFatigueEngine:
         recent_fixtures: Optional[List[Dict]] = None,
         is_home_team: bool = False,
         match_date: Optional[str] = None,
+        distance_override_km: Optional[float] = None,
     ) -> TravelAssessment:
         """
         Compute the full fatigue assessment for one team.
@@ -353,8 +354,10 @@ class TravelFatigueEngine:
         venue_coords = self._venue_coords(playing_at)
         home_coords = self._venue_coords(home_ground)
 
-        # Distance
-        if venue_coords and home_coords:
+        # Distance — caller-supplied override takes priority over coordinate lookup
+        if distance_override_km is not None:
+            distance_km = distance_override_km
+        elif venue_coords and home_coords:
             distance_km = _haversine_km(
                 home_coords["lat"],
                 home_coords["lon"],
@@ -431,6 +434,7 @@ class TravelFatigueEngine:
         home_recent: Optional[List[Dict]] = None,
         away_recent: Optional[List[Dict]] = None,
         match_date: Optional[str] = None,
+        away_distance_override_km: Optional[float] = None,
     ) -> FatigueReport:
         """
         Build a comparative FatigueReport for both teams.
@@ -458,6 +462,7 @@ class TravelFatigueEngine:
             recent_fixtures=away_recent,
             is_home_team=False,
             match_date=match_date,
+            distance_override_km=away_distance_override_km,
         )
 
         net_adv = away_assessment.total_fatigue - home_assessment.total_fatigue
@@ -585,14 +590,7 @@ def quick_fatigue_check(
     """
     engine = TravelFatigueEngine()
 
-    if away_travel_km > 0.0 and venue_slug not in STADIUM_COORDS:
-        # Inject a synthetic venue entry so the engine can compute correctly
-        STADIUM_COORDS[_slugify(venue_slug)] = {
-            "lat": 0.0,
-            "lon": 0.0,
-            "alt_m": 0.0,
-            "tz": 0.0,
-        }
+    override = away_travel_km if away_travel_km > 0.0 and _slugify(venue_slug) not in STADIUM_COORDS else None
 
     return engine.compare_teams(
         home_team=home_team_slug,
@@ -600,4 +598,5 @@ def quick_fatigue_check(
         venue=venue_slug,
         home_days_rest=home_days_rest,
         away_days_rest=away_days_rest,
+        away_distance_override_km=override,
     )

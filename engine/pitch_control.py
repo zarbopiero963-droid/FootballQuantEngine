@@ -379,13 +379,18 @@ class DangerousControlMap:
 
         for row in range(pc_result.grid_rows):
             for col in range(pc_result.grid_cols):
-                xt_val = self._interpolate_xt(
+                xt_home = self._interpolate_xt(
                     col, row, pc_result.grid_cols, pc_result.grid_rows
+                )
+                # Away team attacks in the opposite direction: mirror the x-axis
+                xt_away = self._interpolate_xt(
+                    pc_result.grid_cols - 1 - col, row,
+                    pc_result.grid_cols, pc_result.grid_rows,
                 )
                 pc_h = pc_result.home_control[row][col]
                 pc_a = pc_result.away_control[row][col]
-                home_total += xt_val * pc_h
-                away_total += xt_val * pc_a
+                home_total += xt_home * pc_h
+                away_total += xt_away * pc_a
 
         dominance = (home_total - away_total) / (home_total + away_total + _EPSILON)
 

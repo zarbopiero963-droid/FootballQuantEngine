@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from quant.features.advanced_stats_features import AdvancedStatsFeatureBuilder
 

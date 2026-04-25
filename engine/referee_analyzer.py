@@ -129,8 +129,8 @@ class MatchRefData:
     away_yellows: int
     home_reds: int
     away_reds: int
-    home_fouls: int = 0
-    away_fouls: int = 0
+    home_fouls: Optional[int] = None
+    away_fouls: Optional[int] = None
 
     @property
     def total_yellows(self) -> int:
@@ -295,9 +295,10 @@ class RefereeAnalyzer:
             acc[m.referee]["yellows"].append(m.total_yellows)
             acc[m.referee]["reds"].append(m.total_reds)
             acc[m.referee]["cards"].append(m.total_cards)
-            total_fouls = m.home_fouls + m.away_fouls
-            if total_fouls > 0:
-                acc[m.referee]["fouls"].append(total_fouls)
+            if m.home_fouls is not None and m.away_fouls is not None:
+                total_fouls = m.home_fouls + m.away_fouls
+                if total_fouls > 0:
+                    acc[m.referee]["fouls"].append(total_fouls)
 
         profiles: Dict[str, RefereeProfile] = {}
         for ref, data in acc.items():
@@ -341,12 +342,13 @@ class RefereeAnalyzer:
         )
 
         for m in matches:
-            acc[m.home_team]["committed"].append(m.home_fouls)
-            acc[m.home_team]["suffered"].append(m.away_fouls)
+            if m.home_fouls is not None:
+                acc[m.home_team]["committed"].append(m.home_fouls)
+                acc[m.away_team]["suffered"].append(m.home_fouls)
+            if m.away_fouls is not None:
+                acc[m.home_team]["suffered"].append(m.away_fouls)
+                acc[m.away_team]["committed"].append(m.away_fouls)
             acc[m.home_team]["yellows"].append(m.home_yellows)
-
-            acc[m.away_team]["committed"].append(m.away_fouls)
-            acc[m.away_team]["suffered"].append(m.home_fouls)
             acc[m.away_team]["yellows"].append(m.away_yellows)
 
         profiles: Dict[str, TeamFoulProfile] = {}
@@ -366,7 +368,7 @@ class RefereeAnalyzer:
         fouls_per_match = [
             m.home_fouls + m.away_fouls
             for m in matches
-            if (m.home_fouls + m.away_fouls) > 0
+            if m.home_fouls is not None and m.away_fouls is not None
         ]
         if fouls_per_match:
             return sum(fouls_per_match) / len(fouls_per_match)
@@ -581,7 +583,7 @@ def from_dicts(rows: List[dict]) -> "RefereeAnalyzer":
         home_yellows, away_yellows, home_reds, away_reds
 
     Optional keys:
-        home_fouls, away_fouls  (default 0 if absent)
+        home_fouls, away_fouls  (omit or None if not available)
 
     Returns a fitted RefereeAnalyzer instance.
     """
@@ -596,8 +598,12 @@ def from_dicts(rows: List[dict]) -> "RefereeAnalyzer":
                 away_yellows=int(row["away_yellows"]),
                 home_reds=int(row["home_reds"]),
                 away_reds=int(row["away_reds"]),
-                home_fouls=int(row.get("home_fouls", 0)),
-                away_fouls=int(row.get("away_fouls", 0)),
+                home_fouls=int(row["home_fouls"])
+                if row.get("home_fouls") is not None
+                else None,
+                away_fouls=int(row["away_fouls"])
+                if row.get("away_fouls") is not None
+                else None,
             )
             matches.append(m)
         except (KeyError, ValueError, TypeError) as exc:

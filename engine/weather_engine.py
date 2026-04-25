@@ -60,6 +60,7 @@ import json
 import logging
 import re
 import time
+import unicodedata
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -542,17 +543,23 @@ def build_engine(api_key: str) -> WeatherEngine:
 def slugify(name: str) -> str:
     """Normalise a team name into a registry key.
 
-    Converts to lowercase, replaces spaces and hyphens with underscores, and
-    strips any characters that are not alphanumeric or underscores.
+    Decomposes Unicode characters (NFKD), drops combining diacritical marks,
+    then converts to lowercase, replaces spaces/hyphens with underscores, and
+    strips any remaining non-ASCII characters.
 
     Examples
     --------
     >>> slugify("Manchester City")
     'manchester_city'
     >>> slugify("Borussia Mönchengladbach")
-    'borussia_mnchengladbach'
+    'borussia_monchengladbach'
+    >>> slugify("Atlético Madrid")
+    'atletico_madrid'
     """
+    # NFKD decomposition strips diacritics (é → e + combining acute)
+    name = unicodedata.normalize("NFKD", name)
+    name = "".join(c for c in name if not unicodedata.combining(c))
     name = name.lower()
     name = re.sub(r"[\s\-]+", "_", name)
-    name = re.sub(r"[^\w]", "", name)  # \w matches [a-zA-Z0-9_]
+    name = re.sub(r"[^\w]", "", name)
     return name

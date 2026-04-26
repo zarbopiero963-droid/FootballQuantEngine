@@ -64,11 +64,9 @@ Al primo avvio clicca **⚙ Settings** nella barra degli strumenti.
 | Campo | Obbligatorio | Descrizione |
 |-------|-------------|-------------|
 | **API-Football Key** | ✅ | Chiave da [api-sports.io](https://api-sports.io) |
-| **League ID** | ✅ | ID numerico della lega (es. `135` = Serie A) |
-| **Season** | ✅ | Anno stagione (es. `2024`) |
+| **Odds API Key** | ❌ | Chiave per quote bookmaker alternativi |
 | **Telegram Token** | ❌ | Token bot da @BotFather |
 | **Telegram Chat ID** | ❌ | ID della chat/gruppo per gli alert |
-| **OpenWeather Key** | ❌ | Chiave [OpenWeatherMap](https://openweathermap.org) per dati meteo |
 
 **ID leghe principali:**
 
@@ -86,7 +84,6 @@ In alternativa usa variabili d'ambiente (hanno precedenza su `settings.json`):
 export API_FOOTBALL_KEY="la_tua_chiave"
 export TELEGRAM_TOKEN="token_bot"
 export TELEGRAM_CHAT_ID="id_chat"
-export OPENWEATHER_KEY="chiave_meteo"
 ```
 
 ---
@@ -104,26 +101,23 @@ La finestra principale è composta da:
 
 ## 4. Come trovare i pronostici
 
-### Passo 1 — Prima esecuzione: scarica lo storico
+### Passo 1 — Prima esecuzione: addestra i modelli
 
-Al primo avvio il sistema deve scaricare lo storico completo dalla API. Clicca **▶ Run Cycle** o usa il bootstrap dedicato:
+Al primo avvio clicca **▶ Run Cycle**. Il sistema:
 
-```python
-controller.run_bootstrap(league_id=135, progress_cb=print)
-```
+1. Recupera le partite completate per la stagione corrente tramite API-Football
+2. Addestra i modelli di probabilità sui risultati disponibili
+3. Salva i dati nel database SQLite locale
+4. Nelle esecuzioni successive aggiorna i dati incrementalmente
 
-Il sistema:
-1. Recupera **tutte le stagioni disponibili** per la lega configurata
-2. Scarica tutti i fixture con risultati, statistiche (angoli, tiri, xG) e quote
-3. Salva tutto nel database SQLite locale
-4. Nelle esecuzioni successive salta le stagioni già presenti
+> **Nota:** il download automatico di tutte le stagioni storiche e il live tracking sono in arrivo nelle prossime release.
 
 ### Passo 2 — Ciclo normale
 
 Clicca **▶ Run Cycle**. Il motore:
 1. Aggiorna la stagione corrente con i risultati recenti
 2. Addestra i modelli sui dati storici
-3. Genera probabilità per ogni partita su **tutti i mercati**
+3. Genera probabilità per ogni partita (1X2, OU 2.5, BTTS)
 4. Calcola EV, Kelly ed Edge per ogni selezione
 5. Assegna la decisione BET / WATCHLIST / NO_BET
 6. Popola la tabella nel tab **Risultati**
@@ -133,8 +127,8 @@ Clicca **▶ Run Cycle**. Il motore:
 | Colonna | Significato |
 |---------|-------------|
 | `home` / `away` | Squadre |
-| `market` | Mercato (1x2, ou25, btts, angoli, cs…) |
-| `selection` | Selezione (home, draw, away, over, under, 1-0…) |
+| `market` | Mercato (1x2, ou25, btts) |
+| `selection` | Selezione (home, draw, away, over, under) |
 | `probability` | Probabilità stimata dal modello |
 | `edge` | Vantaggio del modello sul bookmaker |
 | `ev` | Expected Value — rendimento atteso per unità |
@@ -149,25 +143,17 @@ Clicca **▶ Run Cycle**. Il motore:
 
 - **Cerca** — testo libero su tutte le colonne
 - **Decision Filter** → seleziona `BET` per vedere solo le scommesse consigliate
-- **Market Filter** → filtra per mercato specifico (1x2, ou25, btts, angoli, cs…)
+- **Market Filter** → filtra per mercato specifico (1x2, ou25, btts)
 
 ### Mercati disponibili
 
 | Codice | Mercato |
 |--------|---------|
 | `1x2` | 1X2 — Home / Draw / Away |
-| `ou15` | Over/Under 1.5 gol |
 | `ou25` | Over/Under 2.5 gol |
-| `ou35` | Over/Under 3.5 gol |
 | `btts` | GG/NG — Both Teams to Score |
-| `ht_ou05` | Over/Under 0.5 gol — primo tempo |
-| `ht_ou15` | Over/Under 1.5 gol — primo tempo |
-| `sh_ou05` | Over/Under 0.5 gol — secondo tempo |
-| `sh_ou15` | Over/Under 1.5 gol — secondo tempo |
-| `corners_8.5` | Over/Under 8.5 calci d'angolo |
-| `corners_9.5` | Over/Under 9.5 calci d'angolo |
-| `corners_10.5` | Over/Under 10.5 calci d'angolo |
-| `cs` | Risultato esatto — top 12 più probabili |
+
+> **In arrivo:** Over/Under 1.5 e 3.5, primo/secondo tempo, calci d'angolo, risultati esatti.
 
 ### Tier di qualità
 
@@ -201,7 +187,7 @@ Clicca **▶ Run Cycle**. Il motore:
 |----------|----------|
 | **▶ Run Cycle** | Aggiorna stagione corrente + genera previsioni su tutti i mercati |
 | **📊 Backtest** | Apre la finestra di analisi storica |
-| **⚙ Settings** | Configura API key, lega, stagione, Telegram, meteo |
+| **⚙ Settings** | Configura API-Football Key, Odds API Key, Telegram |
 | **📂 Import CSV** | Importa dati partite/quote da file CSV esterni |
 | **📝 Manual Context** | Modifica manuale di infortuni, formazioni, meteo |
 | **📁 Outputs** | Visualizza e genera i report HTML |
@@ -490,15 +476,13 @@ Configura **Telegram Token** e **Chat ID** nelle Settings per ricevere alert aut
 
 | Dato scaricato | Utilizzo |
 |----------------|----------|
-| Tutte le stagioni disponibili | Bootstrap storico completo |
-| Fixture (schedule + risultati + HT) | Base di tutti i modelli |
-| Statistiche per fixture (angoli, tiri, xG, cartellini) | CornersModel, HalftimeModel |
-| Quote bookmaker per tutti i mercati | Edge, EV, Kelly |
+| Fixture completati (risultati) | Addestramento modelli Dixon-Coles |
+| Fixture in programma | Previsioni pre-partita |
+| Quote bookmaker (Match Winner) | Edge, EV, Kelly |
 | Classifiche | Standings Engine |
 | Head-to-head | H2H Engine |
 | Infortuni | Injury Engine |
 | Arbitri | Referee Engine |
-| Partite live | LiveUpdater (polling ogni 60s) |
 
 Cache automatica: fixture 24h, quote 1h.
 
@@ -528,25 +512,15 @@ Rating Elo storici per confronto e validazione interna.
 ## 13. Flusso di lavoro completo
 
 ```
-PRIMA ESECUZIONE
-  └─ run_bootstrap(league_id)
-       ├─ Recupera tutte le stagioni disponibili
-       ├─ Scarica fixture + statistiche per ogni stagione
-       └─ Salva tutto nel DB (downloaded_seasons traccia il progresso)
-
 CICLO NORMALE (Run Cycle)
-  ├─ update_current_season() → aggiorna risultati recenti
-  ├─ MultiMarketEngine.fit() → addestra su dati storici
-  ├─ get_upcoming_matches() → fixture da prevedere
-  ├─ get_prematch_odds() → quote bookmaker per tutti i mercati
-  ├─ predict_all() → 1X2, OU, BTTS, HT, angoli, risultati esatti
+  ├─ get_completed_matches() → scarica risultati stagione corrente
+  ├─ PoissonEngine.fit() → calcola forza attacco/difesa per ogni squadra
+  ├─ DixonColesModel.fit() → addestra sui dati storici
+  ├─ get_fixtures() → fixture in programma da prevedere
+  ├─ get_odds() → quote bookmaker (Match Winner)
+  ├─ predict() → probabilità 1X2, OU 2.5, BTTS
   ├─ Calcolo edge/EV/Kelly per ogni selezione
-  ├─ Salva in multi_market_predictions
   └─ Mostra in dashboard con BET/WATCHLIST/NO_BET
-
-LIVE (background thread)
-  └─ LiveUpdater polla /fixtures?live=all ogni 60s
-       └─ Aggiorna score/status/elapsed nel DB
 
 ANALISI
   ├─ Backtest → KPI storici + threshold optimizer

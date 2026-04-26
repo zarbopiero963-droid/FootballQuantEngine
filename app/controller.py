@@ -25,6 +25,7 @@ from typing import Optional
 
 from app.bootstrap_controller import BootstrapController
 from config.settings_manager import load_settings
+from database.db_manager import init_db
 from engine.job_runner import JobRunner
 from export.csv_exporter import CsvExporter
 from export.excel_exporter import ExcelExporter
@@ -49,10 +50,12 @@ class AppController:
         self._output = Path(output_dir)
         self._output.mkdir(parents=True, exist_ok=True)
 
-        # Bootstrap / data engine
-        api_key = os.getenv("API_FOOTBALL_KEY", "")
-        self._bootstrap_ctrl = BootstrapController(api_key=api_key)
-        self._bootstrap_ctrl.initialise()
+        # Ensure DB tables exist — no API key needed for this step
+        init_db()
+
+        # Bootstrap controller is lazy-initialised on first use so the app
+        # opens even when no API key is configured yet.
+        self._bootstrap_ctrl: BootstrapController | None = None
 
         # Core prediction pipeline
         self.runner = JobRunner()
@@ -78,6 +81,21 @@ class AppController:
         self._cumulative_metrics: dict = {}
 
     # ------------------------------------------------------------------
+    # Internal: lazy BootstrapController (avoids startup crash when key absent)
+    # ------------------------------------------------------------------
+
+    def _get_bootstrap(self) -> BootstrapController:
+        if self._bootstrap_ctrl is None:
+            api_key = (
+                os.getenv("API_FOOTBALL_KEY")
+                or self._settings.api_football_key
+                or ""
+            )
+            self._bootstrap_ctrl = BootstrapController(api_key=api_key)
+            self._bootstrap_ctrl.initialise()
+        return self._bootstrap_ctrl
+
+    # ------------------------------------------------------------------
     # Bootstrap (first run / refresh historical data)
     # ------------------------------------------------------------------
 
@@ -88,7 +106,7 @@ class AppController:
         fetch_stats: bool = True,
     ) -> dict:
         """Download all historical seasons for league_id into the local DB."""
-        return self._bootstrap_ctrl.run_bootstrap(
+        return self._get_bootstrap().run_bootstrap(
             league_id=league_id,
             progress_cb=progress_cb,
             fetch_stats=fetch_stats,
@@ -98,7 +116,7 @@ class AppController:
         self, league_id: int, season: int, progress_cb=None
     ) -> int:
         """Re-fetch only the current season to pick up new results."""
-        return self._bootstrap_ctrl.update_current_season(
+        return self._get_bootstrap().update_current_season(
             league_id=league_id,
             season=season,
             progress_cb=progress_cb,
@@ -163,7 +181,7 @@ class AppController:
         lid = league_id or getattr(settings, "league_id", None) or 135
         s   = season   or getattr(settings, "season",    None) or 2024
         self.update_current_season(lid, s)
-        return self._bootstrap_ctrl.run_predictions(lid, s)
+        return self._get_bootstrap().run_predictions(lid, s)
 
     # Aliases for backwards compatibility with MainWindow / tests
     def run_once(self) -> list[dict]:
@@ -200,15 +218,18 @@ class AppController:
     # ------------------------------------------------------------------
 
     def start_live_updates(self) -> None:
-        self._bootstrap_ctrl.start_live_updates()
+        self._get_bootstrap().start_live_updates()
 
     def stop_live_updates(self) -> None:
-        self._bootstrap_ctrl.stop_live_updates()
+        if self._bootstrap_ctrl:
+            self._bootstrap_ctrl.stop_live_updates()
 
     def on_live_update(self, callback) -> None:
-        self._bootstrap_ctrl.on_live_update(callback)
+        self._get_bootstrap().on_live_update(callback)
 
     def live_health(self) -> dict:
+        if self._bootstrap_ctrl is None:
+            return {"running": False}
         return self._bootstrap_ctrl.live_health()
 
     # ------------------------------------------------------------------

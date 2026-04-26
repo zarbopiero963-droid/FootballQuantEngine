@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sqlite3
 from typing import Callable
 
 from config.constants import DATABASE_NAME
@@ -120,6 +121,9 @@ class BootstrapController:
             _log("[Predictions] No completed matches — cannot train models. Run Bootstrap first.")
             return []
 
+        # Merge corner stats from local DB so CornersModel gets real data.
+        self._merge_corner_stats(completed)
+
         self._multi_engine.fit(completed)  # type: ignore[union-attr]
 
         _log("[Predictions] Fetching upcoming fixtures…")
@@ -171,3 +175,22 @@ class BootstrapController:
                 cb(fixtures)
             except Exception as exc:
                 logger.warning("Live callback error: %s", exc)
+
+    @staticmethod
+    def _merge_corner_stats(matches: list[dict]) -> None:
+        """Join home_corners / away_corners from fixture_stats into each match dict."""
+        try:
+            conn = sqlite3.connect(DATABASE_NAME)
+            rows = conn.execute(
+                "SELECT fixture_id, home_corners, away_corners FROM fixture_stats"
+            ).fetchall()
+            conn.close()
+        except Exception as exc:
+            logger.warning("Could not load fixture_stats for corners: %s", exc)
+            return
+
+        stats_map = {str(r[0]): (r[1], r[2]) for r in rows}
+        for m in matches:
+            hc, ac = stats_map.get(str(m.get("fixture_id", "")), (None, None))
+            m.setdefault("home_corners", hc)
+            m.setdefault("away_corners", ac)

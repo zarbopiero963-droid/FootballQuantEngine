@@ -54,8 +54,9 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
     Uses the schema_migrations table (created by schema.sql) to track which
     versions have already been applied, so each migration runs exactly once.
     SQLite does not support ALTER TABLE … ADD COLUMN IF NOT EXISTS, so we
-    catch the OperationalError that fires when a column already exists — this
-    keeps the function safe to call on fresh databases too.
+    catch the OperationalError that fires when a column already exists.
+    Any other OperationalError (missing table, lock, etc.) is re-raised so
+    the migration is NOT recorded as applied and will be retried next time.
     """
     applied: set[int] = {
         row[0]
@@ -70,8 +71,9 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         for table, col, col_type in columns:
             try:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
-            except sqlite3.OperationalError:
-                pass  # column already present in this database
+            except sqlite3.OperationalError as exc:
+                if "duplicate column name" not in str(exc).lower():
+                    raise  # unexpected error — do not mark migration as applied
 
         conn.execute(
             "INSERT INTO schema_migrations(version, description) VALUES(?, ?)",

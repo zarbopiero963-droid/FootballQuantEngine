@@ -1,34 +1,61 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-from PyInstaller.utils.hooks import collect_all
-
 block_cipher = None
-
-datas = []
-binaries = []
-hiddenimports = []
-
-for pkg in ("numpy", "pandas", "scipy", "PySide6"):
-    pkg_datas, pkg_binaries, pkg_hidden = collect_all(pkg)
-    datas += pkg_datas
-    binaries += pkg_binaries
-    hiddenimports += pkg_hidden
 
 a = Analysis(
     ["app/desktop_launcher.py"],
     pathex=["."],
-    binaries=binaries,
-    datas=datas,
-    hiddenimports=hiddenimports,
+    binaries=[],
+    datas=[],
+    hiddenimports=[
+        "pandas",
+        "numpy",
+        "scipy",
+        "sklearn",
+        "sklearn.utils._cython_blas",
+        "sklearn.neighbors._typedefs",
+        "sqlalchemy",
+        "openpyxl",
+        "requests",
+        "PySide6.QtCore",
+        "PySide6.QtGui",
+        "PySide6.QtWidgets",
+        "PySide6.QtSvg",
+    ],
     hookspath=[],
+    hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=[
+        "matplotlib",
+        "matplotlib.backends",
+        "tkinter",
+        "_tkinter",
+        "pytest",
+        "IPython",
+        "notebook",
+        "jupyter",
+        "jupyterlab",
+        "pydoc",
+        "doctest",
+        "unittest",
+        "black",
+        "isort",
+        "ruff",
+        "pyinstaller",
+        "pkg_resources._vendor",
+        "setuptools",
+    ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
+    noarchive=False,
 )
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(
+    a.pure,
+    a.zipped_data,
+    cipher=block_cipher,
+)
 
 exe = EXE(
     pyz,
@@ -38,9 +65,11 @@ exe = EXE(
     name="FootballQuantEngine",
     debug=False,
     bootloader_ignore_signals=False,
-    strip=False,
-    upx=False,
-    console=True,
+    strip=True,
+    upx=True,
+    upx_exclude=[],
+    console=False,
+    icon=None,
 )
 
 coll = COLLECT(
@@ -48,7 +77,8 @@ coll = COLLECT(
     a.binaries,
     a.zipfiles,
     a.datas,
-    strip=False,
-    upx=False,
+    strip=True,
+    upx=True,
+    upx_exclude=[],
     name="FootballQuantEngine",
 )

@@ -1,3 +1,7 @@
+import glob
+import os
+import webbrowser
+
 from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
@@ -16,9 +20,10 @@ from ui.outputs_view import OutputsView
 from ui.project_summary_window import ProjectSummaryWindow
 from ui.settings_window import SettingsWindow
 
+_OUTPUTS_DIR = "outputs"
+
 
 class MainWindow(QMainWindow):
-
     def __init__(self, controller):
 
         super().__init__()
@@ -69,6 +74,15 @@ class MainWindow(QMainWindow):
         self.project_summary_button.clicked.connect(self.open_project_summary)
         toolbar.addWidget(self.project_summary_button)
 
+        self.analytics_button = QPushButton("Analytics")
+        self.analytics_button.clicked.connect(self.open_analytics)
+        toolbar.addWidget(self.analytics_button)
+
+        self.reports_button = QPushButton("HTML Report")
+        self.reports_button.setToolTip("Open latest HTML report from outputs/")
+        self.reports_button.clicked.connect(self.open_latest_report)
+        toolbar.addWidget(self.reports_button)
+
         self.about_button = QPushButton("About")
         self.about_button.clicked.connect(self.open_about)
         toolbar.addWidget(self.about_button)
@@ -81,6 +95,8 @@ class MainWindow(QMainWindow):
         self.final_check_window = None
         self.project_summary_window = None
         self.backtest_window = None
+        self.analytics_window = None
+        self.reports_button_ref = None
 
         self.dashboard.set_status("Ready")
         self.dashboard.append_log("Application started.")
@@ -120,6 +136,30 @@ class MainWindow(QMainWindow):
 
         self.project_summary_window = ProjectSummaryWindow()
         self.project_summary_window.show()
+
+    def open_analytics(self):
+        from dashboard.analytics_dashboard import AnalyticsDashboard
+
+        self.analytics_window = AnalyticsDashboard(controller=self.controller)
+        self.analytics_window.load_from_controller()
+        self.analytics_window.show()
+
+    def open_latest_report(self):
+        """Open the most recently modified HTML file from outputs/."""
+        html_files = glob.glob(os.path.join(_OUTPUTS_DIR, "*.html"))
+        if not html_files:
+            QMessageBox.information(
+                self,
+                "No Reports",
+                f"No HTML reports found in '{_OUTPUTS_DIR}/'.\n"
+                "Run Backtest or Analytics to generate a report first.",
+            )
+            return
+        latest = max(html_files, key=os.path.getmtime)
+        abs_path = os.path.abspath(latest)
+        url = f"file:///{abs_path.replace(os.sep, '/')}"
+        webbrowser.open(url)
+        self.dashboard.append_log(f"Opened report: {latest}")
 
     def open_backtest(self):
 

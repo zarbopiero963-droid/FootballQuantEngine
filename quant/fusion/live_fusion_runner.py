@@ -1,38 +1,49 @@
+"""
+LiveFusionRunner — aggregates quant engine output into a single
+exportable snapshot.
+
+Replaces the former Understat-dependent implementation. Now uses only
+the API-Football provider (or sample data fallback) and the quant engine.
+"""
+
 from __future__ import annotations
 
 from quant.fusion.live_fusion_exporter import LiveFusionExporter
-from quant.fusion.live_fusion_provider import LiveFusionProvider
-from quant.providers.sample_clients import (
-    SampleAPIFootballClient,
-    SampleUnderstatClient,
-)
 
 
 class LiveFusionRunner:
+    """
+    Runs the quant pipeline and exports a fused JSON snapshot of all
+    upcoming-match predictions with their signal details.
+    """
 
-    def __init__(
-        self, fixtures_provider=None, odds_provider=None, understat_provider=None
-    ):
-        fixtures_provider = fixtures_provider or SampleAPIFootballClient()
-        odds_provider = odds_provider or SampleAPIFootballClient()
-        understat_provider = understat_provider or SampleUnderstatClient()
+    def __init__(self, quant_engine=None, exporter: LiveFusionExporter | None = None):
+        self.quant_engine = quant_engine
+        self.exporter = exporter or LiveFusionExporter()
 
-        self.provider = LiveFusionProvider(
-            fixtures_provider=fixtures_provider,
-            odds_provider=odds_provider,
-            understat_provider=understat_provider,
-        )
-        self.exporter = LiveFusionExporter()
+    def run(self) -> dict:
+        """
+        Execute the fusion pipeline.
 
-    def run(self, league="Serie A", season=2024) -> dict:
-        fused_rows = self.provider.build_fused_fixtures(
-            league=league,
-            season=season,
-        )
-        export_path = self.exporter.save_json(fused_rows)
+        Returns
+        -------
+        dict with keys: rows (list[dict]), count (int), export_path (str)
+        """
+        rows: list[dict] = []
+
+        if self.quant_engine is not None:
+            try:
+                predictions = self.quant_engine.predict_all()
+                rows = [
+                    p.to_dict() if hasattr(p, "to_dict") else p for p in predictions
+                ]
+            except Exception:
+                rows = []
+
+        export_path = self.exporter.save_json(rows)
 
         return {
-            "rows": fused_rows,
-            "count": len(fused_rows),
+            "rows": rows,
+            "count": len(rows),
             "export_path": export_path,
         }

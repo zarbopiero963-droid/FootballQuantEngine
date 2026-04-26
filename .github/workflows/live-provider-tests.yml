@@ -21,6 +21,11 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
+      - name: Install system Qt dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libegl1 libgl1
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -28,5 +33,7 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Run live provider tests
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: |
           pytest tests -q -k "live or api_football"

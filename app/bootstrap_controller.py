@@ -28,6 +28,27 @@ from quant.providers.api_football_client import APIFootballClient
 logger = logging.getLogger(__name__)
 
 
+def _persist_corner_stats(fixture_id: str | int, home_corners, away_corners) -> None:
+    """Upsert a corner stats row so API-fetched data survives the next run."""
+    try:
+        conn = sqlite3.connect(DATABASE_NAME)
+        conn.execute(
+            """
+            INSERT INTO fixture_stats(fixture_id, home_corners, away_corners, updated_at)
+            VALUES(?, ?, ?, datetime('now'))
+            ON CONFLICT(fixture_id) DO UPDATE
+              SET home_corners = excluded.home_corners,
+                  away_corners = excluded.away_corners,
+                  updated_at   = excluded.updated_at
+            """,
+            (fixture_id, home_corners, away_corners),
+        )
+        conn.commit()
+        conn.close()
+    except Exception as exc:
+        logger.debug("Could not persist corner stats for %s: %s", fixture_id, exc)
+
+
 class BootstrapController:
 
     def __init__(self, api_key: str | None = None):
@@ -121,8 +142,8 @@ class BootstrapController:
             _log("[Predictions] No completed matches — cannot train models. Run Bootstrap first.")
             return []
 
-        # Merge corner stats from local DB so CornersModel gets real data.
-        self._merge_corner_stats(completed)
+        # Merge corner stats from local DB; fetch from API for fixtures still missing them.
+        self._merge_corner_stats(completed, client=client)
 
         self._multi_engine.fit(completed)  # type: ignore[union-attr]
 
@@ -177,8 +198,19 @@ class BootstrapController:
                 logger.warning("Live callback error: %s", exc)
 
     @staticmethod
-    def _merge_corner_stats(matches: list[dict]) -> None:
-        """Join home_corners / away_corners from fixture_stats into each match dict."""
+    def _merge_corner_stats(
+        matches: list[dict],
+        client=None,
+        api_fallback_limit: int = 30,
+    ) -> None:
+        """Join home_corners/away_corners into each match dict.
+
+        First reads from the local fixture_stats table.  For any FT match
+        still missing corner data, falls back to the API (capped at
+        api_fallback_limit calls) and persists the result so future runs
+        don't need to fetch again.
+        """
+        # 1. Load whatever is already stored locally.
         try:
             conn = sqlite3.connect(DATABASE_NAME)
             rows = conn.execute(
@@ -187,10 +219,48 @@ class BootstrapController:
             conn.close()
         except Exception as exc:
             logger.warning("Could not load fixture_stats for corners: %s", exc)
-            return
+            rows = []
 
-        stats_map = {str(r[0]): (r[1], r[2]) for r in rows}
+        # Keep only rows where at least one value is non-null (avoid masking API data).
+        stats_map: dict[str, tuple] = {
+            str(r[0]): (r[1], r[2]) for r in rows if r[1] is not None or r[2] is not None
+        }
+
+        # 2. Optionally fill gaps via API (avoids silently training on zeroed data).
+        if client is not None:
+            missing = [
+                m["fixture_id"]
+                for m in matches
+                if str(m.get("fixture_id", "")) not in stats_map
+            ][:api_fallback_limit]
+
+            if missing:
+                logger.info(
+                    "Fetching corner stats from API for %d fixtures missing local data.",
+                    len(missing),
+                )
+
+            for fid in missing:
+                try:
+                    stats = client.get_fixture_stats(fid)
+                    hc = stats.get("home_corners")
+                    ac = stats.get("away_corners")
+                    if hc is not None or ac is not None:
+                        stats_map[str(fid)] = (hc, ac)
+                        _persist_corner_stats(fid, hc, ac)
+                except Exception as exc:
+                    logger.debug("API corner fetch skipped for %s: %s", fid, exc)
+
+        # 3. Inject into match dicts (setdefault preserves any caller-supplied value).
+        n_filled = 0
         for m in matches:
             hc, ac = stats_map.get(str(m.get("fixture_id", "")), (None, None))
             m.setdefault("home_corners", hc)
             m.setdefault("away_corners", ac)
+            if hc is not None:
+                n_filled += 1
+
+        logger.info(
+            "Corner stats merged: %d/%d matches have corner data.",
+            n_filled, len(matches),
+        )

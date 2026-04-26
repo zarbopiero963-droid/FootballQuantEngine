@@ -12,13 +12,13 @@ CREATE TABLE IF NOT EXISTS fixtures(
     match_date   TEXT,
     home_goals   INTEGER,
     away_goals   INTEGER,
-    ht_home      INTEGER,
-    ht_away      INTEGER,
+    ht_home      INTEGER,          -- added in schema v2
+    ht_away      INTEGER,          -- added in schema v2
     status       TEXT,
-    venue        TEXT,
-    referee      TEXT,
-    elapsed      INTEGER,
-    updated_at   TEXT
+    venue        TEXT,             -- added in schema v2
+    referee      TEXT,             -- added in schema v2
+    elapsed      INTEGER,          -- added in schema v2
+    updated_at   TEXT              -- added in schema v2
 );
 
 CREATE INDEX IF NOT EXISTS idx_fixtures_status        ON fixtures(status);
@@ -118,7 +118,7 @@ CREATE TABLE IF NOT EXISTS odds_history(
 
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     fixture_id INTEGER NOT NULL REFERENCES fixtures(fixture_id),
-    market     TEXT    DEFAULT '1x2',
+    market     TEXT    DEFAULT '1x2',   -- added in schema v2
     timestamp  TEXT,
     home_odds  REAL,
     draw_odds  REAL,
@@ -143,3 +143,14 @@ CREATE TABLE IF NOT EXISTS predictions(
 );
 
 CREATE INDEX IF NOT EXISTS idx_predictions_fixture ON predictions(fixture_id);
+
+-- ---------------------------------------------------------------------------
+-- Schema migration registry — tracks which migrations have been applied.
+-- Managed exclusively by database/db_manager.py; do not write directly.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS schema_migrations(
+
+    version     INTEGER PRIMARY KEY,
+    description TEXT    NOT NULL,
+    applied_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);

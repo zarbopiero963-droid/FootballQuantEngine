@@ -22,6 +22,7 @@ from typing import Callable
 
 from config.constants import DATABASE_NAME
 from quant.providers.api_football_client import APIFootballClient
+from quant.providers.league_registry import name as league_name
 
 logger = logging.getLogger(__name__)
 
@@ -52,35 +53,42 @@ class DataBootstrap:
             if progress_cb:
                 progress_cb(msg)
 
-        _log(f"[Bootstrap] Checking available seasons for league {league_id}…")
+        lname = league_name(league_id, DATABASE_NAME)
+        _log(f"[Bootstrap] Checking available seasons for {lname} (ID {league_id})…")
         all_seasons = self.client.get_available_seasons(league_id)
         if not all_seasons:
-            _log("[Bootstrap] No seasons found — check league_id and API key.")
+            _log(f"[Bootstrap] No seasons found for {lname} — check league_id and API key.")
             return {"seasons_downloaded": 0, "fixtures_saved": 0, "stats_saved": 0}
 
         already_done = self._get_downloaded_seasons(league_id)
         missing = [s for s in all_seasons if s not in already_done]
 
-        _log(f"[Bootstrap] Available: {all_seasons} | Already in DB: {sorted(already_done)} | To download: {missing}")
+        _log(
+            f"[Bootstrap] {lname} — Available: {all_seasons} | "
+            f"In DB: {sorted(already_done)} | To download: {missing}"
+        )
 
         seasons_ok = 0
         total_fixtures = 0
         total_stats = 0
 
         for season in missing:
-            _log(f"[Bootstrap] Downloading season {season}…")
+            _log(f"[Bootstrap] {lname} — Downloading season {season}…")
             try:
                 n_fix, n_stats = self._download_season(league_id, season, fetch_stats, _log)
-                self._mark_season_done(league_id, season, n_fix)
+                self._mark_season_done(league_id, lname, season, n_fix)
                 seasons_ok += 1
                 total_fixtures += n_fix
                 total_stats += n_stats
-                _log(f"[Bootstrap] Season {season} done — {n_fix} fixtures, {n_stats} stats records.")
+                _log(f"[Bootstrap] {lname} {season} done — {n_fix} fixtures, {n_stats} stat records.")
             except Exception as exc:
-                _log(f"[Bootstrap] ERROR on season {season}: {exc}")
-                logger.exception("Bootstrap season %s failed", season)
+                _log(f"[Bootstrap] ERROR on {lname} season {season}: {exc}")
+                logger.exception("Bootstrap season %s failed for %s", season, lname)
 
-        _log(f"[Bootstrap] Completed. {seasons_ok} seasons, {total_fixtures} fixtures, {total_stats} stat records.")
+        _log(
+            f"[Bootstrap] {lname} completed. "
+            f"{seasons_ok} seasons, {total_fixtures} fixtures, {total_stats} stat records."
+        )
         return {
             "seasons_downloaded": seasons_ok,
             "fixtures_saved": total_fixtures,
@@ -103,10 +111,11 @@ class DataBootstrap:
             if progress_cb:
                 progress_cb(msg)
 
-        _log(f"[Bootstrap] Updating current season {season} for league {league_id}…")
+        lname = league_name(league_id, DATABASE_NAME)
+        _log(f"[Bootstrap] Updating {lname} (ID {league_id}) — season {season}…")
         n_fix, _ = self._download_season(league_id, season, fetch_stats=False, log=_log)
-        self._mark_season_done(league_id, season, n_fix)
-        _log(f"[Bootstrap] Update done — {n_fix} fixtures refreshed.")
+        self._mark_season_done(league_id, lname, season, n_fix)
+        _log(f"[Bootstrap] {lname} season {season} updated — {n_fix} fixtures refreshed.")
         return n_fix
 
     # ------------------------------------------------------------------
@@ -260,18 +269,21 @@ class DataBootstrap:
         except Exception:
             return set()
 
-    def _mark_season_done(self, league_id: int, season: int, n_fixtures: int) -> None:
+    def _mark_season_done(
+        self, league_id: int, lname: str, season: int, n_fixtures: int
+    ) -> None:
         try:
             conn = self._connect()
             conn.execute(
                 """
-                INSERT INTO downloaded_seasons(league_id, season, n_fixtures, downloaded_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO downloaded_seasons(league_id, league_name, season, n_fixtures, downloaded_at)
+                VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(league_id, season) DO UPDATE SET
+                    league_name   = excluded.league_name,
                     n_fixtures    = excluded.n_fixtures,
                     downloaded_at = excluded.downloaded_at
                 """,
-                (league_id, season, n_fixtures, datetime.now(timezone.utc).isoformat()),
+                (league_id, lname, season, n_fixtures, datetime.now(timezone.utc).isoformat()),
             )
             conn.commit()
             conn.close()

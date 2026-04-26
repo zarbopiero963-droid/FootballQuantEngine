@@ -33,33 +33,20 @@ from typing import Dict, List, Optional
 
 from data.api_football_collector import ApiFootballCollector
 from database.fixtures_repository import FixturesRepository
+from quant.providers.league_registry import all_known as _registry_all_known
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Betfair Exchange football leagues
-# API-Football league IDs for the 18 markets regularly traded on Betfair
+# API-Football league IDs for the 18 markets regularly traded on Betfair.
+# Sourced from the central league registry for consistency.
 # ---------------------------------------------------------------------------
 
 BETFAIR_LEAGUES: Dict[int, str] = {
-    2: "UEFA Champions League",
-    3: "UEFA Europa League",
-    39: "England - Premier League",
-    40: "England - Championship",
-    61: "France - Ligue 1",
-    65: "France - Ligue 2",
-    78: "Germany - Bundesliga",
-    79: "Germany - 2. Bundesliga",
-    88: "Netherlands - Eredivisie",
-    94: "Portugal - Primeira Liga",
-    119: "Denmark - Superliga",
-    135: "Italy - Serie A",
-    136: "Italy - Serie B",
-    140: "Spain - La Liga",
-    143: "Spain - Segunda División",
-    144: "Belgium - Pro League",
-    179: "Scotland - Premiership",
-    203: "Turkey - Süper Lig",
+    lid: name
+    for lid, name in _registry_all_known().items()
+    if lid in {2, 3, 39, 40, 61, 65, 78, 79, 88, 94, 119, 135, 136, 140, 143, 144, 179, 203}
 }
 
 # First season we want.  API-Football typically has data from ~2010 depending
@@ -214,7 +201,7 @@ class HistoricalDownloader:
         for season in target_seasons:
             if resume and self._repo.is_season_downloaded(league_id, season):
                 logger.debug(
-                    "  skip league=%d season=%d (already downloaded)", league_id, season
+                    "  skip %s (ID %d) season=%d (already downloaded)", league_name, league_id, season
                 )
                 progress.skipped_seasons += 1
                 continue
@@ -245,7 +232,7 @@ class HistoricalDownloader:
         try:
             fixtures = self._collector.get_league_season(league_id, season)
         except Exception as exc:  # noqa: BLE001
-            tag = f"league={league_id} season={season}: {exc}"
+            tag = f"{league_name} (ID {league_id}) season={season}: {exc}"
             progress.failed_seasons.append(tag)
             logger.exception("  FAILED %s", tag)
             return
@@ -254,7 +241,8 @@ class HistoricalDownloader:
             # API returned zero results — league probably didn't exist yet this season.
             # Still register it to avoid re-fetching empty seasons on resume.
             logger.info(
-                "  league=%d season=%d returned 0 fixtures (skipping registry)",
+                "  %s (ID %d) season=%d returned 0 fixtures (skipping registry)",
+                league_name,
                 league_id,
                 season,
             )
@@ -268,9 +256,9 @@ class HistoricalDownloader:
         progress.total_fixtures += len(fixtures)
 
         logger.info(
-            "  league=%d (%s) season=%d — %d fixtures saved (%.1f%% done)",
-            league_id,
+            "  %s (ID %d) season=%d — %d fixtures saved (%.1f%% done)",
             league_name,
+            league_id,
             season,
             len(fixtures),
             progress.pct_done(),

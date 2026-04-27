@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 BETFAIR_LEAGUES: Dict[int, str] = {
     lid: name
     for lid, name in _registry_all_known().items()
-    if lid in {2, 3, 39, 40, 61, 65, 78, 79, 88, 94, 119, 135, 136, 140, 143, 144, 179, 203}
+    if lid in {2, 3, 39, 40, 61, 62, 78, 79, 88, 94, 119, 135, 136, 140, 143, 144, 179, 203}
 }
 
 # First season we want.  API-Football typically has data from ~2010 depending

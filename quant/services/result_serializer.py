@@ -5,6 +5,9 @@ def to_records(results):
         records.append(
             {
                 "fixture_id": item.fixture_id,
+                "league_id": item.league_id,
+                "league_name": item.league_name,
+                "league": item.league_name,
                 "home_team": item.home_team,
                 "away_team": item.away_team,
                 "market": item.market,

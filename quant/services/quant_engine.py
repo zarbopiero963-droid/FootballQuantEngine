@@ -12,6 +12,7 @@ from quant.models.prediction_result import PredictionResult
 from quant.models.referee_engine import RefereeEngine
 from quant.models.rest_engine import RestEngine
 from quant.models.standings_engine import StandingsEngine
+from quant.providers.league_registry import name as _league_name
 from quant.services.agreement_engine import AgreementEngine
 from quant.services.confidence_engine import QuantConfidenceEngine
 from quant.services.market_tools import MarketTools
@@ -157,9 +158,12 @@ class QuantEngine:
                 agreement=agreement,
             )
 
+            _lid = int(fixture.get("league_id") or 0)
             results.append(
                 PredictionResult(
                     fixture_id=str(fixture["fixture_id"]),
+                    league_id=_lid,
+                    league_name=fixture.get("league") or _league_name(_lid),
                     home_team=fixture["home_team"],
                     away_team=fixture["away_team"],
                     market=market_name,

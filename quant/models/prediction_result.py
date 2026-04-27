@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 @dataclass
 class PredictionResult:
     fixture_id: str
+    league_id: int
+    league_name: str
     home_team: str
     away_team: str
     market: str

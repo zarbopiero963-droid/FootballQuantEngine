@@ -171,19 +171,23 @@ def test_parse_prematch_odds_1x2(mock_resp):
         client = APIFootballClient(api_key="test_key")
         odds = client.get_prematch_odds([2001])
 
-    assert odds["2001"]["home"] == pytest.approx(2.10)
-    assert odds["2001"]["draw"] == pytest.approx(3.40)
-    assert odds["2001"]["away"] == pytest.approx(3.20)
+    x12 = odds["2001"]["1x2"]
+    assert x12["home"] == pytest.approx(2.10)
+    assert x12["draw"] == pytest.approx(3.40)
+    assert x12["away"] == pytest.approx(3.20)
 
 
-def test_parse_prematch_odds_keys_only_1x2(mock_resp):
-    """Client only parses Match Winner; non-1x2 markets are ignored."""
+def test_parse_prematch_odds_all_markets_present(mock_resp):
+    """Client parses 1x2, ou25, and btts markets from the same response."""
     with patch("requests.get", return_value=mock_resp(ODDS_RESPONSE)):
         from quant.providers.api_football_client import APIFootballClient
         client = APIFootballClient(api_key="test_key")
         odds = client.get_prematch_odds([2001])
 
-    assert set(odds["2001"].keys()) == {"home", "draw", "away"}
+    markets = odds["2001"]
+    assert "1x2" in markets
+    assert "ou25" in markets
+    assert "btts" in markets
 
 
 def test_parse_prematch_odds_missing_fixture(mock_resp):

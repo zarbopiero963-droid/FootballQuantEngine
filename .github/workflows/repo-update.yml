@@ -83,20 +83,19 @@ jobs:
             exit 0
           fi
 
-          git commit -m "[skip ci] Automated DevOps Engine Update"
+          # No [skip ci] — automated commits must still pass CI
+          git commit -m "chore: automated DevOps engine update"
 
-          # Primo tentativo push normale
-          if git push origin HEAD:main; then
-            echo "Push OK"
-            exit 0
-          fi
+          # Retry up to 3 times with rebase (no force push)
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              echo "Push OK on attempt $attempt"
+              exit 0
+            fi
+            echo "Push rejected (attempt $attempt), rebasing on origin/main…"
+            git fetch origin main
+            git rebase origin/main
+          done
 
-          echo "Push rejected, retry with fetch/reset/cherry-pick"
-
-          LAST_COMMIT="$(git rev-parse HEAD)"
-
-          git fetch origin main
-          git reset --hard origin/main
-          git cherry-pick "$LAST_COMMIT"
-
-          git push --force-with-lease origin HEAD:main
+          echo "ERROR: push failed after 3 attempts — manual intervention required"
+          exit 1

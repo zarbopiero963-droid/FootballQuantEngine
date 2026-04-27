@@ -37,7 +37,7 @@ from collections import defaultdict
 
 import pandas as pd
 
-from analysis.betfair_leagues import is_betfair_league
+from analytics.betfair_leagues import is_betfair_league
 from database.db_manager import connect
 
 _FORM_WINDOW = 5

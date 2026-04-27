@@ -1,6 +1,6 @@
 import pandas as pd
 
-from analysis.market_inefficiency import MarketInefficiencyScanner
+from analytics.market_inefficiency_scanner import MarketInefficiencyScanner
 
 
 def test_market_inefficiency_runs():

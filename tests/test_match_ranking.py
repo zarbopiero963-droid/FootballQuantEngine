@@ -1,6 +1,6 @@
 import pandas as pd
 
-from analysis.match_ranking import MatchRanking
+from analytics.match_ranking import MatchRanking
 
 
 def test_match_ranking_runs():

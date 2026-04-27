@@ -1,4 +1,4 @@
-from analysis.report_viewer_helper import ReportViewerHelper
+from analytics.report_viewer_helper import ReportViewerHelper
 
 
 def test_report_viewer_helper_class_exists():

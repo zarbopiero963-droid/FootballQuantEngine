@@ -1,6 +1,6 @@
 import pandas as pd
 
-from analysis.ai_feature_generation import AIFeatureGenerator
+from analytics.ai_feature_generation import AIFeatureGenerator
 
 
 def test_ai_feature_generation_runs():

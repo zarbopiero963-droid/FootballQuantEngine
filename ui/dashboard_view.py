@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from analysis.svg_chart_builder import SvgChartBuilder
+from analytics.svg_chart_builder import SvgChartBuilder
 from export.csv_exporter import CsvExporter
 from export.excel_exporter import ExcelExporter
 

@@ -1,4 +1,4 @@
-from analysis.manual_context import ManualContextManager
+from analytics.manual_context import ManualContextManager
 
 
 def test_manual_context_manager_class_exists():

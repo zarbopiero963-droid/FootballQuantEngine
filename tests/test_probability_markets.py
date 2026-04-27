@@ -1,4 +1,4 @@
-from analysis.probability_markets import ProbabilityMarkets
+from analytics.probability_markets import ProbabilityMarkets
 
 
 def test_probability_markets_runs():

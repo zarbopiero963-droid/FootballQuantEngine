@@ -470,8 +470,8 @@ def load_best_model() -> dict | None:
         import joblib
 
         return joblib.load(MODEL_PATH)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("joblib.load failed for %s: %s — trying pickle fallback", MODEL_PATH, exc)
     # pickle fallback: only load files written by this process (same host, same user)
     logger.warning(
         "joblib unavailable or failed; falling back to pickle for %s — "
@@ -481,7 +481,8 @@ def load_best_model() -> dict | None:
     try:
         with open(MODEL_PATH, "rb") as fh:
             return pickle.load(fh)
-    except Exception:
+    except Exception as exc:
+        logger.warning("pickle.load also failed for %s: %s", MODEL_PATH, exc)
         return None
 
 

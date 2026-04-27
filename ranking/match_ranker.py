@@ -255,6 +255,7 @@ class MatchRanker:
 
         # Collect extra pass-through fields
         known = {
+            "fixture_id",
             "match_id",
             "market",
             "probability",
@@ -268,7 +269,7 @@ class MatchRanker:
         extras = {k: v for k, v in record.items() if k not in known}
 
         return RankedBet(
-            match_id=str(record.get("match_id", "")),
+            match_id=str(record.get("fixture_id") or record.get("match_id", "")),
             market=str(record.get("market", "")),
             probability=prob,
             odds=odds,

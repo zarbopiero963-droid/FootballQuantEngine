@@ -244,18 +244,24 @@ class MarketInefficiencyScanner:
     # Primary scan
     # ------------------------------------------------------------------
 
-    def scan(self, predictions: List[Dict]) -> List[Dict]:
+    def scan(self, predictions) -> "List[Dict]":
         """
-        Scan a list of predictions for market inefficiencies.
+        Scan predictions for market inefficiencies.
 
-        Each prediction must contain:
-          - home_win, draw, away_win  : model probabilities
-          - home_odds, draw_odds, away_odds  : bookmaker odds
-        Optional:
-          - fixture_id, league, timestamp
-
-        Returns the input list enriched with inefficiency fields.
+        Accepts either a list of dicts or a pandas DataFrame.
+        Returns the same type as input, enriched with inefficiency fields
+        including ``inefficiency_score`` (abs z-score of the strongest signal).
         """
+        # Accept pandas DataFrames — convert to records for uniform processing
+        _was_dataframe = False
+        try:
+            import pandas as pd
+            if isinstance(predictions, pd.DataFrame):
+                _was_dataframe = True
+                predictions = predictions.to_dict(orient="records")
+        except ImportError:
+            pass
+
         now = time.time()
         results = []
 
@@ -277,8 +283,12 @@ class MarketInefficiencyScanner:
                     enriched["cohen_h"] = 0.0
             except Exception as exc:
                 logger.debug("MarketInefficiencyScanner.scan: error on record: %s", exc)
+            enriched["inefficiency_score"] = abs(float(enriched.get("z_score", 0.0)))
             results.append(enriched)
 
+        if _was_dataframe:
+            import pandas as pd
+            return pd.DataFrame(results)
         return results
 
     def _scan_one(self, pred: Dict, now: float) -> List[Inefficiency]:

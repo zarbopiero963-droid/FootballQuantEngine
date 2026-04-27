@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS downloaded_seasons(
 
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     league_id     INTEGER NOT NULL,
+    league_name   TEXT    NOT NULL DEFAULT '',   -- human-readable name
     season        INTEGER NOT NULL,
     n_fixtures    INTEGER NOT NULL DEFAULT 0,
     downloaded_at TEXT    NOT NULL

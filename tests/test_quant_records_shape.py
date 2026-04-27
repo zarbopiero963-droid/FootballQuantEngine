@@ -18,6 +18,9 @@ def test_quant_records_have_expected_fields():
 
     expected = {
         "fixture_id",
+        "league_id",
+        "league_name",
+        "league",
         "home_team",
         "away_team",
         "market",

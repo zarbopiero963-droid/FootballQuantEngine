@@ -30,6 +30,13 @@ _MIGRATIONS: list[tuple[int, str, list[tuple[str, str, str]]]] = [
             ("odds_history", "market",     "TEXT DEFAULT '1x2'"),
         ],
     ),
+    (
+        3,
+        "Added league_name column to downloaded_seasons for human-readable display",
+        [
+            ("downloaded_seasons", "league_name", "TEXT NOT NULL DEFAULT ''"),
+        ],
+    ),
 ]
 
 

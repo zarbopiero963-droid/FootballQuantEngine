@@ -24,6 +24,7 @@ from data.live_updater import LiveUpdater
 from database.db_manager import init_db
 from quant.markets.multi_market_engine import MultiMarketEngine
 from quant.providers.api_football_client import APIFootballClient
+from quant.providers.league_registry import name as league_name
 
 logger = logging.getLogger(__name__)
 
@@ -133,13 +134,14 @@ class BootstrapController:
             self.initialise(progress_cb)
 
         client = APIFootballClient(api_key=self._api_key)
+        lname = league_name(league_id, DATABASE_NAME)
 
-        _log(f"[Predictions] Loading completed matches for training… (league={league_id}, season={season})")
+        _log(f"[Predictions] Loading completed matches — {lname} season {season}…")
         completed = client.get_completed_matches(league_id, season)
         _log(f"[Predictions] {len(completed)} completed matches loaded.")
 
         if not completed:
-            _log("[Predictions] No completed matches — cannot train models. Run Bootstrap first.")
+            _log(f"[Predictions] No completed matches for {lname} — run Bootstrap first.")
             return []
 
         # Merge corner stats from local DB; fetch from API for fixtures still missing them.
@@ -147,22 +149,22 @@ class BootstrapController:
 
         self._multi_engine.fit(completed)  # type: ignore[union-attr]
 
-        _log("[Predictions] Fetching upcoming fixtures…")
+        _log(f"[Predictions] Fetching upcoming fixtures for {lname} season {season}…")
         upcoming = client.get_upcoming_matches(league_id, season)
-        _log(f"[Predictions] {len(upcoming)} upcoming fixtures found.")
+        _log(f"[Predictions] {len(upcoming)} upcoming fixtures found in {lname}.")
 
         if not upcoming:
-            _log("[Predictions] No upcoming fixtures.")
+            _log(f"[Predictions] No upcoming fixtures in {lname}.")
             return []
 
         fixture_ids = [f["fixture_id"] for f in upcoming]
-        _log(f"[Predictions] Fetching odds for {len(fixture_ids)} fixtures…")
+        _log(f"[Predictions] Fetching odds for {len(fixture_ids)} {lname} fixtures…")
         odds_map = client.get_prematch_odds(fixture_ids)
         _log(f"[Predictions] Odds fetched for {len(odds_map)} fixtures.")
 
-        _log("[Predictions] Computing multi-market predictions…")
+        _log(f"[Predictions] Computing multi-market predictions for {lname}…")
         rows = self._multi_engine.predict_all(upcoming, odds_map)  # type: ignore[union-attr]
-        _log(f"[Predictions] {len(rows)} prediction rows generated.")
+        _log(f"[Predictions] {len(rows)} prediction rows generated for {lname}.")
 
         saved = self._multi_engine.save_predictions(rows, DATABASE_NAME)  # type: ignore[union-attr]
         _log(f"[Predictions] {saved} rows saved to DB.")

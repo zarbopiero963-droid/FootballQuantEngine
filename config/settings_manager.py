@@ -42,14 +42,11 @@ def load_settings():
 
 
 def save_settings(settings):
-
+    # Never persist secrets to disk — they must come from environment variables.
+    # Only non-sensitive UI preferences are written to settings.json.
     data = {
-        "api_football_key": settings.api_football_key,
-        "telegram_token": settings.telegram_token,
-        "telegram_chat_id": settings.telegram_chat_id,
         "league_id": settings.league_id,
         "season": settings.season,
-        "openweather_key": settings.openweather_key,
     }
 
     with open(SETTINGS_FILE, "w") as f:

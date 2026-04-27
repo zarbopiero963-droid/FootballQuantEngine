@@ -42,12 +42,33 @@ def load_settings():
 
 
 def save_settings(settings):
-    # Never persist secrets to disk — they must come from environment variables.
-    # Only non-sensitive UI preferences are written to settings.json.
+    # Read whatever is already on disk so we can preserve existing credentials.
+    existing: dict = {}
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE) as f:
+                existing = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Non-sensitive UI preferences are always written.
     data = {
         "league_id": settings.league_id,
         "season": settings.season,
     }
+
+    # Preserve credentials that are already stored in the file but are NOT
+    # currently supplied via environment variables (env vars make the file
+    # copy redundant and should not be duplicated on disk).
+    _SECRET_ENV: dict = {
+        "api_football_key": "API_FOOTBALL_KEY",
+        "telegram_token": "TELEGRAM_TOKEN",
+        "telegram_chat_id": "TELEGRAM_CHAT_ID",
+        "openweather_key": "OPENWEATHER_KEY",
+    }
+    for field, env_var in _SECRET_ENV.items():
+        if not os.getenv(env_var) and existing.get(field):
+            data[field] = existing[field]
 
     with open(SETTINGS_FILE, "w") as f:
         json.dump(data, f, indent=2)

@@ -1,9 +1,22 @@
+import os
 from pathlib import Path
 
 BASE_URL_API_FOOTBALL = "https://v3.football.api-sports.io"
 
-# Absolute path so the DB is always found regardless of cwd
-DATABASE_NAME = str(Path(__file__).resolve().parent.parent / "quant_engine.db")
+
+def _resolve_db_path() -> str:
+    # Explicit override wins (useful for tests, CI, containers, read-only installs).
+    env = os.getenv("FQE_DB_PATH")
+    if env:
+        return env
+    # Write to a user-writable data directory so the app works under read-only
+    # install paths (e.g. system-wide or PyInstaller EXE in Program Files).
+    data_dir = Path.home() / ".footballquantengine"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return str(data_dir / "quant_engine.db")
+
+
+DATABASE_NAME = _resolve_db_path()
 
 EDGE_THRESHOLD = 0.05
 

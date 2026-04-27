@@ -45,6 +45,19 @@ def connect() -> sqlite3.Connection:
     return sqlite3.connect(DATABASE_NAME)
 
 
+@contextmanager
+def get_db():
+    conn = connect()
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 def init_db() -> None:
     conn = connect()
 

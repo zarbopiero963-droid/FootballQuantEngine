@@ -44,135 +44,35 @@ from __future__ import annotations
 import logging
 import math
 import time
-from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
+
+from engine.bayesian_math import (
+    compute_btts,
+    compute_over_under,
+    compute_win_probs,
+    poisson_pmf,
+)
+from engine.bayesian_types import (
+    _EVENT_DELTA_ALPHA,
+    _MAX_GOALS,
+    _MIN_ALPHA,
+    BayesianAlert,
+    BayesianState,
+    LiveEvent,
+    PreMatchPrior,
+)
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
-# Increment to Gamma shape (α) for each event type
-_EVENT_DELTA_ALPHA: Dict[str, Tuple[float, float]] = {
-    "home_goal": (1.00, 0.00),
-    "away_goal": (0.00, 1.00),
-    "home_shot_on_target": (0.15, 0.00),
-    "away_shot_on_target": (0.00, 0.15),
-    "home_dangerous_attack": (0.05, 0.00),
-    "away_dangerous_attack": (0.00, 0.05),
-    "home_red_card": (0.00, 0.20),  # home weakened → away benefit
-    "away_red_card": (0.20, 0.00),  # away weakened → home benefit
-    "corner_home": (0.03, 0.00),
-    "corner_away": (0.00, 0.03),
-}
-
-_MIN_ALPHA: float = 0.5  # floor on α — prevents λ collapsing to zero
-_MAX_GOALS: int = 10  # poisson score matrix dimension (captures >99.999% of mass)
-
-
-# ---------------------------------------------------------------------------
-# Dataclasses
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class PreMatchPrior:
-    """Pre-match Poisson estimates used to build Gamma priors."""
-
-    lambda_home: float
-    lambda_away: float
-    confidence: float = 3.0  # equivalent prior matches
-
-    def __post_init__(self) -> None:
-        if self.lambda_home <= 0 or self.lambda_away <= 0:
-            raise ValueError("Pre-match lambda values must be positive.")
-        if self.confidence <= 0:
-            raise ValueError("Confidence must be positive.")
-
-
-@dataclass
-class LiveEvent:
-    """A single in-play event observed during the match."""
-
-    minute: int
-    event_type: str
-    timestamp: float = field(default_factory=lambda: time.time())
-
-    def __post_init__(self) -> None:
-        if self.event_type not in _EVENT_DELTA_ALPHA:
-            raise ValueError(
-                f"Unknown event_type '{self.event_type}'. "
-                f"Valid types: {sorted(_EVENT_DELTA_ALPHA)}"
-            )
-        if not (0 <= self.minute <= 120):
-            raise ValueError(f"minute must be in [0, 120], got {self.minute}.")
-
-
-@dataclass
-class BayesianState:
-    """Full Bayesian posterior state at a given match minute."""
-
-    minute: int
-    home_score: int
-    away_score: int
-    alpha_home: float
-    beta_home: float
-    alpha_away: float
-    beta_away: float
-    posterior_lambda_home: float
-    posterior_lambda_away: float
-    p_home_win: float
-    p_draw: float
-    p_away_win: float
-    p_over_25: float
-    p_under_25: float
-    p_btts: float
-    events_processed: int
-    last_event_minute: int
-
-    def summary(self) -> str:
-        """Return a compact ASCII summary of the current Bayesian state."""
-        sep = "=" * 56
-        lines = [
-            sep,
-            f"  BAYESIAN LIVE STATE  —  minute {self.minute:>3d}",
-            sep,
-            f"  Score          : {self.home_score} – {self.away_score}",
-            f"  λ home (post.) : {self.posterior_lambda_home:.4f}",
-            f"  λ away (post.) : {self.posterior_lambda_away:.4f}",
-            f"  Gamma home     : Gamma({self.alpha_home:.4f}, {self.beta_home:.4f})",
-            f"  Gamma away     : Gamma({self.alpha_away:.4f}, {self.beta_away:.4f})",
-            "  " + "-" * 52,
-            f"  P(home win)    : {self.p_home_win:.4f}",
-            f"  P(draw)        : {self.p_draw:.4f}",
-            f"  P(away win)    : {self.p_away_win:.4f}",
-            f"  P(over 2.5)    : {self.p_over_25:.4f}",
-            f"  P(under 2.5)   : {self.p_under_25:.4f}",
-            f"  P(BTTS)        : {self.p_btts:.4f}",
-            "  " + "-" * 52,
-            f"  Events done    : {self.events_processed}",
-            f"  Last event min : {self.last_event_minute}",
-            sep,
-        ]
-        return "\n".join(lines)
-
-
-@dataclass
-class BayesianAlert:
-    """Triggered when the posterior diverges significantly from pre-match."""
-
-    state: BayesianState
-    alert_type: str  # "UNDER_VALUE" | "HOME_DRIFT" | "AWAY_SURGE" | "QUIET_GAME"
-    message: str
-    edge_direction: str  # "BUY_UNDER" | "BUY_HOME" | "BUY_AWAY" | "BUY_DRAW"
-    confidence: str  # "HIGH" | "MEDIUM" | "LOW"
-
-    def __str__(self) -> str:
-        return (
-            f"[{self.confidence}] {self.alert_type}: {self.message} "
-            f"→ {self.edge_direction}"
-        )
+# Re-export for backward compatibility
+__all__ = [
+    "BayesianLiveEngine",
+    "BayesianAlert",
+    "BayesianState",
+    "LiveEvent",
+    "PreMatchPrior",
+    "run_bayesian_live",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -531,14 +431,14 @@ class BayesianLiveEngine:
         rem_lh = post_lh * remaining_frac
         rem_la = post_la * remaining_frac
 
-        p_hw, p_d, p_aw = self._compute_win_probs(
+        p_hw, p_d, p_aw = compute_win_probs(
             rem_lh, rem_la, home_score, away_score
         )
         already_scored = home_score + away_score
-        p_over, p_under = self._compute_over_under(
+        p_over, p_under = compute_over_under(
             rem_lh, rem_la, already_scored, threshold=2.5
         )
-        p_btts = self._compute_btts(rem_lh, rem_la, home_score, away_score)
+        p_btts = compute_btts(rem_lh, rem_la, home_score, away_score)
 
         return BayesianState(
             minute=minute,
@@ -560,93 +460,8 @@ class BayesianLiveEngine:
             last_event_minute=last_event_minute,
         )
 
-    def _poisson_pmf(self, k: int, lam: float) -> float:
-        """Compute P(X = k) for X ~ Poisson(lam)."""
-        if lam <= 0.0:
-            return 1.0 if k == 0 else 0.0
-        return math.exp(-lam) * (lam**k) / math.factorial(k)
-
-    def _compute_win_probs(
-        self,
-        rem_lh: float,
-        rem_la: float,
-        home_score: int,
-        away_score: int,
-    ) -> Tuple[float, float, float]:
-        """
-        Compute P(home win), P(draw), P(away win) using a Poisson score
-        matrix for remaining goals (0..MAX_GOALS each).
-
-        Takes current score into account so a 1-0 home side needs 0 more
-        goals to maintain a winning position, etc.
-        """
-        p_hw = 0.0
-        p_d = 0.0
-        p_aw = 0.0
-        for gh in range(_MAX_GOALS + 1):
-            p_gh = self._poisson_pmf(gh, rem_lh)
-            for ga in range(_MAX_GOALS + 1):
-                p_ga = self._poisson_pmf(ga, rem_la)
-                joint = p_gh * p_ga
-                total_home = home_score + gh
-                total_away = away_score + ga
-                if total_home > total_away:
-                    p_hw += joint
-                elif total_home == total_away:
-                    p_d += joint
-                else:
-                    p_aw += joint
-        return p_hw, p_d, p_aw
-
-    def _compute_over_under(
-        self,
-        rem_lh: float,
-        rem_la: float,
-        already_scored: int,
-        threshold: float,
-    ) -> Tuple[float, float]:
-        """
-        Compute P(total goals > threshold) and P(total goals <= threshold).
-
-        already_scored is the number of goals already in the match.
-        """
-        p_over = 0.0
-        for gh in range(_MAX_GOALS + 1):
-            p_gh = self._poisson_pmf(gh, rem_lh)
-            for ga in range(_MAX_GOALS + 1):
-                p_ga = self._poisson_pmf(ga, rem_la)
-                total = already_scored + gh + ga
-                if total > threshold:
-                    p_over += p_gh * p_ga
-        p_under = max(0.0, 1.0 - p_over)
-        return p_over, p_under
-
-    def _compute_btts(
-        self,
-        rem_lh: float,
-        rem_la: float,
-        home_score: int,
-        away_score: int,
-    ) -> float:
-        """
-        Compute P(both teams to score), accounting for current score.
-
-        If a team has already scored, they only need 0 more for their
-        half of the condition to be satisfied.
-        """
-        # P(home scores at least 1 more OR home already scored)
-        if home_score > 0:
-            p_home_scores = 1.0
-        else:
-            p_home_scores = 1.0 - self._poisson_pmf(0, rem_lh)
-
-        # P(away scores at least 1 more OR away already scored)
-        if away_score > 0:
-            p_away_scores = 1.0
-        else:
-            p_away_scores = 1.0 - self._poisson_pmf(0, rem_la)
-
-        return p_home_scores * p_away_scores
+    # _poisson_pmf, _compute_win_probs, _compute_over_under, _compute_btts
+    # extracted to engine.bayesian_math as module-level functions.
 
 
 # ---------------------------------------------------------------------------

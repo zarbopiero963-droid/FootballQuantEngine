@@ -1,12 +1,17 @@
 import os
 import subprocess
+import sys
 import time
 
 import pytest
 
-pytest.importorskip("pywinauto")
-psutil = pytest.importorskip("psutil")
-Desktop = pytest.importorskip("pywinauto").Desktop
+# Tests must be *collected* on all platforms so `-m windows` returns exit 0
+# (2 skipped) rather than exit 5 (no tests collected).  The actual Windows-
+# only libraries are imported lazily inside each test and helper.
+pytestmark = pytest.mark.skipif(
+    sys.platform != "win32",
+    reason="EXE smoke tests require Windows with pywinauto and psutil",
+)
 
 EXE_PATH = os.environ.get(
     "APP_EXE_PATH",
@@ -21,6 +26,7 @@ def _start_app():
 
 
 def _wait_for_window(timeout: float = 30.0):
+    Desktop = pytest.importorskip("pywinauto").Desktop
     end_time = time.time() + timeout
 
     while time.time() < end_time:
@@ -43,18 +49,13 @@ def _wait_for_window(timeout: float = 30.0):
 
 def _terminate_process_tree(pid: int):
     try:
+        import psutil
         parent = psutil.Process(pid)
-    except Exception:
-        return
-
-    children = parent.children(recursive=True)
-    for proc in children:
-        try:
-            proc.kill()
-        except Exception:
-            pass
-
-    try:
+        for proc in parent.children(recursive=True):
+            try:
+                proc.kill()
+            except Exception:
+                pass
         parent.kill()
     except Exception:
         pass
@@ -62,6 +63,9 @@ def _terminate_process_tree(pid: int):
 
 @pytest.mark.windows
 def test_installed_exe_opens_main_window():
+    pytest.importorskip("pywinauto")
+    pytest.importorskip("psutil")
+
     if not os.path.exists(EXE_PATH):
         pytest.skip(f"EXE not found: {EXE_PATH}")
 
@@ -83,6 +87,9 @@ def test_installed_exe_opens_main_window():
 
 @pytest.mark.windows
 def test_installed_exe_has_main_buttons():
+    pytest.importorskip("pywinauto")
+    pytest.importorskip("psutil")
+
     if not os.path.exists(EXE_PATH):
         pytest.skip(f"EXE not found: {EXE_PATH}")
 

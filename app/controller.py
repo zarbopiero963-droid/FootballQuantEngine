@@ -1,37 +1,31 @@
 """
-Application controller — orchestrates the full prediction-to-notification pipeline.
+AppController
+=============
+Main orchestrator for the desktop application.
 
-Responsibilities
-----------------
-1. Run a quant prediction cycle (via JobRunner)
-2. Rank results with Kelly criterion and composite scoring (MatchRanker)
-3. Export to CSV and Excel with full formatting (CsvExporter, ExcelExporter)
-4. Generate a dated HTML performance report (ReportGenerator)
-5. Send Telegram alerts: value-bet list + attach CSV + daily summary
-6. Start / stop the live odds streaming engine (OddsStream)
-7. Track bankroll across cycles and pass it to the ranker for stake sizing
-8. Expose run stats for the UI (last run time, last result count, etc.)
-
-Design decisions
-----------------
-- JobRunner / QuantJobRunner are the source of truth for predictions; this
-  controller adds the post-processing layer on top without duplicating logic.
-- Telegram notifications are best-effort: failures are logged but never
-  raise exceptions so the UI cycle always completes.
-- The OddsStream is started in a daemon thread and injected with a callback
-  that triggers a Telegram steam alert.
-- Bankroll defaults to 1000 and can be updated via update_bankroll().
+Responsibilities:
+  - Initialise DB and run historical bootstrap (via BootstrapController)
+  - Run a quant prediction cycle (via JobRunner)
+  - Rank results with Kelly criterion and composite scoring (MatchRanker)
+  - Export to CSV and Excel (CsvExporter, ExcelExporter)
+  - Generate a dated HTML performance report (ReportGenerator)
+  - Send Telegram alerts (TelegramNotifier)
+  - Start / stop the live odds streaming engine (OddsStream)
+  - Start / stop the live fixture updater (LiveUpdater via BootstrapController)
+  - Track bankroll across cycles
 """
-
 from __future__ import annotations
 
 import logging
+import os
 import time
 from datetime import date
 from pathlib import Path
 from typing import Optional
 
+from app.bootstrap_controller import BootstrapController
 from config.settings_manager import load_settings
+from database.db_manager import init_db
 from engine.job_runner import JobRunner
 from export.csv_exporter import CsvExporter
 from export.excel_exporter import ExcelExporter
@@ -43,16 +37,7 @@ logger = logging.getLogger(__name__)
 
 
 class AppController:
-    """
-    Central application controller.
-
-    Parameters
-    ----------
-    bankroll     : starting bankroll for Kelly stake sizing (default 1000)
-    kelly_scale  : fraction of full Kelly to recommend (default 0.25)
-    output_dir   : base directory for CSV / Excel / report files
-    dry_run      : if True, Telegram sends are logged but not actually sent
-    """
+    """Central application controller."""
 
     def __init__(
         self,
@@ -65,16 +50,21 @@ class AppController:
         self._output = Path(output_dir)
         self._output.mkdir(parents=True, exist_ok=True)
 
-        # Core pipeline
+        # Ensure DB tables exist — no API key needed for this step
+        init_db()
+
+        # Bootstrap controller is lazy-initialised on first use so the app
+        # opens even when no API key is configured yet.
+        self._bootstrap_ctrl: BootstrapController | None = None
+
+        # Core prediction pipeline
         self.runner = JobRunner()
 
-        # Post-processing components
+        # Post-processing
         self.ranker = MatchRanker(bankroll=bankroll, kelly_scale=kelly_scale)
         self.csv_exp = CsvExporter(output_dir=str(self._output))
         self.xlsx_exp = ExcelExporter(output_dir=str(self._output))
-        self.reporter = ReportGenerator(
-            output_dir=str(self._output / "reports"),
-        )
+        self.reporter = ReportGenerator(output_dir=str(self._output / "reports"))
         self.notifier = TelegramNotifier(
             token=self._settings.telegram_token,
             chat_id=self._settings.telegram_chat_id,
@@ -91,18 +81,55 @@ class AppController:
         self._cumulative_metrics: dict = {}
 
     # ------------------------------------------------------------------
-    # Primary entry points (called from MainWindow / QuantJobRunner)
+    # Internal: lazy BootstrapController (avoids startup crash when key absent)
+    # ------------------------------------------------------------------
+
+    def _get_bootstrap(self) -> BootstrapController:
+        if self._bootstrap_ctrl is None:
+            api_key = (
+                os.getenv("API_FOOTBALL_KEY")
+                or self._settings.api_football_key
+                or ""
+            )
+            self._bootstrap_ctrl = BootstrapController(api_key=api_key)
+            self._bootstrap_ctrl.initialise()
+        return self._bootstrap_ctrl
+
+    # ------------------------------------------------------------------
+    # Bootstrap (first run / refresh historical data)
+    # ------------------------------------------------------------------
+
+    def run_bootstrap(
+        self,
+        league_id: int,
+        progress_cb=None,
+        fetch_stats: bool = True,
+    ) -> dict:
+        """Download all historical seasons for league_id into the local DB."""
+        return self._get_bootstrap().run_bootstrap(
+            league_id=league_id,
+            progress_cb=progress_cb,
+            fetch_stats=fetch_stats,
+        )
+
+    def update_current_season(
+        self, league_id: int, season: int, progress_cb=None
+    ) -> int:
+        """Re-fetch only the current season to pick up new results."""
+        return self._get_bootstrap().update_current_season(
+            league_id=league_id,
+            season=season,
+            progress_cb=progress_cb,
+        )
+
+    # ------------------------------------------------------------------
+    # Primary entry points
     # ------------------------------------------------------------------
 
     def run_predictions(self) -> list[dict]:
-        """
-        Full cycle: predict → rank → export → notify.
-
-        Returns the raw ranked list (list[dict]) so the UI can display it.
-        """
+        """Full cycle: predict → rank → export → notify."""
         t0 = time.monotonic()
 
-        # 1. Raw predictions from the quant engine
         try:
             raw = self.runner.run_cycle()
         except Exception as exc:
@@ -113,22 +140,16 @@ class AppController:
             logger.info("AppController: no prediction results.")
             return []
 
-        # Normalise: JobRunner may return list[dict] or DataFrame
         records = self._to_list(raw)
-
-        # 2. Rank with Kelly + composite score
         ranked = self.ranker.rank_as_dicts(records)
 
-        # 3. Export
         today = date.today().isoformat()
         csv_path = self._export_csv(ranked, today)
         self._export_excel(ranked, today)
 
-        # 4. Telegram: value bets alert + CSV attachment
         bets_only = [r for r in ranked if r.get("decision") == "BET"]
         self._notify_bets(bets_only, csv_path)
 
-        # 5. Stats
         elapsed = time.monotonic() - t0
         self._last_run_ts = time.time()
         self._last_result_count = len(ranked)
@@ -141,7 +162,6 @@ class AppController:
             len(bets_only),
         )
 
-        # 6. Cycle summary notification
         top_match = ranked[0].get("match_id") if ranked else None
         self.notifier.send_cycle_summary(
             n_processed=len(records),
@@ -153,7 +173,17 @@ class AppController:
 
         return ranked
 
-    # Aliases kept for backwards compatibility with MainWindow / tests
+    def run_cycle(
+        self, league_id: int | None = None, season: int | None = None
+    ) -> list:
+        """Update current season data then generate all-market predictions."""
+        settings = load_settings()
+        lid = league_id or getattr(settings, "league_id", None) or 135
+        s   = season   or getattr(settings, "season",    None) or 2024
+        self.update_current_season(lid, s)
+        return self._get_bootstrap().run_predictions(lid, s)
+
+    # Aliases for backwards compatibility with MainWindow / tests
     def run_once(self) -> list[dict]:
         return self.run_predictions()
 
@@ -169,31 +199,38 @@ class AppController:
         ranked_bets: Optional[list[dict]] = None,
         metrics: Optional[dict] = None,
     ) -> str:
-        """
-        Generate a dated HTML report and send a Telegram summary.
-
-        If ranked_bets is None, runs a fresh prediction cycle first.
-
-        Returns
-        -------
-        str — path of the generated HTML report.
-        """
         if ranked_bets is None:
             ranked_bets = self.run_predictions()
-
         metrics = metrics or self._cumulative_metrics
-
         report_path = self.reporter.generate(
             ranked_bets=ranked_bets,
             metrics=metrics,
         )
         logger.info("AppController: daily report saved to %s", report_path)
-
         self.notifier.send_daily_report_alert(
             metrics=metrics,
             report_path=report_path,
         )
         return report_path
+
+    # ------------------------------------------------------------------
+    # Live fixture updates (data engine)
+    # ------------------------------------------------------------------
+
+    def start_live_updates(self) -> None:
+        self._get_bootstrap().start_live_updates()
+
+    def stop_live_updates(self) -> None:
+        if self._bootstrap_ctrl:
+            self._bootstrap_ctrl.stop_live_updates()
+
+    def on_live_update(self, callback) -> None:
+        self._get_bootstrap().on_live_update(callback)
+
+    def live_health(self) -> dict:
+        if self._bootstrap_ctrl is None:
+            return {"running": False}
+        return self._bootstrap_ctrl.live_health()
 
     # ------------------------------------------------------------------
     # Live odds streaming
@@ -202,15 +239,6 @@ class AppController:
     def start_stream(
         self, fetch_fn, source: str = "default", interval: float = 300.0
     ) -> None:
-        """
-        Start live odds streaming.
-
-        Parameters
-        ----------
-        fetch_fn : callable() → list[dict]  (fixture_id, home_odds, …)
-        source   : display name for this source
-        interval : polling interval in seconds
-        """
         from live.odds_stream import OddsStream
 
         if self._stream and self._stream.is_running():
@@ -264,7 +292,6 @@ class AppController:
         logger.info("AppController: bankroll updated to %.2f.", bankroll)
 
     def update_metrics(self, metrics: dict) -> None:
-        """Store backtest metrics for inclusion in daily reports."""
         self._cumulative_metrics = dict(metrics)
 
     # ------------------------------------------------------------------
@@ -280,6 +307,7 @@ class AppController:
             "stream_running": bool(self._stream and self._stream.is_running()),
             "telegram_ok": self.notifier.configured,
             "notify_stats": self.notifier.stats(),
+            "live_updater": self.live_health(),
         }
 
     # ------------------------------------------------------------------
@@ -288,7 +316,6 @@ class AppController:
 
     @staticmethod
     def _to_list(raw) -> list[dict]:
-        """Convert pipeline output (list or DataFrame) to list[dict]."""
         if isinstance(raw, list):
             return raw
         try:
@@ -319,7 +346,6 @@ class AppController:
         bets: list[dict],
         csv_path: Optional[str],
     ) -> None:
-        """Send Telegram value-bets alert + attach CSV."""
         if not self.notifier.configured:
             return
         try:

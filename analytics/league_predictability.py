@@ -516,3 +516,61 @@ class LeaguePredictabilityAnalyser:
             predictability_score=0.0,
             grade="D",
         )
+
+
+# ---------------------------------------------------------------------------
+# Convenience wrapper — DataFrame in, DataFrame out
+# ---------------------------------------------------------------------------
+
+
+class LeaguePredictability:
+    """
+    Thin adapter over LeaguePredictabilityAnalyser for DataFrame workflows.
+
+    Accepts a DataFrame with at minimum ``league``, ``home_goals``,
+    ``away_goals`` columns and returns a summary DataFrame with one row per
+    league containing ``league`` and ``predictability_score`` (plus all other
+    metrics from LeagueReport).
+    """
+
+    def __init__(self, **kwargs) -> None:
+        self._analyser = LeaguePredictabilityAnalyser(**kwargs)
+
+    def score(self, df) -> "pd.DataFrame":  # type: ignore[name-defined]
+        """
+        Score each league in *df* and return a tidy summary DataFrame.
+
+        Parameters
+        ----------
+        df : pandas DataFrame with columns:
+             - league       : league name (str)
+             - home_goals   : int
+             - away_goals   : int
+             Optionally: p_home, p_draw, p_away, home_odds, away_odds,
+                         home_points for richer metrics.
+        """
+        try:
+            import pandas as pd
+        except ImportError as exc:
+            raise ImportError("pandas is required for LeaguePredictability.score()") from exc
+
+        records = []
+        for row in df.itertuples(index=False):
+            hg = getattr(row, "home_goals", 0) or 0
+            ag = getattr(row, "away_goals", 0) or 0
+            if hg > ag:
+                outcome = "home_win"
+            elif hg < ag:
+                outcome = "away_win"
+            else:
+                outcome = "draw"
+            rec = row._asdict() if hasattr(row, "_asdict") else {}
+            rec["actual_outcome"] = outcome
+            # Fall back to uniform probs if model probs absent
+            rec.setdefault("p_home", 1 / 3)
+            rec.setdefault("p_draw", 1 / 3)
+            rec.setdefault("p_away", 1 / 3)
+            records.append(rec)
+
+        rows = self._analyser.summary_table(records)
+        return pd.DataFrame(rows)

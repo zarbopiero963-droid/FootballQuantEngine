@@ -61,6 +61,11 @@ jobs:
           black --check .
           isort --check-only .
 
+      - name: Type-check (mypy)
+        run: |
+          pip install mypy
+          mypy config/ quant/models/ quant/services/ ranking/ database/ notifications/ --ignore-missing-imports || true
+
       - name: Run unit tests
         run: |
           pytest -q --ignore=tests/exe

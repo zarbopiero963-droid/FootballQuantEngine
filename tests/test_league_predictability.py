@@ -1,6 +1,6 @@
 import pandas as pd
 
-from analysis.league_predictability import LeaguePredictability
+from analytics.league_predictability import LeaguePredictability
 
 
 def test_league_predictability_runs():

@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from analysis.report_viewer_helper import ReportViewerHelper
+from analytics.report_viewer_helper import ReportViewerHelper
 from engine.offline_controller import OfflineController
 
 

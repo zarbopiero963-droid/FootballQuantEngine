@@ -1,3 +1,10 @@
+from config.constants import (
+    XG_STRONG_THRESHOLD,
+    XG_WEAK_THRESHOLD,
+    XG_SUPPORT_AGAINST,
+    XG_SUPPORT_NEUTRAL,
+    XG_SUPPORT_STRONG,
+)
 from quant.features.dataset_builder import QuantDatasetBuilder
 from quant.features.feature_builder import FeatureBuilder
 from quant.models.calibration import ProbabilityCalibration
@@ -124,12 +131,12 @@ class QuantEngine:
         agreement = bundle["agreement"]
 
         xg_diff = features.get("xg_diff", 0.0)
-        if xg_diff > 0.20:
-            xg_support = 1.0
-        elif xg_diff < -0.20:
-            xg_support = 0.6
+        if xg_diff > XG_STRONG_THRESHOLD:
+            xg_support = XG_SUPPORT_STRONG
+        elif xg_diff < XG_WEAK_THRESHOLD:
+            xg_support = XG_SUPPORT_AGAINST
         else:
-            xg_support = 0.4
+            xg_support = XG_SUPPORT_NEUTRAL
 
         mapping = {
             "home": ("home_win", float(bookmaker_odds.get("home", 0.0))),

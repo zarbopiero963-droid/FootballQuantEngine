@@ -455,7 +455,8 @@ def _save_model(model: Any, meta: dict) -> str:
         import joblib
 
         joblib.dump(payload, MODEL_PATH)
-    except Exception:
+    except Exception as exc:
+        logger.warning("joblib.dump failed (%s); falling back to pickle for %s", exc, MODEL_PATH)
         with open(MODEL_PATH, "wb") as fh:
             pickle.dump(payload, fh)
     return MODEL_PATH
@@ -692,8 +693,8 @@ class LocalAutoML:
         if best_model is not None:
             try:
                 model_path = _save_model(best_model, meta)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Model persistence failed for %s: %s", best_name, exc)
 
         return {
             "status": "trained",
@@ -745,7 +746,8 @@ def _feature_importances_sklearn(
                 model, X, y, n_repeats=5, scoring="neg_log_loss", random_state=42
             )
             imp = list(-r.importances_mean)
-        except Exception:
+        except Exception as exc:
+            logger.warning("Permutation importance failed, using uniform weights: %s", exc)
             return {c: 1.0 / len(feature_cols) for c in feature_cols}
 
     total = sum(abs(v) for v in imp) or 1.0

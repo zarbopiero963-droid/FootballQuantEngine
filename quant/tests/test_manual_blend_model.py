@@ -5,7 +5,7 @@ def test_manual_blend_model_runs():
     model = ManualBlendModel()
 
     result = model.combine(
-        poisson_probs={"home_win": 0.50, "draw": 0.25, "away_win": 0.25},
+        dc_probs={"home_win": 0.50, "draw": 0.25, "away_win": 0.25},
         elo_diff=55,
         form_diff=0.20,
         xg_diff=0.30,

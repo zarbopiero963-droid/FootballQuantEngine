@@ -1,5 +1,6 @@
 import logging
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 
 from config.constants import DATABASE_NAME
@@ -42,6 +43,19 @@ _MIGRATIONS: list[tuple[int, str, list[tuple[str, str, str]]]] = [
 
 def connect() -> sqlite3.Connection:
     return sqlite3.connect(DATABASE_NAME)
+
+
+@contextmanager
+def get_db():
+    conn = connect()
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def init_db() -> None:

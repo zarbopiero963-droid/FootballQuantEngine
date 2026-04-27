@@ -1,6 +1,6 @@
 import pandas as pd
 
-from analysis.market_pressure import MarketPressureAnalyzer
+from analytics.market_pressure import MarketPressureAnalyzer
 
 
 def test_market_pressure_runs():

@@ -73,6 +73,12 @@ from typing import List, Tuple
 
 logger = logging.getLogger(__name__)
 
+# Minimum eigenvalue floor for PSD regularisation of the covariance matrix.
+# Piecewise correlation assignment can produce non-PSD matrices; adding this
+# multiple of I to the diagonal restores PSD without materially changing
+# the covariance structure (bets have std ~ 0.3–0.5, so 1e-8 is negligible).
+_PSD_EPS = 1e-8
+
 # ---------------------------------------------------------------------------
 # Dataclasses
 # ---------------------------------------------------------------------------
@@ -445,6 +451,11 @@ class MarkowitzOptimizer:
         Construct the N×N covariance matrix from bet standard deviations and
         the piecewise correlation rules (same match > same group > cross group).
 
+        The matrix is regularised to be positive-semi-definite (PSD) by adding
+        a small multiple of the identity when the minimum eigenvalue is negative.
+        Piecewise correlation assignment can otherwise produce a non-PSD matrix,
+        which makes portfolio variance negative and optimisation diverge.
+
         Returns
         -------
         List[List[float]]
@@ -461,6 +472,21 @@ class MarkowitzOptimizer:
                 else:
                     rho = self._correlation(bets[row], bets[col])
                     cov[row][col] = rho * stds[row] * stds[col]
+
+        # PSD regularisation: shift eigenspectrum so all eigenvalues ≥ _PSD_EPS
+        try:
+            import numpy as np
+
+            arr = np.array(cov)
+            min_eig = float(np.linalg.eigvalsh(arr).min())
+            if min_eig < _PSD_EPS:
+                shift = _PSD_EPS - min_eig
+                for i in range(num):
+                    cov[i][i] += shift
+        except Exception:
+            # numpy unavailable or eigen decomposition failed — proceed as-is
+            pass
+
         return cov
 
     def _correlation(self, bet_a: BetProposal, bet_b: BetProposal) -> float:

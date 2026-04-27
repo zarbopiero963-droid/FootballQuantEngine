@@ -1,4 +1,4 @@
-from analysis.match_ranking import MatchRanking
+from analytics.match_ranking import MatchRanking
 
 
 class MatchRanker:

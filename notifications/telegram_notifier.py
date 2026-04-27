@@ -355,8 +355,13 @@ class TelegramNotifier:
     # HTTP with retry + rate limit
     # ------------------------------------------------------------------
 
+    def _safe_url(self, url: str) -> str:
+        """Return url with the bot token replaced by *** for safe logging."""
+        return url.replace(self._token, "***") if self._token else url
+
     def _post_with_retry(self, url: str, **kwargs) -> bool:
         self._bucket.consume(block=True)
+        safe = self._safe_url(url)
 
         for attempt in range(1, _MAX_RETRIES + 1):
             try:
@@ -379,30 +384,37 @@ class TelegramNotifier:
 
                 if 400 <= resp.status_code < 500:
                     logger.error(
-                        "TelegramNotifier: client error %d — %s",
+                        "TelegramNotifier: client error %d on %s — %s",
                         resp.status_code,
+                        safe,
                         resp.text[:200],
                     )
                     self.failed_count += 1
                     return False
 
                 logger.warning(
-                    "TelegramNotifier: server error %d (attempt %d/%d).",
+                    "TelegramNotifier: server error %d (attempt %d/%d) on %s.",
                     resp.status_code,
                     attempt,
                     _MAX_RETRIES,
+                    safe,
                 )
 
             except requests.exceptions.Timeout:
                 logger.warning(
-                    "TelegramNotifier: timeout (attempt %d/%d).", attempt, _MAX_RETRIES
+                    "TelegramNotifier: timeout on %s (attempt %d/%d).",
+                    safe,
+                    attempt,
+                    _MAX_RETRIES,
                 )
             except Exception as exc:
+                # Mask token in exc string — requests errors often embed the URL
+                safe_exc = str(exc).replace(self._token, "***") if self._token else str(exc)
                 logger.warning(
                     "TelegramNotifier: exception (attempt %d/%d): %s",
                     attempt,
                     _MAX_RETRIES,
-                    exc,
+                    safe_exc,
                 )
 
             if attempt < _MAX_RETRIES:

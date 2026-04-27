@@ -1,10 +1,10 @@
 {
   "record_count": 9,
-  "bet_count": 2,
+  "bet_count": 1,
   "watchlist_count": 1,
-  "no_bet_count": 6,
+  "no_bet_count": 7,
   "avg_probability": 0.333333,
-  "avg_confidence": 0.479459,
-  "avg_agreement": 0.791195,
-  "max_market_edge": 0.162716
+  "avg_confidence": 0.469505,
+  "avg_agreement": 0.799973,
+  "max_market_edge": 0.126967
 }

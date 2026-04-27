@@ -23,6 +23,9 @@
         "fair_odds",
         "fixture_id",
         "home_team",
+        "league",
+        "league_id",
+        "league_name",
         "market",
         "market_edge",
         "model_edge",
@@ -68,21 +71,21 @@
       "name": "has_any_decision_bucket",
       "passed": true,
       "value": {
-        "BET": 2,
+        "BET": 1,
         "WATCHLIST": 1,
-        "NO_BET": 6
+        "NO_BET": 7
       }
     }
   ],
   "summary": {
     "record_count": 9,
-    "bet_count": 2,
+    "bet_count": 1,
     "watchlist_count": 1,
-    "no_bet_count": 6,
+    "no_bet_count": 7,
     "avg_probability": 0.333333,
-    "avg_confidence": 0.479459,
-    "avg_agreement": 0.791195,
-    "max_market_edge": 0.162716
+    "avg_confidence": 0.469505,
+    "avg_agreement": 0.799973,
+    "max_market_edge": 0.126967
   },
   "baseline": {
     "has_baseline": true,
@@ -96,9 +99,9 @@
       },
       {
         "metric": "bet_count",
-        "current": 2,
+        "current": 1,
         "baseline": 2,
-        "delta": 0.0
+        "delta": -1.0
       },
       {
         "metric": "avg_probability",
@@ -108,15 +111,15 @@
       },
       {
         "metric": "avg_confidence",
-        "current": 0.479459,
+        "current": 0.469505,
         "baseline": 0.479459,
-        "delta": 0.0
+        "delta": -0.009954
       },
       {
         "metric": "avg_agreement",
-        "current": 0.791195,
+        "current": 0.799973,
         "baseline": 0.791195,
-        "delta": 0.0
+        "delta": 0.008778
       }
     ]
   }

@@ -9,6 +9,11 @@ jobs:
   build-windows:
 
     runs-on: windows-latest
+    # Restrict secret injection: only main or PRs from the same repo
+    if: |
+      github.ref == 'refs/heads/main' ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
 
     env:
       API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}

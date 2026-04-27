@@ -44,6 +44,11 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      - name: Security audit (pip-audit)
+        run: |
+          pip install pip-audit
+          pip-audit --require-hashes=false
+
       - name: Install UPX
         run: |
           choco install upx --no-progress -y

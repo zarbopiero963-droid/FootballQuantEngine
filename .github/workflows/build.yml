@@ -83,7 +83,9 @@ jobs:
       - name: Run EXE smoke tests
         env:
           APP_EXE_PATH: dist\FootballQuantEngine\FootballQuantEngine.exe
-        run: pytest tests/exe -q -m windows
+          # GitHub Actions Windows runners are slow on cold start (Defender scans).
+          EXE_WINDOW_TIMEOUT: "90"
+        run: pytest tests/exe -q -m windows -v --tb=long
 
       - name: Zip Portable App
         shell: pwsh

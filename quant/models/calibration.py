@@ -85,11 +85,17 @@ class ProbabilityCalibration:
         X = np.array(predicted_probs, dtype=float).reshape(-1, 1)
         y = np.array(outcomes, dtype=float)
 
+        # Binarize for Platt: draws (0.5) are treated as non-wins (0).
+        # LogisticRegression requires a strict binary target; without this,
+        # sklearn treats 0.5 as a third class and predict_proba()[:, 1] no
+        # longer corresponds to the positive-class probability.
+        y_binary = (y >= 1.0).astype(float)
+
         # Platt scaling: logistic regression on raw model scores
         platt = LogisticRegression(C=1e6)
         try:
-            platt.fit(X, y)
-            platt_loss = log_loss(y, platt.predict_proba(X)[:, 1])
+            platt.fit(X, y_binary)
+            platt_loss = log_loss(y_binary, platt.predict_proba(X)[:, 1])
         except Exception as exc:
             logger.warning("Platt fit failed: %s", exc)
             platt_loss = float("inf")

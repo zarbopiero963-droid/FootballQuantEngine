@@ -47,7 +47,7 @@ jobs:
       - name: Security audit (pip-audit)
         run: |
           pip install pip-audit
-          pip-audit --require-hashes=false
+          pip-audit
 
       - name: Install UPX
         run: |

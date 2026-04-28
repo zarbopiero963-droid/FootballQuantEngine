@@ -68,8 +68,8 @@ jobs:
 
       - name: Type-check (mypy)
         run: |
-          pip install mypy
-          mypy config/ quant/models/ quant/services/ ranking/ database/ notifications/ --ignore-missing-imports || true
+          pip install mypy types-requests
+          mypy config/ quant/models/ quant/services/ ranking/ database/ notifications/ --ignore-missing-imports --explicit-package-bases --follow-imports=silent
 
       - name: Run unit tests
         run: |

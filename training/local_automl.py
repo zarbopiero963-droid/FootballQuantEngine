@@ -25,6 +25,7 @@ training.automl_metrics   — metrics, preprocessing, CV runners, feature import
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import pickle
@@ -47,12 +48,22 @@ from training.automl_metrics import (
 logger = logging.getLogger(__name__)
 
 MODEL_PATH = "outputs/automl_best_model.pkl"
+_SHA256_PATH = MODEL_PATH + ".sha256"
 _MIN_ROWS = 20
 
 
 # ---------------------------------------------------------------------------
 # Persistence
 # ---------------------------------------------------------------------------
+
+
+def _file_sha256(path: str) -> str:
+    """Return the hex SHA-256 digest of a file's contents."""
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def _save_model(model: Any, meta: dict) -> str:
@@ -66,24 +77,56 @@ def _save_model(model: Any, meta: dict) -> str:
         logger.warning("joblib.dump failed (%s); falling back to pickle for %s", exc, MODEL_PATH)
         with open(MODEL_PATH, "wb") as fh:
             pickle.dump(payload, fh)
+
+    # Write sidecar SHA-256 so load_best_model() can verify integrity.
+    digest = _file_sha256(MODEL_PATH)
+    with open(_SHA256_PATH, "w") as fh:
+        fh.write(digest + "\n")
+
     return MODEL_PATH
 
 
 def load_best_model() -> dict | None:
-    """Load the persisted best model from disk. Returns None if absent."""
+    """Load the persisted best model from disk.
+
+    The SHA-256 checksum sidecar (MODEL_PATH + '.sha256') is always verified
+    before any deserialization. If the checksum is absent or mismatches the
+    file on disk the function returns None and logs an error instead of loading
+    potentially tampered data.
+    """
     if not os.path.exists(MODEL_PATH):
         return None
+
+    # Checksum guard — must pass before any deserialization.
+    if not os.path.exists(_SHA256_PATH):
+        logger.error(
+            "Refusing to load %s — checksum sidecar %s is missing. "
+            "Re-train to regenerate a trusted model file.",
+            MODEL_PATH,
+            _SHA256_PATH,
+        )
+        return None
+
+    with open(_SHA256_PATH) as fh:
+        expected = fh.read().strip()
+    actual = _file_sha256(MODEL_PATH)
+    if actual != expected:
+        logger.error(
+            "SHA-256 mismatch for %s (expected %s, got %s) — "
+            "refusing to deserialize potentially tampered file.",
+            MODEL_PATH,
+            expected,
+            actual,
+        )
+        return None
+
     try:
         import joblib
 
         return joblib.load(MODEL_PATH)
     except Exception as exc:
         logger.warning("joblib.load failed for %s: %s — trying pickle fallback", MODEL_PATH, exc)
-    logger.warning(
-        "joblib unavailable or failed; falling back to pickle for %s — "
-        "ensure this file originates from a trusted source",
-        MODEL_PATH,
-    )
+
     try:
         with open(MODEL_PATH, "rb") as fh:
             return pickle.load(fh)

@@ -2,14 +2,16 @@
 Pure-Python mathematical primitives for the Gaussian Copula Engine.
 
 Extracted from gaussian_copula.py to keep each module under 400 LOC.
-Implements normal CDF/PPF (Abramowitz & Stegun / Acklam) and Cholesky
-decomposition without any external dependencies.
+Implements normal CDF/PPF (Abramowitz & Stegun / Acklam), Cholesky
+decomposition, correlation matrix helpers, and Monte Carlo joint
+probability simulation — all without external dependencies.
 """
 
 from __future__ import annotations
 
 import math
-from typing import List
+import random
+from typing import Dict, List, Optional, Tuple
 
 
 def _normal_pdf(x: float) -> float:
@@ -125,3 +127,104 @@ def _make_positive_definite(
     for i in range(n):
         result[i][i] += jitter
     return result
+
+
+# ---------------------------------------------------------------------------
+# Correlation matrix helpers
+# ---------------------------------------------------------------------------
+
+# Default pairwise Pearson correlations between football event types.
+DEFAULT_CORRELATIONS: Dict[Tuple[str, str], float] = {
+    ("home_win", "over_goals"): -0.25,
+    ("home_win", "btts"): -0.30,
+    ("away_win", "over_goals"): 0.15,
+    ("draw", "over_goals"): 0.10,
+    ("draw", "btts"): 0.35,
+    ("over_goals", "btts"): 0.60,
+    ("home_win", "home_scorer"): 0.55,
+    ("home_win", "away_scorer"): -0.40,
+    ("cards_over", "over_goals"): 0.20,
+    ("cards_over", "draw"): 0.15,
+}
+
+
+def uniform_corr_matrix(n: int, rho: float) -> List[List[float]]:
+    """Return an n×n matrix with 1.0 on the diagonal and *rho* off-diagonal."""
+    matrix = [[0.0] * n for _ in range(n)]
+    for i in range(n):
+        for j in range(n):
+            matrix[i][j] = 1.0 if i == j else rho
+    return matrix
+
+
+def validate_corr_matrix(
+    matrix: List[List[float]], expected_n: int
+) -> List[List[float]]:
+    """Validate shape and diagonal of a user-supplied correlation matrix."""
+    if len(matrix) != expected_n:
+        raise ValueError(
+            f"correlation_matrix must be {expected_n}×{expected_n}, got {len(matrix)} rows."
+        )
+    for i, row in enumerate(matrix):
+        if len(row) != expected_n:
+            raise ValueError(
+                f"Row {i} of correlation_matrix has {len(row)} elements, expected {expected_n}."
+            )
+        if abs(matrix[i][i] - 1.0) > 1e-9:
+            raise ValueError(
+                f"Diagonal element [{i}][{i}] = {matrix[i][i]}, expected 1.0."
+            )
+    return matrix
+
+
+def build_default_corr_matrix(
+    event_types: List[str],
+    default_correlation: float = 0.10,
+) -> List[List[float]]:
+    """Build an n×n correlation matrix from DEFAULT_CORRELATIONS lookup."""
+    n = len(event_types)
+    corr = uniform_corr_matrix(n, 0.0)
+    for i in range(n):
+        for j in range(i + 1, n):
+            ti, tj = event_types[i], event_types[j]
+            rho = (
+                DEFAULT_CORRELATIONS.get((ti, tj))
+                or DEFAULT_CORRELATIONS.get((tj, ti))
+                or default_correlation
+            )
+            corr[i][j] = rho
+            corr[j][i] = rho
+    return corr
+
+
+# ---------------------------------------------------------------------------
+# Monte Carlo simulation
+# ---------------------------------------------------------------------------
+
+
+def simulate_joint_prob(
+    probs: List[float],
+    lower: List[List[float]],
+    n_simulations: int,
+    rng: Optional[random.Random] = None,
+) -> float:
+    """Monte Carlo estimate of joint probability under the Gaussian copula.
+
+    For each path: draw n independent N(0,1), correlate via Cholesky L,
+    map to uniform margins with Φ, count when all u_i < p_i.
+    """
+    if rng is None:
+        rng = random.Random()
+    n = len(probs)
+    hits = 0
+    for _ in range(n_simulations):
+        z = [rng.gauss(0.0, 1.0) for _ in range(n)]
+        all_fire = True
+        for i in range(n):
+            y_i = sum(lower[i][k] * z[k] for k in range(i + 1))
+            if _normal_cdf(y_i) >= probs[i]:
+                all_fire = False
+                break
+        if all_fire:
+            hits += 1
+    return hits / n_simulations

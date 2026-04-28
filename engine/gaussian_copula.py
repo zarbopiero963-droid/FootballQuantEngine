@@ -1,58 +1,28 @@
 """
-Gaussian Copula Engine for Bet Builder / Same-Game Parlay Mispricing Detection
-===============================================================================
+Gaussian Copula Engine for Bet Builder / Same-Game Parlay mispricing detection.
 
-Bookmakers typically price Bet Builder / Same-Game Parlay markets by multiplying
-the implied marginal probabilities of each leg, implicitly assuming the outcomes
-are statistically independent.  In reality, football match events are correlated:
-a home win is negatively correlated with both teams scoring (BTTS), while BTTS
-is strongly positively correlated with over-goals markets.
+Bookmakers price multi-leg combinations by multiplying independent marginal
+probabilities.  This engine estimates the true joint probability via a Gaussian
+copula (Monte Carlo with Cholesky-correlated normals) and flags combinations
+where the bookmaker price implies a significantly lower joint probability than
+the model.
 
-This module exploits that structural mispricing by estimating the **true** joint
-probability of a multi-leg combination via a Gaussian copula:
-
-    1. Each leg's marginal probability is modelled independently (supplied by
-       the caller, e.g. from a Poisson or xG model).
-    2. A correlation matrix Σ encodes pairwise dependencies between event types.
-    3. We simulate correlated uniform random variables via:
-           Z  ~  N(0, I_n)            (independent standard normals)
-           Y  =  L @ Z                (L = Cholesky factor of Σ)
-           U_i = Φ(Y_i)              (map back to [0,1] via normal CDF)
-           leg_i fires  ⟺  U_i < p_i
-    4. The empirical fraction of simulations where ALL legs fire is the copula
-       joint probability estimate.
-
-When the bookmaker's independence product gives combined odds of 15.00 but the
-copula model yields a fair price of 6.00, there is substantial positive expected
-value — the combination is systematically underpriced by the bookmaker.
-
-Mathematical primitives are implemented without scipy / numpy:
-  - Normal CDF: Abramowitz & Stegun (1964) rational approximation, |ε| < 7.5e-8.
-  - Inverse normal CDF: Peter Acklam's algorithm.
-  - Cholesky decomposition: pure Python, O(n³).
-  - Correlated normals: stdlib random.gauss for marginals, Cholesky for structure.
-
-References
-----------
-  Abramowitz, M. and Stegun, I. A. (1964). Handbook of Mathematical Functions.
-  Acklam, P. (2003). An algorithm for computing the inverse normal cumulative
-      distribution function. Unpublished manuscript.
-  Sklar, A. (1959). Fonctions de répartition à n dimensions et leurs marges.
+Mathematical primitives live in engine.copula_math; data types in engine.copula_types.
 """
 
 from __future__ import annotations
 
 import itertools
 import logging
-import math
-import random
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional
 
 from engine.copula_math import (
     _cholesky,
     _make_positive_definite,
-    _normal_cdf,
-    _normal_ppf,
+    build_default_corr_matrix,
+    simulate_joint_prob,
+    uniform_corr_matrix,
+    validate_corr_matrix,
 )
 from engine.copula_types import BetLeg, CopulaCorrelation, CopulaResult
 
@@ -66,47 +36,20 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_CORRELATIONS: Dict[Tuple[str, str], float] = {
-    ("home_win", "over_goals"): -0.25,
-    ("home_win", "btts"): -0.30,
-    ("away_win", "over_goals"): 0.15,
-    ("draw", "over_goals"): 0.10,
-    ("draw", "btts"): 0.35,
-    ("over_goals", "btts"): 0.60,
-    ("home_win", "home_scorer"): 0.55,
-    ("home_win", "away_scorer"): -0.40,
-    ("cards_over", "over_goals"): 0.20,
-    ("cards_over", "draw"): 0.15,
-}
-
-
-# ===========================================================================
-# Gaussian Copula Engine
-# ===========================================================================
-
 
 class GaussianCopulaEngine:
     """Gaussian copula engine for Bet Builder / Same-Game Parlay pricing.
 
-    The engine exploits the independence assumption made by most bookmakers
-    when pricing multi-leg combinations.  Given model marginal probabilities
-    and a pairwise correlation structure, it estimates the true joint
-    probability via Monte Carlo simulation under the Gaussian copula.
-
     Parameters
     ----------
     n_simulations:
-        Number of Monte Carlo paths for joint probability estimation.
-        50 000 paths gives standard error ≈ sqrt(p(1-p)/N) ≈ 0.2 % for
-        typical 5 % joint probability values.
+        Monte Carlo paths.  50 000 gives SE ≈ 0.2 % for typical 5 % joint probs.
     default_correlation:
-        Fallback Pearson ρ used when no entry exists in
-        :data:`_DEFAULT_CORRELATIONS` and no matrix is supplied.
+        Fallback Pearson ρ when no lookup entry exists.
     edge_threshold_pct:
-        Minimum edge (in percent) for :attr:`CopulaResult.is_value` to be True.
+        Minimum edge (%) for CopulaResult.is_value to be True.
     seed:
-        Optional integer seed for the internal :class:`random.Random` instance,
-        useful for reproducible tests.
+        Optional RNG seed for reproducible tests.
     """
 
     def __init__(
@@ -117,9 +60,7 @@ class GaussianCopulaEngine:
         seed: Optional[int] = None,
     ) -> None:
         if n_simulations < 1000:
-            raise ValueError(
-                "n_simulations must be at least 1 000 for reliable estimates."
-            )
+            raise ValueError("n_simulations must be at least 1 000.")
         if not (-1.0 < default_correlation < 1.0):
             raise ValueError("default_correlation must be strictly in (-1, 1).")
         if edge_threshold_pct < 0.0:
@@ -128,6 +69,7 @@ class GaussianCopulaEngine:
         self.n_simulations = n_simulations
         self.default_correlation = default_correlation
         self.edge_threshold_pct = edge_threshold_pct
+        import random
         self._rng = random.Random(seed)
 
     # ------------------------------------------------------------------
@@ -145,53 +87,35 @@ class GaussianCopulaEngine:
         Parameters
         ----------
         legs:
-            Bet legs to evaluate.  Must contain at least 2 entries.
+            At least 2 BetLeg entries.
         correlation_matrix:
-            Optional explicit n×n correlation matrix.  If omitted the engine
-            builds one from :data:`_DEFAULT_CORRELATIONS` using *event_types*.
+            Optional explicit n×n matrix.  When absent, built from event_types.
         event_types:
-            List of event-type strings (same length as *legs*) used to look up
-            default correlations, e.g. ``["home_win", "btts", "over_goals"]``.
-            Required when *correlation_matrix* is None.
-
-        Returns
-        -------
-        CopulaResult
+            Event-type strings (same length as legs) for default correlation lookup.
         """
         n = len(legs)
         if n < 2:
             raise ValueError("Need at least 2 legs for a Bet Builder evaluation.")
 
-        # Build or validate the correlation matrix
         if correlation_matrix is not None:
-            corr = self._validate_corr_matrix(correlation_matrix, n)
+            corr = validate_corr_matrix(correlation_matrix, n)
         elif event_types is not None:
             if len(event_types) != n:
                 raise ValueError(
-                    f"event_types length ({len(event_types)}) must match "
-                    f"legs length ({n})."
+                    f"event_types length ({len(event_types)}) must match legs length ({n})."
                 )
-            corr = self._build_default_corr_matrix(event_types)
+            corr = build_default_corr_matrix(event_types, self.default_correlation)
         else:
-            # All-default-correlation matrix
-            corr = self._uniform_corr_matrix(n, self.default_correlation)
+            corr = uniform_corr_matrix(n, self.default_correlation)
 
-        # Ensure positive-definiteness before Cholesky
-        corr_pd = _make_positive_definite(corr)
-        lower = _cholesky(corr_pd)
-
-        # Extract marginal model probabilities
+        lower = _cholesky(_make_positive_definite(corr))
         probs = [leg.model_prob for leg in legs]
+        model_joint = simulate_joint_prob(probs, lower, self.n_simulations, self._rng)
 
-        # Monte Carlo joint probability under Gaussian copula
-        model_joint = self._simulate_joint_prob(probs, lower)
-
-        # Bookmaker independence product
         book_joint = 1.0
         for leg in legs:
             book_joint *= leg.bookmaker_implied
 
-        # Guard against degenerate cases
         if model_joint <= 0.0:
             logger.warning(
                 "model_joint_prob rounded to zero — increase n_simulations or "
@@ -216,15 +140,10 @@ class GaussianCopulaEngine:
             n_simulations=self.n_simulations,
             is_value=(edge > self.edge_threshold_pct),
         )
-
         logger.debug(
             "Evaluated %d-leg parlay: book_odds=%.2f fair_odds=%.2f edge=%.2f%%",
-            n,
-            book_odds,
-            fair_odds,
-            edge,
+            n, book_odds, fair_odds, edge,
         )
-
         return result
 
     def find_value_parlays(
@@ -233,226 +152,41 @@ class GaussianCopulaEngine:
         max_legs: int = 4,
         event_types: Optional[List[str]] = None,
     ) -> List[CopulaResult]:
-        """Screen all 2-to-max_legs combinations for positive-value parlays.
-
-        Parameters
-        ----------
-        available_legs:
-            Pool of BetLeg objects to combine.
-        max_legs:
-            Maximum combination size to test (inclusive).
-        event_types:
-            Optional list of event-type strings parallel to *available_legs*.
-
-        Returns
-        -------
-        List[CopulaResult]
-            All combinations flagged as value, sorted by edge_pct descending.
-        """
+        """Screen all 2-to-max_legs combinations for positive-value parlays."""
         if max_legs < 2:
             raise ValueError("max_legs must be at least 2.")
-
         n_pool = len(available_legs)
         if n_pool < 2:
             raise ValueError("Need at least 2 available legs to form a parlay.")
 
-        max_combo_size = min(max_legs, n_pool)
         value_results: List[CopulaResult] = []
         total_combos = 0
 
-        for size in range(2, max_combo_size + 1):
+        for size in range(2, min(max_legs, n_pool) + 1):
             for indices in itertools.combinations(range(n_pool), size):
                 total_combos += 1
-                combo_legs = [available_legs[idx] for idx in indices]
-
-                # Build event_types subset if provided
-                combo_types: Optional[List[str]] = None
-                if event_types is not None:
-                    combo_types = [event_types[idx] for idx in indices]
-
+                combo_legs = [available_legs[i] for i in indices]
+                combo_types: Optional[List[str]] = (
+                    [event_types[i] for i in indices] if event_types is not None else None
+                )
                 try:
-                    result = self.evaluate(
-                        legs=combo_legs,
-                        event_types=combo_types,
-                    )
+                    result = self.evaluate(legs=combo_legs, event_types=combo_types)
                     if result.is_value:
                         value_results.append(result)
                 except Exception as exc:
                     logger.warning(
-                        "Skipping combination %s due to error: %s",
-                        [leg.name for leg in combo_legs],
-                        exc,
+                        "Skipping combination %s: %s",
+                        [leg.name for leg in combo_legs], exc,
                     )
 
-        logger.info(
-            "Screened %d combinations, found %d value parlays.",
-            total_combos,
-            len(value_results),
-        )
-
-        value_results.sort(key=lambda res: res.edge_pct, reverse=True)
+        logger.info("Screened %d combinations, found %d value parlays.", total_combos, len(value_results))
+        value_results.sort(key=lambda r: r.edge_pct, reverse=True)
         return value_results
 
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
 
-    def _simulate_joint_prob(
-        self,
-        probs: List[float],
-        lower: List[List[float]],
-    ) -> float:
-        """Monte Carlo estimate of joint probability under the Gaussian copula.
-
-        Algorithm
-        ---------
-        For each simulation path:
-          1. Draw n independent standard normals z_i using random.gauss.
-          2. Compute correlated normals y = L @ z  (L is the Cholesky factor).
-          3. Map back to uniform margins: u_i = Φ(y_i).
-          4. All legs fire when u_i < p_i for all i simultaneously.
-
-        Parameters
-        ----------
-        probs:
-            Marginal model probabilities for each leg.
-        lower:
-            Lower-triangular Cholesky factor of the correlation matrix.
-
-        Returns
-        -------
-        float
-            Empirical fraction of paths where all legs fire.
-        """
-        n = len(probs)
-        hits = 0
-
-        for _ in range(self.n_simulations):
-            # Step 1: independent standard normals
-            z = [self._rng.gauss(0.0, 1.0) for _ in range(n)]
-
-            # Step 2: correlate via Cholesky — y = L @ z
-            y = [0.0] * n
-            for i in range(n):
-                s = 0.0
-                for k in range(i + 1):
-                    s += lower[i][k] * z[k]
-                y[i] = s
-
-            # Step 3 & 4: map to uniform, check all legs fire
-            all_fire = True
-            for i in range(n):
-                u = _normal_cdf(y[i])
-                if u >= probs[i]:
-                    all_fire = False
-                    break
-
-            if all_fire:
-                hits += 1
-
-        return hits / self.n_simulations
-
-    def _build_default_corr_matrix(
-        self,
-        event_types: List[str],
-    ) -> List[List[float]]:
-        """Build an n×n correlation matrix from :data:`_DEFAULT_CORRELATIONS`.
-
-        Parameters
-        ----------
-        event_types:
-            List of event-type strings corresponding to each leg.
-
-        Returns
-        -------
-        List[List[float]]
-            Symmetric correlation matrix with ones on the diagonal.
-        """
-        n = len(event_types)
-        corr = self._uniform_corr_matrix(n, 0.0)  # start with identity
-
-        for i in range(n):
-            for j in range(i + 1, n):
-                ti, tj = event_types[i], event_types[j]
-                rho = (
-                    _DEFAULT_CORRELATIONS.get((ti, tj))
-                    or _DEFAULT_CORRELATIONS.get((tj, ti))
-                    or self.default_correlation
-                )
-                corr[i][j] = rho
-                corr[j][i] = rho
-
-        return corr
-
-    @staticmethod
-    def _uniform_corr_matrix(
-        n: int,
-        rho: float,
-    ) -> List[List[float]]:
-        """Return an n×n matrix with 1.0 on the diagonal and *rho* elsewhere.
-
-        Parameters
-        ----------
-        n:
-            Matrix dimension.
-        rho:
-            Off-diagonal correlation value.
-
-        Returns
-        -------
-        List[List[float]]
-        """
-        matrix = [[0.0] * n for _ in range(n)]
-        for i in range(n):
-            for j in range(n):
-                matrix[i][j] = 1.0 if i == j else rho
-        return matrix
-
-    @staticmethod
-    def _validate_corr_matrix(
-        matrix: List[List[float]],
-        expected_n: int,
-    ) -> List[List[float]]:
-        """Validate shape and diagonal of a user-supplied correlation matrix.
-
-        Parameters
-        ----------
-        matrix:
-            Candidate correlation matrix.
-        expected_n:
-            Required dimension.
-
-        Returns
-        -------
-        List[List[float]]
-            The validated matrix (unchanged).
-
-        Raises
-        ------
-        ValueError
-            If shape or diagonal constraints are violated.
-        """
-        if len(matrix) != expected_n:
-            raise ValueError(
-                f"correlation_matrix must be {expected_n}×{expected_n}, "
-                f"got {len(matrix)} rows."
-            )
-        for i, row in enumerate(matrix):
-            if len(row) != expected_n:
-                raise ValueError(
-                    f"Row {i} of correlation_matrix has {len(row)} elements, "
-                    f"expected {expected_n}."
-                )
-            if abs(matrix[i][i] - 1.0) > 1e-9:
-                raise ValueError(
-                    f"Diagonal element [{i}][{i}] = {matrix[i][i]}, expected 1.0."
-                )
-        return matrix
-
-
-# ===========================================================================
-# Module-level convenience function
-# ===========================================================================
+# ---------------------------------------------------------------------------
+# Convenience function
+# ---------------------------------------------------------------------------
 
 
 def evaluate_bet_builder(
@@ -460,75 +194,26 @@ def evaluate_bet_builder(
     correlation_matrix: Optional[List[List[float]]] = None,
     n_simulations: int = 50_000,
 ) -> CopulaResult:
-    """One-shot Bet Builder evaluation using the Gaussian Copula Engine.
+    """One-shot Bet Builder evaluation.
 
-    Converts plain dicts to :class:`BetLeg` objects and delegates to
-    :class:`GaussianCopulaEngine`.
-
-    Parameters
-    ----------
-    legs:
-        List of dicts, each with keys:
-
-        - ``"name"`` (str) — human-readable description
-        - ``"market_odds"`` (float) — bookmaker decimal odds
-        - ``"model_prob"`` (float) — model marginal probability
-        - ``"event_type"`` (str, optional) — event type for default correlations
-
-    correlation_matrix:
-        Optional explicit n×n correlation matrix.  When omitted, event types
-        from the leg dicts are used to look up :data:`_DEFAULT_CORRELATIONS`.
-
-    n_simulations:
-        Monte Carlo path count, default 50 000.
-
-    Returns
-    -------
-    CopulaResult
-
-    Examples
-    --------
-    >>> result = evaluate_bet_builder(
-    ...     legs=[
-    ...         {"name": "Home win", "market_odds": 2.10, "model_prob": 0.52,
-    ...          "event_type": "home_win"},
-    ...         {"name": "BTTS Yes", "market_odds": 1.85, "model_prob": 0.57,
-    ...          "event_type": "btts"},
-    ...         {"name": "Over 2.5", "market_odds": 1.90, "model_prob": 0.55,
-    ...          "event_type": "over_goals"},
-    ...     ],
-    ...     n_simulations=50_000,
-    ... )
-    >>> print(result)
+    Each leg dict must have: name (str), market_odds (float), model_prob (float).
+    Optional key: event_type (str) for default correlation lookup.
     """
     bet_legs: List[BetLeg] = []
     event_types: List[str] = []
 
     for idx, leg_dict in enumerate(legs):
-        missing = [
-            k for k in ("name", "market_odds", "model_prob") if k not in leg_dict
-        ]
+        missing = [k for k in ("name", "market_odds", "model_prob") if k not in leg_dict]
         if missing:
             raise ValueError(f"Leg {idx} is missing required keys: {missing!r}")
-        bet_legs.append(
-            BetLeg(
-                name=str(leg_dict["name"]),
-                market_odds=float(leg_dict["market_odds"]),
-                model_prob=float(leg_dict["model_prob"]),
-            )
-        )
+        bet_legs.append(BetLeg(
+            name=str(leg_dict["name"]),
+            market_odds=float(leg_dict["market_odds"]),
+            model_prob=float(leg_dict["model_prob"]),
+        ))
         event_types.append(str(leg_dict.get("event_type", "")))
 
     engine = GaussianCopulaEngine(n_simulations=n_simulations)
-
-    # If no explicit matrix, try default lookup; fall back to default rho
     if correlation_matrix is not None:
-        return engine.evaluate(
-            legs=bet_legs,
-            correlation_matrix=correlation_matrix,
-        )
-    else:
-        return engine.evaluate(
-            legs=bet_legs,
-            event_types=event_types,
-        )
+        return engine.evaluate(legs=bet_legs, correlation_matrix=correlation_matrix)
+    return engine.evaluate(legs=bet_legs, event_types=event_types)

@@ -20,7 +20,7 @@ import logging
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import requests
 
@@ -359,7 +359,7 @@ class TelegramNotifier:
         """Return url with the bot token replaced by *** for safe logging."""
         return url.replace(self._token, "***") if self._token else url
 
-    def _post_with_retry(self, url: str, **kwargs) -> bool:
+    def _post_with_retry(self, url: str, **kwargs: Any) -> bool:
         self._bucket.consume(block=True)
         safe = self._safe_url(url)
 

@@ -49,7 +49,10 @@ def test_api_connection(mock_get):
     assert "leagues" in args[0]
     headers = kwargs.get("headers", {})
     assert any(k.lower() == "x-apisports-key" for k in headers)
-    assert headers[[k for k in headers if k.lower() == "x-apisports-key"][0]] == "test-key-ci"
+    assert (
+        headers[[k for k in headers if k.lower() == "x-apisports-key"][0]]
+        == "test-key-ci"
+    )
     params = kwargs.get("params")
     if params is not None:
         assert isinstance(params, dict)

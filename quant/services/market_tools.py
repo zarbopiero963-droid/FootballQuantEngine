@@ -43,5 +43,7 @@ class MarketTools:
             return 0.0
         return (probability * bookmaker_odds) - 1.0
 
-    def probability_edge_vs_market(self, model_prob: float, market_prob: float) -> float:
+    def probability_edge_vs_market(
+        self, model_prob: float, market_prob: float
+    ) -> float:
         return float(model_prob) - float(market_prob)

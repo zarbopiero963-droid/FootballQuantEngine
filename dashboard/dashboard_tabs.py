@@ -113,7 +113,9 @@ class _InefficiencyTab(QWidget):
             edge = float(r.get("edge_pct", 0.0))
             league_edge.setdefault(lg, []).append(edge)
 
-        sorted_lg = sorted(league_edge.items(), key=lambda x: -sum(x[1]) / len(x[1]))[:15]
+        sorted_lg = sorted(league_edge.items(), key=lambda x: -sum(x[1]) / len(x[1]))[
+            :15
+        ]
         labels = [lg[:12] for lg, _ in sorted_lg]
         values = [sum(v) / len(v) for _, v in sorted_lg]
 

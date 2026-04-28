@@ -253,9 +253,9 @@ _DEFAULT_XT_GRID: List[List[float]] = [
 
 # Validate shape at import time so misconfiguration is caught immediately.
 assert len(_DEFAULT_XT_GRID) == 12, "xT grid must have exactly 12 rows"
-assert all(len(r) == 16 for r in _DEFAULT_XT_GRID), (
-    "each row must have exactly 16 columns"
-)
+assert all(
+    len(r) == 16 for r in _DEFAULT_XT_GRID
+), "each row must have exactly 16 columns"
 
 
 # ---------------------------------------------------------------------------

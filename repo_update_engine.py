@@ -134,8 +134,13 @@ def restore_backup(zip_path):
     with zipfile.ZipFile(zip_path, "r") as z:
         for member in z.namelist():
             member_path = os.path.abspath(os.path.join(target_dir, member))
-            if not member_path.startswith(target_dir + os.sep) and member_path != target_dir:
-                log(f"RESTORE aborted: path traversal detected in archive entry '{member}'")
+            if (
+                not member_path.startswith(target_dir + os.sep)
+                and member_path != target_dir
+            ):
+                log(
+                    f"RESTORE aborted: path traversal detected in archive entry '{member}'"
+                )
                 return False
         z.extractall(target_dir)
 

@@ -11,6 +11,7 @@ Orchestrates the full data lifecycle:
 The controller exposes a clean interface consumed by the main AppController
 and the UI layer (progress callbacks, live callbacks).
 """
+
 from __future__ import annotations
 
 import logging
@@ -66,9 +67,9 @@ class BootstrapController:
     def initialise(self, progress_cb: Callable[[str], None] | None = None) -> None:
         """Ensure DB tables exist and create engine instances."""
         init_db()
-        self._bootstrap     = DataBootstrap(api_key=self._api_key)
-        self._multi_engine  = MultiMarketEngine()
-        self._live_updater  = LiveUpdater(api_key=self._api_key, interval=60)
+        self._bootstrap = DataBootstrap(api_key=self._api_key)
+        self._multi_engine = MultiMarketEngine()
+        self._live_updater = LiveUpdater(api_key=self._api_key, interval=60)
         self._live_updater.on_update(self._on_live_update)
         if progress_cb:
             progress_cb("[Init] Engine ready.")
@@ -125,6 +126,7 @@ class BootstrapController:
         Fetch upcoming fixtures + odds, run MultiMarketEngine,
         save predictions to DB, return the rows for the UI.
         """
+
         def _log(msg: str) -> None:
             logger.info(msg)
             if progress_cb:
@@ -141,7 +143,9 @@ class BootstrapController:
         _log(f"[Predictions] {len(completed)} completed matches loaded.")
 
         if not completed:
-            _log(f"[Predictions] No completed matches for {lname} — run Bootstrap first.")
+            _log(
+                f"[Predictions] No completed matches for {lname} — run Bootstrap first."
+            )
             return []
 
         # Merge corner stats from local DB; fetch from API for fixtures still missing them.
@@ -225,7 +229,9 @@ class BootstrapController:
 
         # Keep only rows where at least one value is non-null (avoid masking API data).
         stats_map: dict[str, tuple] = {
-            str(r[0]): (r[1], r[2]) for r in rows if r[1] is not None or r[2] is not None
+            str(r[0]): (r[1], r[2])
+            for r in rows
+            if r[1] is not None or r[2] is not None
         }
 
         # 2. Optionally fill gaps via API (avoids silently training on zeroed data).
@@ -264,5 +270,6 @@ class BootstrapController:
 
         logger.info(
             "Corner stats merged: %d/%d matches have corner data.",
-            n_filled, len(matches),
+            n_filled,
+            len(matches),
         )

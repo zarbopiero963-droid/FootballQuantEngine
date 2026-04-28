@@ -598,12 +598,16 @@ def from_dicts(rows: List[dict]) -> "RefereeAnalyzer":
                 away_yellows=int(row["away_yellows"]),
                 home_reds=int(row["home_reds"]),
                 away_reds=int(row["away_reds"]),
-                home_fouls=int(row["home_fouls"])
-                if row.get("home_fouls") is not None
-                else None,
-                away_fouls=int(row["away_fouls"])
-                if row.get("away_fouls") is not None
-                else None,
+                home_fouls=(
+                    int(row["home_fouls"])
+                    if row.get("home_fouls") is not None
+                    else None
+                ),
+                away_fouls=(
+                    int(row["away_fouls"])
+                    if row.get("away_fouls") is not None
+                    else None
+                ),
             )
             matches.append(m)
         except (KeyError, ValueError, TypeError) as exc:

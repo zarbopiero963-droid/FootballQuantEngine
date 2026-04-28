@@ -88,9 +88,9 @@ def test_csv_export_full_contains_all_rows(tmp_path):
             data_rows.append(stripped)
 
     # First non-comment line is the header; subsequent are data rows
-    assert len(data_rows) >= 3, (
-        f"Expected header + at least 2 data rows, got {len(data_rows)} non-comment lines"
-    )
+    assert (
+        len(data_rows) >= 3
+    ), f"Expected header + at least 2 data rows, got {len(data_rows)} non-comment lines"
 
 
 def test_csv_export_bets_only_has_bet_rows(tmp_path):
@@ -102,15 +102,16 @@ def test_csv_export_bets_only_has_bet_rows(tmp_path):
 
     with open(path, newline="", encoding="utf-8-sig") as f:
         # Skip comment lines
-        lines = [l for l in f if not l.startswith("#")]
+        lines = [line for line in f if not line.startswith("#")]
 
     reader = csv.DictReader(lines)
     rows = list(reader)
     assert len(rows) >= 1, "Expected at least one row in bets-only export"
     for row in rows:
-        assert row["decision"].upper() in ("BET", "WATCHLIST"), (
-            f"Unexpected decision '{row['decision']}' in bets-only export"
-        )
+        assert row["decision"].upper() in (
+            "BET",
+            "WATCHLIST",
+        ), f"Unexpected decision '{row['decision']}' in bets-only export"
 
 
 def test_csv_summary_creates_file(tmp_path):
@@ -139,6 +140,4 @@ def test_excel_export_has_bets_sheet(tmp_path):
     exporter = ExcelExporter(output_dir=str(tmp_path))
     result = exporter.export(SAMPLE_BETS)
     wb = openpyxl.load_workbook(result)
-    assert "Bets" in wb.sheetnames, (
-        f"Expected 'Bets' sheet, found: {wb.sheetnames}"
-    )
+    assert "Bets" in wb.sheetnames, f"Expected 'Bets' sheet, found: {wb.sheetnames}"

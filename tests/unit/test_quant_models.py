@@ -9,16 +9,16 @@ from __future__ import annotations
 
 import pytest
 
-from quant.models.poisson_engine import PoissonEngine
 from quant.models.dixon_coles_engine import DixonColesEngine
 from quant.models.elo_engine import EloEngine
 from quant.models.form_engine import FormEngine
 from quant.models.h2h_engine import H2HEngine
-
+from quant.models.poisson_engine import PoissonEngine
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def matches():
@@ -35,6 +35,7 @@ def matches():
 # ---------------------------------------------------------------------------
 # PoissonEngine — defence normalisation correctness (audit §4)
 # ---------------------------------------------------------------------------
+
 
 class TestPoissonDefenceNormalisation:
     """
@@ -63,10 +64,22 @@ class TestPoissonDefenceNormalisation:
         # Build matches where team "Avg" concedes exactly the league average
         matches = []
         for i in range(n):
-            matches.append({"home_team": "Avg", "away_team": "Other",
-                            "home_goals": 1, "away_goals": 1})
-            matches.append({"home_team": "Other", "away_team": "Avg",
-                            "home_goals": 1, "away_goals": 1})
+            matches.append(
+                {
+                    "home_team": "Avg",
+                    "away_team": "Other",
+                    "home_goals": 1,
+                    "away_goals": 1,
+                }
+            )
+            matches.append(
+                {
+                    "home_team": "Other",
+                    "away_team": "Avg",
+                    "home_goals": 1,
+                    "away_goals": 1,
+                }
+            )
         engine.fit(matches)
         # "Avg" has defense_home = avg_home_conceded / league_avg_away_goals = 1.0
         profile = engine.get_team_profile("Avg")
@@ -120,13 +133,18 @@ class TestPoissonDefenceNormalisation:
         engine = PoissonEngine()
         engine.fit([])
         profile = engine.get_team_profile("Ghost FC")
-        assert profile == {"attack_home": 1.0, "defense_home": 1.0,
-                           "attack_away": 1.0, "defense_away": 1.0}
+        assert profile == {
+            "attack_home": 1.0,
+            "defense_home": 1.0,
+            "attack_away": 1.0,
+            "defense_away": 1.0,
+        }
 
 
 # ---------------------------------------------------------------------------
 # DixonColesEngine
 # ---------------------------------------------------------------------------
+
 
 class TestDixonColesEngine:
 
@@ -165,6 +183,7 @@ class TestDixonColesEngine:
 # ---------------------------------------------------------------------------
 # EloEngine
 # ---------------------------------------------------------------------------
+
 
 class TestEloEngine:
 
@@ -208,6 +227,7 @@ class TestEloEngine:
 # FormEngine
 # ---------------------------------------------------------------------------
 
+
 class TestFormEngine:
 
     def test_unknown_team_returns_half(self):
@@ -217,15 +237,17 @@ class TestFormEngine:
 
     def test_all_wins_form_is_one(self):
         form = FormEngine(lookback=5)
-        matches = [{"home_team": "A", "away_team": "B",
-                    "home_goals": 1, "away_goals": 0}] * 5
+        matches = [
+            {"home_team": "A", "away_team": "B", "home_goals": 1, "away_goals": 0}
+        ] * 5
         form.fit(matches)
         assert form.get_form("A") == pytest.approx(1.0)
 
     def test_all_losses_form_is_zero(self):
         form = FormEngine(lookback=5)
-        matches = [{"home_team": "B", "away_team": "A",
-                    "home_goals": 1, "away_goals": 0}] * 5
+        matches = [
+            {"home_team": "B", "away_team": "A", "home_goals": 1, "away_goals": 0}
+        ] * 5
         form.fit(matches)
         assert form.get_form("A") == pytest.approx(0.0)
 
@@ -239,10 +261,11 @@ class TestFormEngine:
     def test_lookback_limits_history(self):
         form = FormEngine(lookback=2)
         # 3 wins followed by 2 losses
-        matches = (
-            [{"home_team": "A", "away_team": "B", "home_goals": 2, "away_goals": 0}] * 3
-            + [{"home_team": "B", "away_team": "A", "home_goals": 2, "away_goals": 0}] * 2
-        )
+        matches = [
+            {"home_team": "A", "away_team": "B", "home_goals": 2, "away_goals": 0}
+        ] * 3 + [
+            {"home_team": "B", "away_team": "A", "home_goals": 2, "away_goals": 0}
+        ] * 2
         form.fit(matches)
         # Only last 2 results (losses as away) should count
         assert form.get_form("A") == pytest.approx(0.0, abs=0.01)
@@ -251,6 +274,7 @@ class TestFormEngine:
 # ---------------------------------------------------------------------------
 # H2HEngine
 # ---------------------------------------------------------------------------
+
 
 class TestH2HEngine:
 
@@ -261,8 +285,14 @@ class TestH2HEngine:
 
     def test_dominant_team_positive_diff(self):
         h2h = H2HEngine()
-        matches = [{"home_team": "Strong", "away_team": "Weak",
-                    "home_goals": 2, "away_goals": 0}] * 5
+        matches = [
+            {
+                "home_team": "Strong",
+                "away_team": "Weak",
+                "home_goals": 2,
+                "away_goals": 0,
+            }
+        ] * 5
         h2h.fit(matches)
         assert h2h.get_h2h_diff("Strong", "Weak") > 0
 
@@ -274,8 +304,9 @@ class TestH2HEngine:
 
     def test_reversed_fixture_uses_inverse_results(self):
         h2h = H2HEngine()
-        matches = [{"home_team": "A", "away_team": "B",
-                    "home_goals": 3, "away_goals": 0}] * 4
+        matches = [
+            {"home_team": "A", "away_team": "B", "home_goals": 3, "away_goals": 0}
+        ] * 4
         h2h.fit(matches)
         # A dominated B at home; as away team B should be negative
         diff_ba = h2h.get_h2h_diff("B", "A")

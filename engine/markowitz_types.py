@@ -39,7 +39,7 @@ class BetProposal:
             )
 
         self.expected_return = self.model_prob * self.odds - 1.0
-        self.variance = self.model_prob * (1.0 - self.model_prob) * (self.odds ** 2)
+        self.variance = self.model_prob * (1.0 - self.model_prob) * (self.odds**2)
 
         denom = self.odds - 1.0
         raw_kelly = self.expected_return / denom if denom > 1e-12 else 0.0

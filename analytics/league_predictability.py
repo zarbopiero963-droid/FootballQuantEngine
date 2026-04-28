@@ -331,9 +331,7 @@ class LeaguePredictabilityAnalyser:
                 actual_winner = (
                     "home"
                     if outcome == "home_win"
-                    else "away"
-                    if outcome == "away_win"
-                    else "draw"
+                    else "away" if outcome == "away_win" else "draw"
                 )
                 if actual_winner != "draw" and actual_winner != implied_fav:
                     upsets += 1
@@ -536,7 +534,7 @@ class LeaguePredictability:
     def __init__(self, **kwargs) -> None:
         self._analyser = LeaguePredictabilityAnalyser(**kwargs)
 
-    def score(self, df) -> "pd.DataFrame":  # type: ignore[name-defined]
+    def score(self, df) -> "pd.DataFrame":  # type: ignore[name-defined]  # noqa: F821
         """
         Score each league in *df* and return a tidy summary DataFrame.
 
@@ -552,7 +550,9 @@ class LeaguePredictability:
         try:
             import pandas as pd
         except ImportError as exc:
-            raise ImportError("pandas is required for LeaguePredictability.score()") from exc
+            raise ImportError(
+                "pandas is required for LeaguePredictability.score()"
+            ) from exc
 
         records = []
         for row in df.itertuples(index=False):

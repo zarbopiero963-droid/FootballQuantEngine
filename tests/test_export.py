@@ -13,8 +13,9 @@ from pathlib import Path
 def _read_csv(path: str):
     """Read a CSV file, skipping # comment lines."""
     with open(path, encoding="utf-8-sig") as f:
-        lines = [l for l in f if not l.startswith("#")]
+        lines = [line for line in f if not line.startswith("#")]
     return list(csv.DictReader(io.StringIO("".join(lines))))
+
 
 import pytest
 
@@ -30,25 +31,58 @@ def exporter(tmp_path):
 def sample_records():
     return [
         {
-            "match_id": "1001", "market": "home", "probability": 0.55,
-            "odds": 2.1, "ev": 0.155, "kelly": 0.072, "kelly_stake": 18.0,
-            "tier": "A", "model_edge": 0.05, "market_edge": 0.03,
-            "confidence": 0.65, "agreement": 0.72, "decision": "BET",
-            "league": "Serie A", "over_25": 0.6, "btts_yes": 0.5,
+            "match_id": "1001",
+            "market": "home",
+            "probability": 0.55,
+            "odds": 2.1,
+            "ev": 0.155,
+            "kelly": 0.072,
+            "kelly_stake": 18.0,
+            "tier": "A",
+            "model_edge": 0.05,
+            "market_edge": 0.03,
+            "confidence": 0.65,
+            "agreement": 0.72,
+            "decision": "BET",
+            "league": "Serie A",
+            "over_25": 0.6,
+            "btts_yes": 0.5,
         },
         {
-            "match_id": "1002", "market": "draw", "probability": 0.30,
-            "odds": 3.8, "ev": 0.14, "kelly": 0.04, "kelly_stake": 10.0,
-            "tier": "B", "model_edge": 0.02, "market_edge": 0.01,
-            "confidence": 0.50, "agreement": 0.55, "decision": "WATCHLIST",
-            "league": "Serie A", "over_25": 0.4, "btts_yes": 0.3,
+            "match_id": "1002",
+            "market": "draw",
+            "probability": 0.30,
+            "odds": 3.8,
+            "ev": 0.14,
+            "kelly": 0.04,
+            "kelly_stake": 10.0,
+            "tier": "B",
+            "model_edge": 0.02,
+            "market_edge": 0.01,
+            "confidence": 0.50,
+            "agreement": 0.55,
+            "decision": "WATCHLIST",
+            "league": "Serie A",
+            "over_25": 0.4,
+            "btts_yes": 0.3,
         },
         {
-            "match_id": "1003", "market": "away", "probability": 0.40,
-            "odds": 2.8, "ev": -0.02, "kelly": 0.0, "kelly_stake": 0.0,
-            "tier": "C", "model_edge": -0.01, "market_edge": 0.0,
-            "confidence": 0.45, "agreement": 0.40, "decision": "SKIP",
-            "league": "Ligue 1", "over_25": 0.45, "btts_yes": 0.35,
+            "match_id": "1003",
+            "market": "away",
+            "probability": 0.40,
+            "odds": 2.8,
+            "ev": -0.02,
+            "kelly": 0.0,
+            "kelly_stake": 0.0,
+            "tier": "C",
+            "model_edge": -0.01,
+            "market_edge": 0.0,
+            "confidence": 0.45,
+            "agreement": 0.40,
+            "decision": "SKIP",
+            "league": "Ligue 1",
+            "over_25": 0.45,
+            "btts_yes": 0.35,
         },
     ]
 

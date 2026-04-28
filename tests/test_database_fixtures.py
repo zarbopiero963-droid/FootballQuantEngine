@@ -5,7 +5,7 @@ Tests for database.fixtures_repository — uses the in_memory_db fixture from co
 from __future__ import annotations
 
 import sqlite3
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
@@ -78,8 +78,7 @@ class TestUpsertAndRetrieve:
 class TestBulkUpsert:
     def test_bulk_inserts_all(self, repo):
         fixtures = [
-            {**_FIXTURE, "fixture_id": f"80{i:02d}", "home_goals": i}
-            for i in range(5)
+            {**_FIXTURE, "fixture_id": f"80{i:02d}", "home_goals": i} for i in range(5)
         ]
         count = repo.upsert_fixtures_bulk(fixtures)
         assert count == 5

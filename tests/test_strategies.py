@@ -5,18 +5,14 @@ and strategies.value_bet_strategy.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
-import pytest
-
 from strategies.edge_detector import EdgeDetector
 from strategies.no_bet_filter import NoBetFilter
 from strategies.value_bet_strategy import ValueBetStrategy
 
-
 # ---------------------------------------------------------------------------
 # EdgeDetector
 # ---------------------------------------------------------------------------
+
 
 class TestEdgeDetector:
     def setup_method(self):
@@ -45,35 +41,42 @@ class TestEdgeDetector:
 # NoBetFilter
 # ---------------------------------------------------------------------------
 
+
 class TestNoBetFilter:
     def setup_method(self):
-        self.fltr = NoBetFilter(min_probability=0.54, min_edge=0.05,
-                                min_confidence=0.65, min_agreement=0.60)
+        self.fltr = NoBetFilter(
+            min_probability=0.54, min_edge=0.05, min_confidence=0.65, min_agreement=0.60
+        )
 
     def test_value_bet_returns_bet(self):
-        decision = self.fltr.decide(probability=0.60, edge=0.10,
-                                    confidence=0.70, agreement=0.75)
+        decision = self.fltr.decide(
+            probability=0.60, edge=0.10, confidence=0.70, agreement=0.75
+        )
         assert decision == "BET"
 
     def test_low_probability_not_bet(self):
-        decision = self.fltr.decide(probability=0.40, edge=0.10,
-                                    confidence=0.70, agreement=0.75)
+        decision = self.fltr.decide(
+            probability=0.40, edge=0.10, confidence=0.70, agreement=0.75
+        )
         assert decision != "BET"
 
     def test_negative_edge_not_bet(self):
-        decision = self.fltr.decide(probability=0.60, edge=-0.05,
-                                    confidence=0.70, agreement=0.75)
+        decision = self.fltr.decide(
+            probability=0.60, edge=-0.05, confidence=0.70, agreement=0.75
+        )
         assert decision != "BET"
 
     def test_low_confidence_not_bet(self):
-        decision = self.fltr.decide(probability=0.60, edge=0.10,
-                                    confidence=0.50, agreement=0.75)
+        decision = self.fltr.decide(
+            probability=0.60, edge=0.10, confidence=0.50, agreement=0.75
+        )
         assert decision != "BET"
 
 
 # ---------------------------------------------------------------------------
 # ValueBetStrategy
 # ---------------------------------------------------------------------------
+
 
 class TestValueBetStrategy:
     def setup_method(self):
@@ -87,11 +90,15 @@ class TestValueBetStrategy:
         return {"1001": {"home": 2.1, "draw": 3.5, "away": 4.5}}
 
     def test_returns_list(self):
-        result = self.strategy.find_value_bets(self._preds(), self._odds(), self.detector)
+        result = self.strategy.find_value_bets(
+            self._preds(), self._odds(), self.detector
+        )
         assert isinstance(result, list)
 
     def test_finds_positive_edge_bet(self):
-        result = self.strategy.find_value_bets(self._preds(home_win=0.65), self._odds(), self.detector)
+        result = self.strategy.find_value_bets(
+            self._preds(home_win=0.65), self._odds(), self.detector
+        )
         markets = [b.get("market") for b in result]
         assert "home" in markets
 

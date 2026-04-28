@@ -9,6 +9,7 @@ Approach:
   - Second half lambda = full-time lambda − halftime lambda.
   - O/U computed from independent Poisson PMFs convolved for total half-goals.
 """
+
 from __future__ import annotations
 
 import math
@@ -34,7 +35,8 @@ class HalftimeModel:
         Each match dict must have: home_goals, away_goals, ht_home, ht_away.
         """
         valid = [
-            m for m in completed_matches
+            m
+            for m in completed_matches
             if m.get("ht_home") is not None
             and m.get("ht_away") is not None
             and m.get("home_goals") is not None
@@ -51,8 +53,12 @@ class HalftimeModel:
         ht_away_sum = sum(float(m["ht_away"]) for m in valid)
         ft_away_sum = sum(float(m["away_goals"]) for m in valid)
 
-        self._ht_ratio_home = ht_home_sum / ft_home_sum if ft_home_sum else self._DEFAULT_HT_RATIO
-        self._ht_ratio_away = ht_away_sum / ft_away_sum if ft_away_sum else self._DEFAULT_HT_RATIO
+        self._ht_ratio_home = (
+            ht_home_sum / ft_home_sum if ft_home_sum else self._DEFAULT_HT_RATIO
+        )
+        self._ht_ratio_away = (
+            ht_away_sum / ft_away_sum if ft_away_sum else self._DEFAULT_HT_RATIO
+        )
 
         # Clamp to sensible range
         self._ht_ratio_home = max(0.30, min(0.55, self._ht_ratio_home))
@@ -109,7 +115,9 @@ class HalftimeModel:
         """Standard lines for both halves."""
         result = {}
         for line in [0.5, 1.5]:
-            probs = self.probabilities(lambda_home_ft, lambda_away_ft, line_ht=line, line_sh=line)
+            probs = self.probabilities(
+                lambda_home_ft, lambda_away_ft, line_ht=line, line_sh=line
+            )
             result[f"ht_ou{str(line).replace('.', '')}"] = probs["ht"]
             result[f"sh_ou{str(line).replace('.', '')}"] = probs["sh"]
         return result
@@ -120,7 +128,7 @@ class HalftimeModel:
 
     def _poisson_pmf(self, k: int, lam: float) -> float:
         lam = max(0.01, lam)
-        return math.exp(-lam) * (lam ** k) / math.factorial(min(k, 170))
+        return math.exp(-lam) * (lam**k) / math.factorial(min(k, 170))
 
     def _ou_total(self, lam_h: float, lam_a: float, line: float) -> dict:
         pmf_h = [self._poisson_pmf(k, lam_h) for k in range(self.max_goals + 1)]

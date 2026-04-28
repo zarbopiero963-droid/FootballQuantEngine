@@ -7,33 +7,35 @@ from __future__ import annotations
 
 import pytest
 
-from analytics.probability_markets import ProbabilityMarkets, poisson_pmf
 from analytics.league_predictability import (
-    LeaguePredictabilityAnalyser,
     LeaguePredictability,
-    _ranked_prob_score,
+    LeaguePredictabilityAnalyser,
     _gini,
+    _ranked_prob_score,
 )
 from analytics.market_inefficiency_scanner import MarketInefficiencyScanner
-
+from analytics.probability_markets import ProbabilityMarkets, poisson_pmf
 
 # ---------------------------------------------------------------------------
 # Helpers / shared data
 # ---------------------------------------------------------------------------
 
+
 def _make_records(n: int = 10):
     """Minimal prediction records for LeaguePredictability tests."""
     records = []
     for i in range(n):
-        records.append({
-            "league": "Serie A",
-            "actual_outcome": "home_win" if i % 3 != 2 else "away_win",
-            "p_home": 0.50,
-            "p_draw": 0.25,
-            "p_away": 0.25,
-            "home_odds": 2.0,
-            "away_odds": 3.5,
-        })
+        records.append(
+            {
+                "league": "Serie A",
+                "actual_outcome": "home_win" if i % 3 != 2 else "away_win",
+                "p_home": 0.50,
+                "p_draw": 0.25,
+                "p_away": 0.25,
+                "home_odds": 2.0,
+                "away_odds": 3.5,
+            }
+        )
     return records
 
 
@@ -41,10 +43,12 @@ def _make_records(n: int = 10):
 # ProbabilityMarkets
 # ---------------------------------------------------------------------------
 
+
 class TestProbabilityMarkets:
 
     def test_poisson_pmf_zero_goals(self):
         import math
+
         result = poisson_pmf(0, 1.5)
         assert result == pytest.approx(math.exp(-1.5), rel=1e-9)
 
@@ -93,6 +97,7 @@ class TestProbabilityMarkets:
 # _gini helper
 # ---------------------------------------------------------------------------
 
+
 class TestGiniHelper:
 
     def test_equal_values_zero_gini(self):
@@ -112,6 +117,7 @@ class TestGiniHelper:
 # ---------------------------------------------------------------------------
 # _ranked_prob_score helper
 # ---------------------------------------------------------------------------
+
 
 class TestRankedProbScore:
 
@@ -136,6 +142,7 @@ class TestRankedProbScore:
 # ---------------------------------------------------------------------------
 # LeaguePredictabilityAnalyser
 # ---------------------------------------------------------------------------
+
 
 class TestLeaguePredictabilityAnalyser:
 
@@ -191,16 +198,19 @@ class TestLeaguePredictabilityAnalyser:
 # LeaguePredictability DataFrame adapter
 # ---------------------------------------------------------------------------
 
+
 class TestLeaguePredictabilityAdapter:
 
     def test_score_returns_dataframe(self):
         pd = pytest.importorskip("pandas")
         lp = LeaguePredictability()
-        df = pd.DataFrame([
-            {"league": "Serie A", "home_goals": 2, "away_goals": 1},
-            {"league": "Serie A", "home_goals": 0, "away_goals": 0},
-            {"league": "Premier League", "home_goals": 1, "away_goals": 2},
-        ])
+        df = pd.DataFrame(
+            [
+                {"league": "Serie A", "home_goals": 2, "away_goals": 1},
+                {"league": "Serie A", "home_goals": 0, "away_goals": 0},
+                {"league": "Premier League", "home_goals": 1, "away_goals": 2},
+            ]
+        )
         result = lp.score(df)
         assert isinstance(result, pd.DataFrame)
         assert "league" in result.columns
@@ -219,20 +229,23 @@ class TestLeaguePredictabilityAdapter:
 # MarketInefficiencyScanner
 # ---------------------------------------------------------------------------
 
+
 class TestMarketInefficiencyScanner:
 
     def _predictions(self, n: int = 15):
         preds = []
         for i in range(n):
-            preds.append({
-                "fixture_id": str(i),
-                "league": "Serie A",
-                "market": "home",
-                "p_model": 0.55,
-                "p_implied": 0.48,
-                "bookmaker_odds": 2.08,
-                "timestamp": 1700000000 + i * 3600,
-            })
+            preds.append(
+                {
+                    "fixture_id": str(i),
+                    "league": "Serie A",
+                    "market": "home",
+                    "p_model": 0.55,
+                    "p_implied": 0.48,
+                    "bookmaker_odds": 2.08,
+                    "timestamp": 1700000000 + i * 3600,
+                }
+            )
         return preds
 
     def test_scan_returns_list(self):

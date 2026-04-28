@@ -17,7 +17,7 @@ def poisson_pmf(k: int, lam: float) -> float:
     """Compute P(X = k) for X ~ Poisson(lam)."""
     if lam <= 0.0:
         return 1.0 if k == 0 else 0.0
-    return math.exp(-lam) * (lam ** k) / math.factorial(k)
+    return math.exp(-lam) * (lam**k) / math.factorial(k)
 
 
 def compute_win_probs(

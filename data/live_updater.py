@@ -11,6 +11,7 @@ Typical use:
     ...
     updater.stop()
 """
+
 from __future__ import annotations
 
 import logging
@@ -105,7 +106,9 @@ class LiveUpdater:
             if live_fixtures:
                 self._save_live_to_db(live_fixtures)
                 self._notify(live_fixtures)
-                logger.debug("LiveUpdater: %d live fixtures updated", len(live_fixtures))
+                logger.debug(
+                    "LiveUpdater: %d live fixtures updated", len(live_fixtures)
+                )
 
         except Exception as exc:
             self.polls_errors += 1

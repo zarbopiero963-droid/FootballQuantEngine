@@ -229,9 +229,11 @@ class MLEnsemble:
         # Apply Isotonic calibration per outcome, then renormalise
         calibrated = np.array(
             [
-                float(self._calibrators[i].predict([raw[i]])[0])
-                if self._calibrators[i] is not None
-                else float(raw[i])
+                (
+                    float(self._calibrators[i].predict([raw[i]])[0])
+                    if self._calibrators[i] is not None
+                    else float(raw[i])
+                )
                 for i in range(3)
             ]
         )

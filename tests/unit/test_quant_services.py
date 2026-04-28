@@ -9,13 +9,13 @@ import pytest
 
 from quant.services.agreement_engine import AgreementEngine
 from quant.services.confidence_engine import QuantConfidenceEngine
-from quant.services.no_bet_filter import QuantNoBetFilter
 from quant.services.market_tools import MarketTools
-
+from quant.services.no_bet_filter import QuantNoBetFilter
 
 # ---------------------------------------------------------------------------
 # AgreementEngine
 # ---------------------------------------------------------------------------
+
 
 class TestAgreementEngine:
 
@@ -41,16 +41,23 @@ class TestAgreementEngine:
 
     def test_single_model_returns_nonnegative(self):
         eng = AgreementEngine()
-        score = eng.three_way_agreement([{"home_win": 0.4, "draw": 0.3, "away_win": 0.3}])
+        score = eng.three_way_agreement(
+            [{"home_win": 0.4, "draw": 0.3, "away_win": 0.3}]
+        )
         assert score >= 0.0
 
     def test_score_bounded_zero_to_one(self):
         import random
+
         random.seed(42)
         eng = AgreementEngine()
         for _ in range(20):
             models = [
-                {"home_win": random.random(), "draw": random.random(), "away_win": random.random()}
+                {
+                    "home_win": random.random(),
+                    "draw": random.random(),
+                    "away_win": random.random(),
+                }
                 for _ in range(4)
             ]
             score = eng.three_way_agreement(models)
@@ -66,6 +73,7 @@ class TestAgreementEngine:
 # ---------------------------------------------------------------------------
 # QuantConfidenceEngine
 # ---------------------------------------------------------------------------
+
 
 class TestQuantConfidenceEngine:
 
@@ -107,6 +115,7 @@ class TestQuantConfidenceEngine:
 # ---------------------------------------------------------------------------
 # QuantNoBetFilter
 # ---------------------------------------------------------------------------
+
 
 class TestQuantNoBetFilter:
 
@@ -162,6 +171,7 @@ class TestQuantNoBetFilter:
 # MarketTools (extended)
 # ---------------------------------------------------------------------------
 
+
 class TestMarketToolsExtended:
 
     def test_normalize_all_zero_odds_returns_uniform(self):
@@ -173,7 +183,9 @@ class TestMarketToolsExtended:
 
     def test_normalize_none_values_returns_uniform(self):
         mt = MarketTools()
-        result = mt.normalize_implied_probs_1x2({"home": None, "draw": None, "away": None})
+        result = mt.normalize_implied_probs_1x2(
+            {"home": None, "draw": None, "away": None}
+        )
         assert sum(result.values()) == pytest.approx(1.0, abs=1e-9)
 
     def test_normalize_missing_keys_returns_uniform(self):
@@ -213,8 +225,12 @@ class TestMarketToolsExtended:
 
     def test_probability_edge_vs_market_positive(self):
         mt = MarketTools()
-        assert mt.probability_edge_vs_market(0.55, 0.48) == pytest.approx(0.07, abs=1e-9)
+        assert mt.probability_edge_vs_market(0.55, 0.48) == pytest.approx(
+            0.07, abs=1e-9
+        )
 
     def test_probability_edge_vs_market_negative(self):
         mt = MarketTools()
-        assert mt.probability_edge_vs_market(0.40, 0.52) == pytest.approx(-0.12, abs=1e-9)
+        assert mt.probability_edge_vs_market(0.40, 0.52) == pytest.approx(
+            -0.12, abs=1e-9
+        )

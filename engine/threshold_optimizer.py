@@ -204,9 +204,11 @@ class ThresholdOptimizer:
             "ThresholdOptimizer: tried %d combos, %d valid — %s",
             result.n_combinations_tried,
             result.n_valid_combinations,
-            result.summary()
-            if result.n_valid_combinations > 0
-            else "no valid combo found",
+            (
+                result.summary()
+                if result.n_valid_combinations > 0
+                else "no valid combo found"
+            ),
         )
         return result
 

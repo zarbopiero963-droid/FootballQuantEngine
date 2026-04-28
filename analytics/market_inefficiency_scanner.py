@@ -256,6 +256,7 @@ class MarketInefficiencyScanner:
         _was_dataframe = False
         try:
             import pandas as pd
+
             if isinstance(predictions, pd.DataFrame):
                 _was_dataframe = True
                 predictions = predictions.to_dict(orient="records")
@@ -288,6 +289,7 @@ class MarketInefficiencyScanner:
 
         if _was_dataframe:
             import pandas as pd
+
             return pd.DataFrame(results)
         return results
 

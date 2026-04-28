@@ -1,22 +1,19 @@
 name: Build Portable EXE
 
+# Runs ONLY on push to main.  Secrets (API_FOOTBALL_KEY) are injected here
+# and nowhere else.  Feature branches are handled by ci.yml which has no
+# secrets and no Windows build step.
+
 on:
   push:
-    branches: ["**"]
+    branches:
+      - main
 
 jobs:
 
   build-windows:
 
     runs-on: windows-latest
-    # Restrict secret injection: only main or PRs from the same repo
-    if: |
-      github.ref == 'refs/heads/main' ||
-      (github.event_name == 'pull_request' &&
-       github.event.pull_request.head.repo.full_name == github.repository)
-
-    env:
-      API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
 
     steps:
 
@@ -40,14 +37,10 @@ jobs:
             ${{ runner.os }}-pip-
 
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pyinstaller
+        run: pip install -r requirements.txt pyinstaller pip-audit mypy types-requests
 
       - name: Security audit (pip-audit)
-        run: |
-          pip install pip-audit
-          pip-audit
+        run: pip-audit
 
       - name: Install UPX
         run: |
@@ -64,12 +57,9 @@ jobs:
         run: |
           ruff check .
           black --check .
-          isort --check-only .
 
       - name: Type-check (mypy)
-        run: |
-          pip install mypy types-requests
-          mypy config/ quant/models/ quant/services/ ranking/ database/ notifications/ --ignore-missing-imports --explicit-package-bases --follow-imports=silent
+        run: mypy config/ quant/models/ quant/services/ ranking/ database/ notifications/
 
       - name: Run unit tests
         run: |
@@ -82,6 +72,8 @@ jobs:
           if (Test-Path dist)  { Remove-Item -Recurse -Force dist }
 
       - name: Build EXE
+        env:
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
         run: |
           python -m PyInstaller football_quant_engine.spec
 

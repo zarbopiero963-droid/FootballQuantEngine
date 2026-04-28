@@ -12,7 +12,6 @@ import pytest
 
 from notifications.telegram_notifier import TelegramNotifier
 
-
 # ---------------------------------------------------------------------------
 # Fixture: patch requests.post
 # ---------------------------------------------------------------------------
@@ -73,6 +72,7 @@ def test_send_message_retries_on_500(mock_post):
 
     # Patch time.sleep so the test doesn't actually wait during retry back-off
     import notifications.telegram_notifier as _mod
+
     original_sleep = _mod.time.sleep
     _mod.time.sleep = lambda _: None
 

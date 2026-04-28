@@ -1,9 +1,9 @@
 from config.constants import (
     XG_STRONG_THRESHOLD,
-    XG_WEAK_THRESHOLD,
     XG_SUPPORT_AGAINST,
     XG_SUPPORT_NEUTRAL,
     XG_SUPPORT_STRONG,
+    XG_WEAK_THRESHOLD,
 )
 from quant.features.dataset_builder import QuantDatasetBuilder
 from quant.features.feature_builder import FeatureBuilder

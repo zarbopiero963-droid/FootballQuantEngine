@@ -130,7 +130,9 @@ class AnalyticsDashboard(QMainWindow):
 
             predictions_enriched = []
             try:
-                from analytics.market_inefficiency_scanner import MarketInefficiencyScanner
+                from analytics.market_inefficiency_scanner import (
+                    MarketInefficiencyScanner,
+                )
 
                 scanner = MarketInefficiencyScanner()
                 predictions_enriched = scanner.scan(bets)

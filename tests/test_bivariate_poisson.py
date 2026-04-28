@@ -1,3 +1,7 @@
+import pytest
+
+scipy = pytest.importorskip("scipy", reason="scipy not installed")
+
 from models.bivariate_poisson import BivariatePoisson
 
 

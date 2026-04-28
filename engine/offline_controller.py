@@ -19,6 +19,6 @@ class OfflineController:
 
         return results
 
-    def run_reports(self, ranked_df=None):
+    def run_reports(self):
 
-        return self.engine.run_reports(ranked_df=ranked_df)
+        return self.engine.run_reports()

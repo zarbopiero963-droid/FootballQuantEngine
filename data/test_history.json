@@ -138,5 +138,40 @@
     "yield": 5,
     "hit_rate": 50,
     "timestamp": "2026-04-27T16:13:04.138266"
+  },
+  {
+    "bankroll": 10,
+    "roi": 5,
+    "yield": 5,
+    "hit_rate": 50,
+    "timestamp": "2026-04-28T05:56:17.101895"
+  },
+  {
+    "bankroll": 10,
+    "roi": 5,
+    "yield": 5,
+    "hit_rate": 50,
+    "timestamp": "2026-04-28T05:56:35.916641"
+  },
+  {
+    "bankroll": 10,
+    "roi": 5,
+    "yield": 5,
+    "hit_rate": 50,
+    "timestamp": "2026-04-28T06:03:27.647344"
+  },
+  {
+    "bankroll": 10,
+    "roi": 5,
+    "yield": 5,
+    "hit_rate": 50,
+    "timestamp": "2026-04-28T10:13:53.746410"
+  },
+  {
+    "bankroll": 10,
+    "roi": 5,
+    "yield": 5,
+    "hit_rate": 50,
+    "timestamp": "2026-04-28T10:16:48.326968"
   }
 ]

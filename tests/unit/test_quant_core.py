@@ -13,15 +13,14 @@ ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from ranking.match_ranker import (
-    kelly_fraction,
-    expected_value,
-    sharpe_ratio,
-    MatchRanker,
-)
 from quant.models.calibration import ProbabilityCalibration
 from quant.services.market_tools import MarketTools
-
+from ranking.match_ranker import (
+    MatchRanker,
+    expected_value,
+    kelly_fraction,
+    sharpe_ratio,
+)
 
 # ---------------------------------------------------------------------------
 # kelly_fraction
@@ -93,12 +92,15 @@ def test_match_ranker_score_one():
     result = ranker.score_one(record)
 
     assert result is not None, "score_one() returned None for a positive-EV record"
-    assert result.tier in ("S", "A", "B", "C"), (
-        f"Unexpected tier '{result.tier}'; expected one of S/A/B/C"
-    )
-    assert result.match_id == "1001", (
-        f"Expected match_id '1001', got '{result.match_id}'"
-    )
+    assert result.tier in (
+        "S",
+        "A",
+        "B",
+        "C",
+    ), f"Unexpected tier '{result.tier}'; expected one of S/A/B/C"
+    assert (
+        result.match_id == "1001"
+    ), f"Expected match_id '1001', got '{result.match_id}'"
 
 
 def test_match_ranker_excludes_no_value():
@@ -115,9 +117,7 @@ def test_match_ranker_excludes_no_value():
         "decision": "BET",
     }
     result = ranker.score_one(record)
-    assert result is None, (
-        f"Expected None for a negative-EV bet, got {result}"
-    )
+    assert result is None, f"Expected None for a negative-EV bet, got {result}"
 
 
 # ---------------------------------------------------------------------------
@@ -135,9 +135,9 @@ def test_probability_calibration_sums_to_one():
     result = cal.calibrate_three_way(raw)
 
     total = result["home_win"] + result["draw"] + result["away_win"]
-    assert total == pytest.approx(1.0, abs=1e-9), (
-        f"Calibrated probabilities sum to {total}, expected 1.0"
-    )
+    assert total == pytest.approx(
+        1.0, abs=1e-9
+    ), f"Calibrated probabilities sum to {total}, expected 1.0"
 
 
 def test_probability_calibration_shrinks_toward_uniform():
@@ -166,6 +166,6 @@ def test_market_tools_fair_odds():
     """
     mt = MarketTools()
     result = mt.fair_odds(0.5)
-    assert result == pytest.approx(2.0, rel=1e-6), (
-        f"Expected fair_odds(0.5) ≈ 2.0, got {result}"
-    )
+    assert result == pytest.approx(
+        2.0, rel=1e-6
+    ), f"Expected fair_odds(0.5) ≈ 2.0, got {result}"

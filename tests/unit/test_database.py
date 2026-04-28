@@ -55,10 +55,16 @@ def test_init_db_creates_all_tables():
     finally:
         conn.close()
 
-    expected = {"fixtures", "snapshots", "downloaded_seasons", "predictions", "odds_history"}
-    assert expected.issubset(tables), (
-        f"Missing tables: {expected - tables}.  Found: {tables}"
-    )
+    expected = {
+        "fixtures",
+        "snapshots",
+        "downloaded_seasons",
+        "predictions",
+        "odds_history",
+    }
+    assert expected.issubset(
+        tables
+    ), f"Missing tables: {expected - tables}.  Found: {tables}"
 
 
 # ---------------------------------------------------------------------------
@@ -85,9 +91,8 @@ def test_get_db_commits_on_success(monkeypatch):
     setup_conn.commit()
 
     monkeypatch.setattr(dm, "DATABASE_NAME", shared_uri)
-    # connect() must use uri=True for shared-cache URIs.
-    original_connect = dm.connect
 
+    # connect() must use uri=True for shared-cache URIs.
     def _uri_connect():
         return sqlite3.connect(dm.DATABASE_NAME, uri=True)
 
@@ -136,7 +141,9 @@ def test_get_db_rolls_back_on_exception(monkeypatch):
                 conn.execute("INSERT INTO _test (val) VALUES ('should_rollback')")
                 raise RuntimeError("deliberate error to trigger rollback")
 
-        row = setup_conn.execute("SELECT val FROM _test WHERE val='should_rollback'").fetchone()
+        row = setup_conn.execute(
+            "SELECT val FROM _test WHERE val='should_rollback'"
+        ).fetchone()
         assert row is None, "Row should have been rolled back but was found in the DB"
     finally:
         setup_conn.close()
@@ -158,8 +165,8 @@ def test_connect_returns_connection(monkeypatch):
 
     conn = dm.connect()
     try:
-        assert isinstance(conn, sqlite3.Connection), (
-            f"Expected sqlite3.Connection, got {type(conn)}"
-        )
+        assert isinstance(
+            conn, sqlite3.Connection
+        ), f"Expected sqlite3.Connection, got {type(conn)}"
     finally:
         conn.close()

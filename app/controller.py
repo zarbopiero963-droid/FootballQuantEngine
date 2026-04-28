@@ -14,6 +14,7 @@ Responsibilities:
   - Start / stop the live fixture updater (LiveUpdater via BootstrapController)
   - Track bankroll across cycles
 """
+
 from __future__ import annotations
 
 import logging
@@ -87,9 +88,7 @@ class AppController:
     def _get_bootstrap(self) -> BootstrapController:
         if self._bootstrap_ctrl is None:
             api_key = (
-                os.getenv("API_FOOTBALL_KEY")
-                or self._settings.api_football_key
-                or ""
+                os.getenv("API_FOOTBALL_KEY") or self._settings.api_football_key or ""
             )
             self._bootstrap_ctrl = BootstrapController(api_key=api_key)
             self._bootstrap_ctrl.initialise()
@@ -179,7 +178,7 @@ class AppController:
         """Update current season data then generate all-market predictions."""
         settings = load_settings()
         lid = league_id or getattr(settings, "league_id", None) or 135
-        s   = season   or getattr(settings, "season",    None) or 2024
+        s = season or getattr(settings, "season", None) or 2024
         self.update_current_season(lid, s)
         return self._get_bootstrap().run_predictions(lid, s)
 

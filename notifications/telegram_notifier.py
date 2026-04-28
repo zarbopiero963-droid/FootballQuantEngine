@@ -409,7 +409,9 @@ class TelegramNotifier:
                 )
             except Exception as exc:
                 # Mask token in exc string — requests errors often embed the URL
-                safe_exc = str(exc).replace(self._token, "***") if self._token else str(exc)
+                safe_exc = (
+                    str(exc).replace(self._token, "***") if self._token else str(exc)
+                )
                 logger.warning(
                     "TelegramNotifier: exception (attempt %d/%d): %s",
                     attempt,

@@ -1,16 +1,16 @@
-import os
+from __future__ import annotations
 
-import pytest
-
-if not os.getenv("API_FOOTBALL_KEY"):
-    pytest.skip("API_FOOTBALL_KEY missing", allow_module_level=True)
+from unittest.mock import patch
 
 from app.quant_controller import AppQuantController
 
 
-def test_app_quant_controller_runs():
-
-    controller = AppQuantController()
+def test_app_quant_controller_runs(mock_api_client):
+    with patch(
+        "quant.services.quant_job_runner.APIFootballClient",
+        return_value=mock_api_client,
+    ):
+        controller = AppQuantController()
 
     results = controller.run_quant_cycle()
 

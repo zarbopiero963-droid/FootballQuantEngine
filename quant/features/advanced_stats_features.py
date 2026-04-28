@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 class AdvancedStatsFeatureBuilder:
 
     def __init__(self, stats_by_team=None):

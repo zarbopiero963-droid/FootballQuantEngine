@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from config.settings_manager import load_settings
 from notifications.telegram_notifier import TelegramNotifier
 

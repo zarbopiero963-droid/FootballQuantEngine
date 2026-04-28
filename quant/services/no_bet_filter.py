@@ -1,18 +1,27 @@
+from __future__ import annotations
+
+
 class QuantNoBetFilter:
 
     def __init__(
         self,
-        min_probability=0.54,
-        min_edge=0.04,
-        min_confidence=0.64,
-        min_agreement=0.58,
-    ):
+        min_probability: float = 0.54,
+        min_edge: float = 0.04,
+        min_confidence: float = 0.64,
+        min_agreement: float = 0.58,
+    ) -> None:
         self.min_probability = min_probability
         self.min_edge = min_edge
         self.min_confidence = min_confidence
         self.min_agreement = min_agreement
 
-    def decide(self, probability, edge, confidence, agreement):
+    def decide(
+        self,
+        probability: float,
+        edge: float,
+        confidence: float,
+        agreement: float,
+    ) -> str:
         probability = float(probability)
         edge = float(edge)
         confidence = float(confidence)

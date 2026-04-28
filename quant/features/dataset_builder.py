@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 class QuantDatasetBuilder:
     def __init__(self, fixtures_provider, odds_provider):
         self.fixtures_provider = fixtures_provider

@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 class SvgChartBuilder:
 
     def line_chart(self, values, title, color="#2c7be5", width=700, height=220):

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from models.elo_model import EloModel
 
 

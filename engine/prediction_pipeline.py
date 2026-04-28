@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from engine.confidence_engine import ConfidenceEngine
 from engine.market_comparison import MarketComparison
 from engine.model_agreement import ModelAgreement

@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 def resolve_fixture_id(match_id, fixtures):
 
     for f in fixtures:

@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 class MarketComparison:
 
     def implied_probabilities(self, odds):

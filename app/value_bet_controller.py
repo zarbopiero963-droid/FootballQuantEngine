@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from quant.value.value_bet_runner import ValueBetRunner
 
 

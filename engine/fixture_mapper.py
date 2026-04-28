@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 def map_api_football_response_to_fixtures(fixtures_response):
 
     fixtures = []

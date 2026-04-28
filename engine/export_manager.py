@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from export.csv_exporter import CsvExporter
 from export.excel_exporter import ExcelExporter
 

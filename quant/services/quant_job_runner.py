@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from config.settings_manager import load_settings
 from quant.providers.api_football_client import APIFootballClient
 from quant.providers.sample_clients import SampleAPIFootballClient

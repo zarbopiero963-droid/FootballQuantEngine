@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 class ModelAgreement:
 
     def calculate(self, plugin_outputs):

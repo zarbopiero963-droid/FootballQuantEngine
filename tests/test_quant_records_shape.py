@@ -1,18 +1,21 @@
-import os
+from __future__ import annotations
 
-import pytest
-
-if not os.getenv("API_FOOTBALL_KEY"):
-    pytest.skip("API_FOOTBALL_KEY missing", allow_module_level=True)
+from unittest.mock import patch
 
 from quant.services.quant_job_runner import QuantJobRunner
 
 
-def test_quant_records_have_expected_fields():
-
-    runner = QuantJobRunner()
+def test_quant_records_have_expected_fields(mock_api_client):
+    with patch(
+        "quant.services.quant_job_runner.APIFootballClient",
+        return_value=mock_api_client,
+    ):
+        runner = QuantJobRunner()
 
     results = runner.run_cycle()
+
+    assert isinstance(results, list)
+    assert len(results) > 0
 
     first = results[0]
 

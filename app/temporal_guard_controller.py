@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from quant.temporal.temporal_guard_runner import TemporalGuardRunner
 
 

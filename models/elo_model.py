@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 class EloModel:
 
     def probability(self, elo_diff):

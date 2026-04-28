@@ -1,16 +1,16 @@
-import os
+from __future__ import annotations
 
-import pytest
-
-if not os.getenv("API_FOOTBALL_KEY"):
-    pytest.skip("API_FOOTBALL_KEY missing", allow_module_level=True)
+from unittest.mock import patch
 
 from engine.job_runner import JobRunner
 
 
-def test_job_runner_returns_quant_results():
-
-    runner = JobRunner()
+def test_job_runner_returns_quant_results(mock_api_client):
+    with patch(
+        "quant.services.quant_job_runner.APIFootballClient",
+        return_value=mock_api_client,
+    ):
+        runner = JobRunner()
 
     results = runner.run_cycle()
 

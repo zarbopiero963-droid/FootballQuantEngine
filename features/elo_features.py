@@ -16,4 +16,4 @@ def elo_diff(home_team: str, away_team: str, elo_df: pd.DataFrame) -> float:
     home_elo: float = float(home_row.iloc[0]["Elo"])
     away_elo: float = float(away_row.iloc[0]["Elo"])
 
-    return home_elo - away_elo
+    return float(home_elo - away_elo)

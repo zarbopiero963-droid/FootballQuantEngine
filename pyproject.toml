@@ -8,5 +8,14 @@ fix = true
 [tool.ruff.lint]
 extend-select = ["I"]
 
+[tool.ruff.lint.isort]
+known-first-party = [
+  "quant", "engine", "analytics", "ranking", "database",
+  "training", "notifications", "ai", "app", "dashboard",
+  "export", "features", "live", "market", "models",
+  "normalization", "plugins", "simulation", "strategies",
+  "ui", "utils",
+]
+
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["E402"]

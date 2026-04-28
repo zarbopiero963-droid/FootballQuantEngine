@@ -1,54 +1,38 @@
+from __future__ import annotations
+
+from strategies.edge_detector import EdgeDetector
+
+
 class ValueBetStrategy:
+    def find_value_bets(
+        self,
+        predictions: dict[str, dict[str, float]],
+        odds_data: dict[str, dict[str, float]],
+        edge_detector: EdgeDetector,
+    ) -> list[dict[str, object]]:
+        results: list[dict[str, object]] = []
 
-    def find_value_bets(self, predictions, odds_data, edge_detector):
-
-        results = []
-
-        for match_id in predictions:
-
-            prediction = predictions[match_id]
-
+        for match_id, prediction in predictions.items():
             if match_id not in odds_data:
                 continue
 
             odds = odds_data[match_id]
 
-            home_prob = prediction.get("home_win")
-            draw_prob = prediction.get("draw")
-            away_prob = prediction.get("away_win")
-
-            home_odds = odds.get("home")
-            draw_odds = odds.get("draw")
-            away_odds = odds.get("away")
-
-            if edge_detector.is_value_bet(home_prob, home_odds):
-                results.append(
-                    {
-                        "match_id": match_id,
-                        "market": "home",
-                        "probability": home_prob,
-                        "odds": home_odds,
-                    }
-                )
-
-            if edge_detector.is_value_bet(draw_prob, draw_odds):
-                results.append(
-                    {
-                        "match_id": match_id,
-                        "market": "draw",
-                        "probability": draw_prob,
-                        "odds": draw_odds,
-                    }
-                )
-
-            if edge_detector.is_value_bet(away_prob, away_odds):
-                results.append(
-                    {
-                        "match_id": match_id,
-                        "market": "away",
-                        "probability": away_prob,
-                        "odds": away_odds,
-                    }
-                )
+            for market, prob_key, odds_key in (
+                ("home", "home_win", "home"),
+                ("draw", "draw", "draw"),
+                ("away", "away_win", "away"),
+            ):
+                prob = prediction.get(prob_key)
+                odd = odds.get(odds_key)
+                if edge_detector.is_value_bet(prob, odd):
+                    results.append(
+                        {
+                            "match_id": match_id,
+                            "market": market,
+                            "probability": prob,
+                            "odds": odd,
+                        }
+                    )
 
         return results

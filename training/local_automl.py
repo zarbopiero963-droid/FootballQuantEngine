@@ -127,15 +127,11 @@ def load_best_model() -> dict | None:
 
         return joblib.load(MODEL_PATH)
     except Exception as exc:
-        logger.warning(
-            "joblib.load failed for %s: %s — trying pickle fallback", MODEL_PATH, exc
+        logger.error(
+            "joblib.load failed for %s: %s — re-train to regenerate a trusted model.",
+            MODEL_PATH,
+            exc,
         )
-
-    try:
-        with open(MODEL_PATH, "rb") as fh:
-            return pickle.load(fh)
-    except Exception as exc:
-        logger.warning("pickle.load also failed for %s: %s", MODEL_PATH, exc)
         return None
 
 

@@ -1,15 +1,16 @@
+from __future__ import annotations
+
+import sqlite3
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock
+
+import pytest
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
-
-import sqlite3
-from unittest.mock import MagicMock
-
-import pytest
 
 SCHEMA_PATH = ROOT_DIR / "database" / "schema.sql"
 
@@ -21,10 +22,17 @@ SCHEMA_PATH = ROOT_DIR / "database" / "schema.sql"
 
 @pytest.fixture
 def in_memory_db():
-    """In-memory SQLite connection with the full schema applied."""
+    """In-memory SQLite connection with full schema + migrations applied."""
     conn = sqlite3.connect(":memory:")
     with open(SCHEMA_PATH, encoding="utf-8") as f:
         conn.executescript(f.read())
+    conn.commit()
+    try:
+        from database.db_manager import _run_migrations
+
+        _run_migrations(conn)
+    except Exception:
+        pass  # best-effort; schema.sql already includes all columns
     yield conn
     conn.close()
 
@@ -272,3 +280,54 @@ def sample_ranked_bets():
             "league": "Serie A",
         },
     ]
+
+
+# ---------------------------------------------------------------------------
+# Network mock — usable across any test that makes HTTP calls
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mock_requests_post(monkeypatch):
+    """Replace requests.post with a MagicMock; default: status_code=200."""
+    mock = MagicMock()
+    mock.return_value.status_code = 200
+    mock.return_value.json.return_value = {"ok": True}
+    monkeypatch.setattr("requests.post", mock)
+    return mock
+
+
+# ---------------------------------------------------------------------------
+# DataFrame fixtures for import-validator / CSV tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def sample_fixtures_df():
+    pd = pytest.importorskip("pandas")
+    return pd.DataFrame(
+        {
+            "fixture_id": [1, 2],
+            "league": ["Serie A", "Serie A"],
+            "season": [2024, 2024],
+            "home": ["Juve", "Milan"],
+            "away": ["Inter", "Napoli"],
+            "match_date": ["2024-01-15", "2024-01-22"],
+            "home_goals": [2, 1],
+            "away_goals": [1, 1],
+            "status": ["FT", "FT"],
+        }
+    )
+
+
+@pytest.fixture
+def sample_odds_df():
+    pd = pytest.importorskip("pandas")
+    return pd.DataFrame(
+        {
+            "fixture_id": [1, 2],
+            "home_odds": [1.90, 2.20],
+            "draw_odds": [3.50, 3.40],
+            "away_odds": [4.00, 3.10],
+        }
+    )

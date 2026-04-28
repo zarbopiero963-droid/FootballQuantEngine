@@ -1,10 +1,20 @@
 """
-Pure-Python mathematical primitives for the Gaussian Copula Engine.
+Pure-Python mathematical primitives for the Gaussian, Clayton and Gumbel
+Copula engines.
 
 Extracted from gaussian_copula.py to keep each module under 400 LOC.
 Implements normal CDF/PPF (Abramowitz & Stegun / Acklam), Cholesky
 decomposition, correlation matrix helpers, and Monte Carlo joint
 probability simulation — all without external dependencies.
+
+Copula families
+---------------
+Gaussian  — zero tail dependence; suitable for independent/moderate correlations.
+Clayton   — lower tail dependence; models joint crashes (e.g. accumulators that
+            all lose together when the favourite underperforms).
+            θ ∈ (0, ∞), lower-tail coefficient λ_L = 2^(−1/θ).
+Gumbel    — upper tail dependence; models joint wins on correlated favourites.
+            θ ∈ [1, ∞), upper-tail coefficient λ_U = 2 − 2^(1/θ).
 """
 
 from __future__ import annotations
@@ -223,6 +233,141 @@ def simulate_joint_prob(
         for i in range(n):
             y_i = sum(lower[i][k] * z[k] for k in range(i + 1))
             if _normal_cdf(y_i) >= probs[i]:
+                all_fire = False
+                break
+        if all_fire:
+            hits += 1
+    return hits / n_simulations
+
+
+# ---------------------------------------------------------------------------
+# Archimedean copula simulation helpers
+# ---------------------------------------------------------------------------
+
+
+def _gamma_sample(alpha: float, rng: random.Random) -> float:
+    """Sample from Gamma(alpha, 1) using Marsaglia-Tsang method (alpha >= 1)
+    or the squeeze/rejection method for alpha < 1.
+
+    Used internally by Clayton and Gumbel copula samplers.
+    """
+    if alpha < 1.0:
+        # Boost: Gamma(alpha) = Gamma(alpha+1) * U^(1/alpha)
+        return _gamma_sample(alpha + 1.0, rng) * (rng.random() ** (1.0 / alpha))
+
+    # Marsaglia-Tsang (2000): d = alpha - 1/3, c = 1/sqrt(9d)
+    d = alpha - 1.0 / 3.0
+    c = 1.0 / math.sqrt(9.0 * d)
+    while True:
+        x = rng.gauss(0.0, 1.0)
+        v = (1.0 + c * x) ** 3
+        if v <= 0.0:
+            continue
+        u = rng.random()
+        x2 = x * x
+        if u < 1.0 - 0.0331 * (x2 * x2):
+            return d * v
+        if math.log(u) < 0.5 * x2 + d * (1.0 - v + math.log(v)):
+            return d * v
+
+
+def _stable_sample(alpha: float, rng: random.Random) -> float:
+    """Sample from a totally-skewed positive α-stable distribution S(α,1) via
+    the Chambers-Mallows-Stuck (1976) algorithm, as described in Hofert (2011).
+
+    Used by the Gumbel copula sampler (Marshall-Olkin representation).
+    α must be in (0, 1).
+    """
+    u = rng.random() * math.pi  # U ~ Uniform(0, π)
+    e = -math.log(rng.random())  # E ~ Exp(1)
+    sin_u = math.sin(alpha * u)
+    cos_u = math.cos((1.0 - alpha) * u)
+    return (sin_u / (math.sin(u) ** (1.0 / alpha))) * (
+        (cos_u / e) ** ((1.0 - alpha) / alpha)
+    )
+
+
+def simulate_joint_prob_clayton(
+    probs: List[float],
+    theta: float,
+    n_simulations: int,
+    rng: Optional[random.Random] = None,
+) -> float:
+    """Monte Carlo estimate of joint probability under the Clayton copula.
+
+    Uses the Marshall-Olkin representation:
+      1. Sample V ~ Gamma(1/θ, 1).
+      2. Sample E_i ~ Exp(1) independently for i = 1, …, n.
+      3. U_i = (1 + E_i / V)^(−1/θ).
+    Lower-tail dependence coefficient: λ_L = 2^(−1/θ).
+
+    Parameters
+    ----------
+    probs:
+        Marginal probabilities (transformed to uniform margins before counting).
+    theta:
+        Clayton parameter θ > 0.  θ → 0 gives independence; θ → ∞ comonotonicity.
+    """
+    if theta <= 0.0:
+        raise ValueError(f"Clayton theta must be > 0, got {theta}")
+    if rng is None:
+        rng = random.Random()
+    n = len(probs)
+    inv_theta = 1.0 / theta
+    hits = 0
+    for _ in range(n_simulations):
+        v = _gamma_sample(inv_theta, rng)
+        all_fire = True
+        for i in range(n):
+            e_i = -math.log(rng.random())
+            u_i = (1.0 + e_i / v) ** (-inv_theta)
+            if u_i >= probs[i]:
+                all_fire = False
+                break
+        if all_fire:
+            hits += 1
+    return hits / n_simulations
+
+
+def simulate_joint_prob_gumbel(
+    probs: List[float],
+    theta: float,
+    n_simulations: int,
+    rng: Optional[random.Random] = None,
+) -> float:
+    """Monte Carlo estimate of joint probability under the Gumbel copula.
+
+    Uses the Marshall-Olkin representation via a positive α-stable variable:
+      1. Sample S ~ TotallySkewed-PositiveStable(1/θ) [Chambers-Mallows-Stuck].
+      2. Sample E_i ~ Exp(1) independently for i = 1, …, n.
+      3. U_i = exp(−(E_i / S)^(1/θ)).
+    Upper-tail dependence coefficient: λ_U = 2 − 2^(1/θ).
+
+    Parameters
+    ----------
+    probs:
+        Marginal probabilities.
+    theta:
+        Gumbel parameter θ ≥ 1.  θ = 1 gives independence; θ → ∞ comonotonicity.
+    """
+    if theta < 1.0:
+        raise ValueError(f"Gumbel theta must be >= 1, got {theta}")
+    if rng is None:
+        rng = random.Random()
+    n = len(probs)
+    alpha = 1.0 / theta  # stable index ∈ (0, 1]
+    hits = 0
+    for _ in range(n_simulations):
+        if alpha >= 1.0:
+            # θ = 1 → independence
+            s = 1.0
+        else:
+            s = _stable_sample(alpha, rng)
+        all_fire = True
+        for i in range(n):
+            e_i = -math.log(rng.random())
+            u_i = math.exp(-((e_i / s) ** alpha))
+            if u_i >= probs[i]:
                 all_fire = False
                 break
         if all_fire:

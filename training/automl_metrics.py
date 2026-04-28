@@ -181,7 +181,9 @@ def _feature_importances_sklearn(
             )
             imp = list(-r.importances_mean)
         except Exception as exc:
-            logger.warning("Permutation importance failed, using uniform weights: %s", exc)
+            logger.warning(
+                "Permutation importance failed, using uniform weights: %s", exc
+            )
             return {c: 1.0 / len(feature_cols) for c in feature_cols}
 
     total = sum(abs(v) for v in imp) or 1.0

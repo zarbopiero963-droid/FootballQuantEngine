@@ -50,6 +50,7 @@ def _wait_for_window(timeout: float = 30.0):
 def _terminate_process_tree(pid: int):
     try:
         import psutil
+
         parent = psutil.Process(pid)
         for proc in parent.children(recursive=True):
             try:

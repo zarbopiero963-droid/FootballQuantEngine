@@ -70,6 +70,7 @@ class GaussianCopulaEngine:
         self.default_correlation = default_correlation
         self.edge_threshold_pct = edge_threshold_pct
         import random
+
         self._rng = random.Random(seed)
 
     # ------------------------------------------------------------------
@@ -142,7 +143,10 @@ class GaussianCopulaEngine:
         )
         logger.debug(
             "Evaluated %d-leg parlay: book_odds=%.2f fair_odds=%.2f edge=%.2f%%",
-            n, book_odds, fair_odds, edge,
+            n,
+            book_odds,
+            fair_odds,
+            edge,
         )
         return result
 
@@ -167,7 +171,9 @@ class GaussianCopulaEngine:
                 total_combos += 1
                 combo_legs = [available_legs[i] for i in indices]
                 combo_types: Optional[List[str]] = (
-                    [event_types[i] for i in indices] if event_types is not None else None
+                    [event_types[i] for i in indices]
+                    if event_types is not None
+                    else None
                 )
                 try:
                     result = self.evaluate(legs=combo_legs, event_types=combo_types)
@@ -176,10 +182,15 @@ class GaussianCopulaEngine:
                 except Exception as exc:
                     logger.warning(
                         "Skipping combination %s: %s",
-                        [leg.name for leg in combo_legs], exc,
+                        [leg.name for leg in combo_legs],
+                        exc,
                     )
 
-        logger.info("Screened %d combinations, found %d value parlays.", total_combos, len(value_results))
+        logger.info(
+            "Screened %d combinations, found %d value parlays.",
+            total_combos,
+            len(value_results),
+        )
         value_results.sort(key=lambda r: r.edge_pct, reverse=True)
         return value_results
 
@@ -203,14 +214,18 @@ def evaluate_bet_builder(
     event_types: List[str] = []
 
     for idx, leg_dict in enumerate(legs):
-        missing = [k for k in ("name", "market_odds", "model_prob") if k not in leg_dict]
+        missing = [
+            k for k in ("name", "market_odds", "model_prob") if k not in leg_dict
+        ]
         if missing:
             raise ValueError(f"Leg {idx} is missing required keys: {missing!r}")
-        bet_legs.append(BetLeg(
-            name=str(leg_dict["name"]),
-            market_odds=float(leg_dict["market_odds"]),
-            model_prob=float(leg_dict["model_prob"]),
-        ))
+        bet_legs.append(
+            BetLeg(
+                name=str(leg_dict["name"]),
+                market_odds=float(leg_dict["market_odds"]),
+                model_prob=float(leg_dict["model_prob"]),
+            )
+        )
         event_types.append(str(leg_dict.get("event_type", "")))
 
     engine = GaussianCopulaEngine(n_simulations=n_simulations)

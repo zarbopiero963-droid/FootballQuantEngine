@@ -27,10 +27,10 @@ from analytics.market_inefficiency_scanner import (
     _z_score,
 )
 
-
 # ===========================================================================
 # MonteCarloAdvanced
 # ===========================================================================
+
 
 class TestMonteCarloAdvanced:
 
@@ -68,7 +68,7 @@ class TestMonteCarloAdvanced:
 
     def test_strong_home_team_wins_more(self, sim):
         strong = sim.simulate(3.0, 0.5, simulations=5_000, seed=6)
-        weak   = sim.simulate(0.5, 3.0, simulations=5_000, seed=6)
+        weak = sim.simulate(0.5, 3.0, simulations=5_000, seed=6)
         assert strong.home_win > 0.5
         assert weak.away_win > 0.5
 
@@ -89,9 +89,20 @@ class TestMonteCarloAdvanced:
     def test_to_dict_complete_keys(self, sim):
         result = sim.simulate(1.5, 1.2, simulations=1_000, seed=10)
         d = result.to_dict()
-        for key in ("home_win", "draw", "away_win", "over_25", "under_25",
-                    "btts_yes", "btts_no", "simulations", "converged",
-                    "ci_home", "ci_draw", "ci_away"):
+        for key in (
+            "home_win",
+            "draw",
+            "away_win",
+            "over_25",
+            "under_25",
+            "btts_yes",
+            "btts_no",
+            "simulations",
+            "converged",
+            "ci_home",
+            "ci_draw",
+            "ci_away",
+        ):
             assert key in d
 
     def test_lambda_shared_zero(self, sim):
@@ -122,15 +133,18 @@ class TestMonteCarloAdvanced:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 class TestMCHelpers:
 
     def test_poisson_sample_zero_lambda(self):
         import random
+
         rng = random.Random(0)
         assert _poisson_sample(0.0, rng) == 0
 
     def test_poisson_sample_typical(self):
         import random
+
         rng = random.Random(42)
         samples = [_poisson_sample(2.0, rng) for _ in range(1000)]
         mean = sum(samples) / len(samples)
@@ -138,14 +152,28 @@ class TestMCHelpers:
 
     def test_bivariate_poisson_sample_nonneg(self):
         import random
+
         rng = random.Random(0)
         for _ in range(50):
             x, y = _bivariate_poisson_sample(1.5, 1.2, 0.1, rng)
             assert x >= 0 and y >= 0
 
     def test_accumulate_home_win(self):
-        acc = {"hw":0,"dr":0,"aw":0,"o15":0,"o25":0,"o35":0,"o45":0,"btts":0,
-               "ah05":0,"ah10":0,"ah15":0,"ah20":0,"score":{}}
+        acc = {
+            "hw": 0,
+            "dr": 0,
+            "aw": 0,
+            "o15": 0,
+            "o25": 0,
+            "o35": 0,
+            "o45": 0,
+            "btts": 0,
+            "ah05": 0,
+            "ah10": 0,
+            "ah15": 0,
+            "ah20": 0,
+            "score": {},
+        }
         _accumulate(3, 0, acc)
         assert acc["hw"] == 1
         assert acc["dr"] == 0
@@ -157,16 +185,42 @@ class TestMCHelpers:
         assert acc["ah20"] == 1
 
     def test_accumulate_draw(self):
-        acc = {"hw":0,"dr":0,"aw":0,"o15":0,"o25":0,"o35":0,"o45":0,"btts":0,
-               "ah05":0,"ah10":0,"ah15":0,"ah20":0,"score":{}}
+        acc = {
+            "hw": 0,
+            "dr": 0,
+            "aw": 0,
+            "o15": 0,
+            "o25": 0,
+            "o35": 0,
+            "o45": 0,
+            "btts": 0,
+            "ah05": 0,
+            "ah10": 0,
+            "ah15": 0,
+            "ah20": 0,
+            "score": {},
+        }
         _accumulate(1, 1, acc)
         assert acc["dr"] == 1
         assert acc["btts"] == 1
         assert acc["o15"] == 1
 
     def test_accumulate_away_win(self):
-        acc = {"hw":0,"dr":0,"aw":0,"o15":0,"o25":0,"o35":0,"o45":0,"btts":0,
-               "ah05":0,"ah10":0,"ah15":0,"ah20":0,"score":{}}
+        acc = {
+            "hw": 0,
+            "dr": 0,
+            "aw": 0,
+            "o15": 0,
+            "o25": 0,
+            "o35": 0,
+            "o45": 0,
+            "btts": 0,
+            "ah05": 0,
+            "ah10": 0,
+            "ah15": 0,
+            "ah20": 0,
+            "score": {},
+        }
         _accumulate(0, 2, acc)
         assert acc["aw"] == 1
         assert acc["ah05"] == 0
@@ -175,6 +229,7 @@ class TestMCHelpers:
 # ===========================================================================
 # MarketInefficiencyScanner — statistical helpers
 # ===========================================================================
+
 
 class TestMISHelpers:
 
@@ -192,7 +247,7 @@ class TestMISHelpers:
 
     def test_remove_vig_zero_returns_uniform(self):
         ph, pd, pa = _remove_vig(0.0, 0.0, 0.0)
-        assert ph == pytest.approx(1/3, abs=0.001)
+        assert ph == pytest.approx(1 / 3, abs=0.001)
 
     def test_z_score_no_difference_zero(self):
         z = _z_score(0.5, 0.5, 100)
@@ -253,14 +308,23 @@ class TestMISHelpers:
 # MarketInefficiencyScanner — scan() and report()
 # ===========================================================================
 
+
 class TestMarketInefficiencyScanner:
 
     @pytest.fixture
     def scanner(self):
         return MarketInefficiencyScanner()
 
-    def _pred(self, home_odds=1.9, draw_odds=3.4, away_odds=4.0,
-              p_home=0.55, p_draw=0.25, p_away=0.20, league="SerieA"):
+    def _pred(
+        self,
+        home_odds=1.9,
+        draw_odds=3.4,
+        away_odds=4.0,
+        p_home=0.55,
+        p_draw=0.25,
+        p_away=0.20,
+        league="SerieA",
+    ):
         return {
             "fixture_id": "test_1",
             "league": league,
@@ -294,8 +358,14 @@ class TestMarketInefficiencyScanner:
 
     def test_scan_strong_home_favourite_detected(self, scanner):
         # Model: 70% home, book: 1.3 home odds (implied ~77%) → home underpriced
-        pred = self._pred(home_odds=1.3, draw_odds=4.5, away_odds=8.0,
-                          p_home=0.70, p_draw=0.20, p_away=0.10)
+        pred = self._pred(
+            home_odds=1.3,
+            draw_odds=4.5,
+            away_odds=8.0,
+            p_home=0.70,
+            p_draw=0.20,
+            p_away=0.10,
+        )
         results = scanner.scan([pred])
         assert results[0]["inefficiency_score"] >= 0
 
@@ -317,10 +387,9 @@ class TestMarketInefficiencyScanner:
         assert "n_observations" in r
 
     def test_report_groups_by_league(self, scanner):
-        preds = (
-            [self._pred(league="SerieA") for _ in range(3)] +
-            [self._pred(league="PremierLeague") for _ in range(3)]
-        )
+        preds = [self._pred(league="SerieA") for _ in range(3)] + [
+            self._pred(league="PremierLeague") for _ in range(3)
+        ]
         results = scanner.scan(preds)
         scanner.scan(preds)  # populate history
         r = scanner.report(results)

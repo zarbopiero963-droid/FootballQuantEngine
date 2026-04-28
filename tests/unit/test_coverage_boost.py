@@ -64,11 +64,19 @@ class TestImportValidator:
 
     def test_validate_matches_df_ok(self, validator):
         pd = pytest.importorskip("pandas")
-        df = pd.DataFrame({
-            "fixture_id": [1], "league": ["SerieA"], "season": [2024],
-            "home": ["Juve"], "away": ["Inter"], "match_date": ["2024-01-01"],
-            "home_goals": [2], "away_goals": [1], "status": ["FT"],
-        })
+        df = pd.DataFrame(
+            {
+                "fixture_id": [1],
+                "league": ["SerieA"],
+                "season": [2024],
+                "home": ["Juve"],
+                "away": ["Inter"],
+                "match_date": ["2024-01-01"],
+                "home_goals": [2],
+                "away_goals": [1],
+                "status": ["FT"],
+            }
+        )
         result = validator.validate_matches_df(df)
         assert result["ok"] is True
         assert result["missing_columns"] == []
@@ -83,12 +91,14 @@ class TestImportValidator:
 
     def test_validate_odds_df_ok(self, validator):
         pd = pytest.importorskip("pandas")
-        df = pd.DataFrame({
-            "fixture_id": [1],
-            "home_odds": [1.9],
-            "draw_odds": [3.5],
-            "away_odds": [4.0],
-        })
+        df = pd.DataFrame(
+            {
+                "fixture_id": [1],
+                "home_odds": [1.9],
+                "draw_odds": [3.5],
+                "away_odds": [4.0],
+            }
+        )
         result = validator.validate_odds_df(df)
         assert result["ok"] is True
 
@@ -131,7 +141,7 @@ class TestLuckIndexAnalysis:
 
     def test_xpts_from_xg_strong_home(self, engine):
         xph, xpa = engine.xpts_from_xg(3.0, 0.3)
-        assert xph > 2.0   # home very likely to win → close to 3 pts
+        assert xph > 2.0  # home very likely to win → close to 3 pts
         assert xpa < 0.5
 
     def test_xpts_from_xg_symmetric(self, engine):
@@ -144,7 +154,7 @@ class TestLuckIndexAnalysis:
 
     def test_xpts_from_xg_zero_home_xg(self, engine):
         xph, xpa = engine.xpts_from_xg(0.0, 2.0)
-        assert xph < 0.5   # very unlikely home gets any points
+        assert xph < 0.5  # very unlikely home gets any points
 
     def test_analyse_empty_returns_report(self, engine):
         report = engine.analyse([])
@@ -154,9 +164,12 @@ class TestLuckIndexAnalysis:
         # MatchRecord: home_team, away_team, home_goals, away_goals, home_xg, away_xg
         matches = [
             MatchRecord(
-                home_team="Juve", away_team="Inter",
-                home_goals=2, away_goals=0,
-                home_xg=2.0, away_xg=0.5,
+                home_team="Juve",
+                away_team="Inter",
+                home_goals=2,
+                away_goals=0,
+                home_xg=2.0,
+                away_xg=0.5,
             )
         ]
         report = engine.analyse(matches)
@@ -165,9 +178,12 @@ class TestLuckIndexAnalysis:
     def test_from_dicts_produces_report(self, engine):
         rows = [
             {
-                "home_team": "Juve", "away_team": "Inter",
-                "home_goals": 2, "away_goals": 0,
-                "home_xg": 2.0, "away_xg": 0.5,
+                "home_team": "Juve",
+                "away_team": "Inter",
+                "home_goals": 2,
+                "away_goals": 0,
+                "home_xg": 2.0,
+                "away_xg": 0.5,
             }
         ]
         report = engine.from_dicts(rows)
@@ -176,9 +192,12 @@ class TestLuckIndexAnalysis:
     def test_compute_luck_report_helper(self):
         rows = [
             {
-                "home_team": "Juve", "away_team": "Inter",
-                "home_goals": 2, "away_goals": 1,
-                "home_xg": 1.5, "away_xg": 1.0,
+                "home_team": "Juve",
+                "away_team": "Inter",
+                "home_goals": 2,
+                "away_goals": 1,
+                "home_xg": 1.5,
+                "away_xg": 1.0,
             }
             for _ in range(5)
         ]
@@ -214,13 +233,17 @@ class TestCorrelatedParlayFull:
         return CorrelatedParlayEngine(lambda_home=1.8, lambda_away=1.2)
 
     def test_p_over_goals_sum_with_under(self, engine):
-        assert engine.p_over_goals(2.5) + engine.p_under_goals(2.5) == pytest.approx(1.0, abs=0.01)
+        assert engine.p_over_goals(2.5) + engine.p_under_goals(2.5) == pytest.approx(
+            1.0, abs=0.01
+        )
 
     def test_p_btts_complement(self, engine):
         assert engine.p_btts_yes() + engine.p_btts_no() == pytest.approx(1.0, abs=0.01)
 
     def test_p_cards_over_complement(self, engine):
-        assert engine.p_cards_over(3.5) + engine.p_cards_under(3.5) == pytest.approx(1.0, abs=0.01)
+        assert engine.p_cards_over(3.5) + engine.p_cards_under(3.5) == pytest.approx(
+            1.0, abs=0.01
+        )
 
     def test_joint_prob_single_event_equals_marginal(self, engine):
         event = SingleEvent("Home Win", "1x2_home", 0.0, 1.9, engine.p_home_win())
@@ -228,7 +251,9 @@ class TestCorrelatedParlayFull:
         assert joint == pytest.approx(engine.p_home_win(), abs=0.02)
 
     def test_joint_prob_over_goals(self, engine):
-        event = SingleEvent("Over 2.5", "over_goals", 2.5, 1.8, engine.p_over_goals(2.5))
+        event = SingleEvent(
+            "Over 2.5", "over_goals", 2.5, 1.8, engine.p_over_goals(2.5)
+        )
         joint = engine.joint_prob([event])
         assert joint == pytest.approx(engine.p_over_goals(2.5), abs=0.02)
 
@@ -272,13 +297,14 @@ class TestCorrelatedParlayFull:
 
     def test_poisson_pmf_zero_k(self):
         import math
+
         assert parlay_pmf(0, 2.0) == pytest.approx(math.exp(-2.0), rel=1e-5)
 
     def test_build_same_game_parlay_runs(self):
         # build_same_game_parlay takes lambda_home, lambda_away, events (List[SingleEvent])
         events = [
             SingleEvent("Home Win", "1x2_home", 0.0, 1.9, 0.55),
-            SingleEvent("O2.5",     "over_goals", 2.5, 1.8, 0.52),
+            SingleEvent("O2.5", "over_goals", 2.5, 1.8, 0.52),
             SingleEvent("BTTS Yes", "btts_yes", 0.0, 1.7, 0.50),
         ]
         result = build_same_game_parlay(lambda_home=1.8, lambda_away=1.2, events=events)
@@ -300,8 +326,12 @@ class TestSentimentEngine:
 
     def _make_item(self, text: str, teams=("Juve",)) -> TextItem:
         # TextItem fields: text, source, team_mentions (list), timestamp, language
-        return TextItem(text=text, source="twitter",
-                        team_mentions=list(teams), timestamp=time.time())
+        return TextItem(
+            text=text,
+            source="twitter",
+            team_mentions=list(teams),
+            timestamp=time.time(),
+        )
 
     def test_score_text_neutral(self, engine):
         item = self._make_item("Team played a match today")
@@ -320,7 +350,9 @@ class TestSentimentEngine:
         item = self._make_item("Player crisis collapse disaster sacked")
         score = engine.score_text(item, "Inter")
         assert score.category in ("INJURY", "TENSION", "NEGATIVE")
-        assert score.final_score > 0  # positive score = bad news in this engine's convention
+        assert (
+            score.final_score > 0
+        )  # positive score = bad news in this engine's convention
 
     def test_aggregate_empty_returns_neutral(self, engine):
         # aggregate(items, team) — items first, then team
@@ -387,6 +419,7 @@ class TestOfflineController:
 
     def test_run_reports_delegates_without_ranked_df(self):
         from unittest.mock import MagicMock, patch
+
         ctrl = OfflineController()
         mock_engine = MagicMock()
         mock_engine.run_reports.return_value = True

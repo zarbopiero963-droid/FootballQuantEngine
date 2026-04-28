@@ -124,8 +124,7 @@ class CLVDatabase:
 
     def _init_schema(self) -> None:
         with self._conn() as conn:
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS clv_bets (
                     id               INTEGER PRIMARY KEY AUTOINCREMENT,
                     added_at         TEXT    NOT NULL,
@@ -138,8 +137,7 @@ class CLVDatabase:
                     profit           REAL,
                     notes            TEXT    DEFAULT ''
                 )
-                """
-            )
+                """)
 
     def add_bet(
         self,
@@ -207,9 +205,11 @@ class CLVDatabase:
                     fixture_desc=r["fixture_desc"],
                     market=r["market"],
                     our_odds=float(r["our_odds"]),
-                    closing_odds=float(r["closing_odds"])
-                    if r["closing_odds"] is not None
-                    else None,
+                    closing_odds=(
+                        float(r["closing_odds"])
+                        if r["closing_odds"] is not None
+                        else None
+                    ),
                     clv_pct=float(r["clv_pct"]) if r["clv_pct"] is not None else None,
                     result=r["result"],
                     profit=float(r["profit"]) if r["profit"] is not None else None,

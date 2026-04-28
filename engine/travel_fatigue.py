@@ -590,7 +590,11 @@ def quick_fatigue_check(
     """
     engine = TravelFatigueEngine()
 
-    override = away_travel_km if away_travel_km > 0.0 and _slugify(venue_slug) not in STADIUM_COORDS else None
+    override = (
+        away_travel_km
+        if away_travel_km > 0.0 and _slugify(venue_slug) not in STADIUM_COORDS
+        else None
+    )
 
     return engine.compare_teams(
         home_team=home_team_slug,

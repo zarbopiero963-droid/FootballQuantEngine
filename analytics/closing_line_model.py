@@ -502,9 +502,9 @@ class ClosingLineModel:
             "home": _stats(errors["home"]),
             "draw": _stats(errors["draw"]),
             "away": _stats(errors["away"]),
-            "clv_mae": round(sum(clv_errors) / len(clv_errors), 4)
-            if clv_errors
-            else 0.0,
+            "clv_mae": (
+                round(sum(clv_errors) / len(clv_errors), 4) if clv_errors else 0.0
+            ),
         }
 
     # ------------------------------------------------------------------

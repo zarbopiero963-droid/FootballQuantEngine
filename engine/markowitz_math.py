@@ -54,8 +54,7 @@ def sharpe_gradient(
         return [0.0] * num
     sigma_w = [sum(cov[r][c] * weights[c] for c in range(num)) for r in range(num)]
     return [
-        (mu[i] * std_p - exp_ret * (sigma_w[i] / std_p)) / variance
-        for i in range(num)
+        (mu[i] * std_p - exp_ret * (sigma_w[i] / std_p)) / variance for i in range(num)
     ]
 
 
@@ -110,7 +109,13 @@ def build_cov_matrix(
             if row == col:
                 cov[row][col] = bets[row].variance
             else:
-                rho = bet_correlation(bets[row], bets[col], same_match_rho, within_group_rho, cross_group_rho)
+                rho = bet_correlation(
+                    bets[row],
+                    bets[col],
+                    same_match_rho,
+                    within_group_rho,
+                    cross_group_rho,
+                )
                 cov[row][col] = rho * stds[row] * stds[col]
     try:
         import numpy as np
@@ -132,7 +137,9 @@ def project_weights(
     bankroll_fraction: float,
 ) -> List[float]:
     """Clip weights to [0, max_stake_fraction] and scale so sum ≤ bankroll_fraction."""
-    projected = [max(0.0, min(w, bets[i].max_stake_fraction)) for i, w in enumerate(weights)]
+    projected = [
+        max(0.0, min(w, bets[i].max_stake_fraction)) for i, w in enumerate(weights)
+    ]
     total = sum(projected)
     if total > bankroll_fraction and total > 1e-12:
         scale = bankroll_fraction / total

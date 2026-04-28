@@ -21,8 +21,12 @@ _HOME_ADV_CANDIDATES = [30.0, 40.0, 50.0, 55.0, 60.0, 70.0, 80.0]
 
 class EloEngine:
 
-    def __init__(self, base_rating: float = 1500.0, k_factor: float = 20.0,
-                 home_advantage: float = 55.0):
+    def __init__(
+        self,
+        base_rating: float = 1500.0,
+        k_factor: float = 20.0,
+        home_advantage: float = 55.0,
+    ):
         self.base_rating = base_rating
         self.k_factor = k_factor
         self.home_advantage = home_advantage
@@ -34,8 +38,9 @@ class EloEngine:
     def expected_score(self, rating_a: float, rating_b: float) -> float:
         return 1.0 / (1.0 + 10 ** ((rating_b - rating_a) / 400.0))
 
-    def update_match(self, home_team: str, away_team: str,
-                     home_goals: int, away_goals: int) -> None:
+    def update_match(
+        self, home_team: str, away_team: str, home_goals: int, away_goals: int
+    ) -> None:
         home_rating = self.get_rating(home_team)
         away_rating = self.get_rating(away_team)
 
@@ -50,8 +55,12 @@ class EloEngine:
         else:
             actual_home, actual_away = 0.5, 0.5
 
-        self.ratings[home_team] = home_rating + self.k_factor * (actual_home - expected_home)
-        self.ratings[away_team] = away_rating + self.k_factor * (actual_away - expected_away)
+        self.ratings[home_team] = home_rating + self.k_factor * (
+            actual_home - expected_home
+        )
+        self.ratings[away_team] = away_rating + self.k_factor * (
+            actual_away - expected_away
+        )
 
     def fit(self, completed_matches: list) -> None:
         for match in completed_matches:
@@ -96,9 +105,15 @@ class EloEngine:
         dict with keys: k_factor, home_advantage, brier_score, n_eval
         """
         if not completed_matches:
-            logger.warning("EloEngine.calibrate called with empty match list; using defaults")
-            return {"k_factor": self.k_factor, "home_advantage": self.home_advantage,
-                    "brier_score": None, "n_eval": 0}
+            logger.warning(
+                "EloEngine.calibrate called with empty match list; using defaults"
+            )
+            return {
+                "k_factor": self.k_factor,
+                "home_advantage": self.home_advantage,
+                "brier_score": None,
+                "n_eval": 0,
+            }
 
         k_grid = k_candidates or _K_CANDIDATES
         ha_grid = home_adv_candidates or _HOME_ADV_CANDIDATES
@@ -109,9 +124,15 @@ class EloEngine:
         eval_ = completed_matches[n_train:]
 
         if not eval_:
-            logger.warning("EloEngine.calibrate: not enough matches for eval split; using defaults")
-            return {"k_factor": self.k_factor, "home_advantage": self.home_advantage,
-                    "brier_score": None, "n_eval": 0}
+            logger.warning(
+                "EloEngine.calibrate: not enough matches for eval split; using defaults"
+            )
+            return {
+                "k_factor": self.k_factor,
+                "home_advantage": self.home_advantage,
+                "brier_score": None,
+                "n_eval": 0,
+            }
 
         best_brier = float("inf")
         best_k = self.k_factor
@@ -119,8 +140,9 @@ class EloEngine:
 
         for k in k_grid:
             for ha in ha_grid:
-                engine = EloEngine(base_rating=self.base_rating, k_factor=k,
-                                   home_advantage=ha)
+                engine = EloEngine(
+                    base_rating=self.base_rating, k_factor=k, home_advantage=ha
+                )
                 engine.fit(train)
 
                 brier_sum = 0.0
@@ -151,7 +173,10 @@ class EloEngine:
         self.home_advantage = best_ha
         logger.info(
             "EloEngine calibration: K=%.1f home_adv=%.1f Brier=%.5f (n_eval=%d)",
-            best_k, best_ha, best_brier, len(eval_),
+            best_k,
+            best_ha,
+            best_brier,
+            len(eval_),
         )
         return {
             "k_factor": best_k,

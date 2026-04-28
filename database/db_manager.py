@@ -21,14 +21,14 @@ _MIGRATIONS: list[tuple[int, str, list[tuple[str, str, str]]]] = [
         "Extended fixtures with league_id, halftime scores, venue, referee; "
         "added market column to odds_history",
         [
-            ("fixtures",     "league_id",  "INTEGER"),
-            ("fixtures",     "ht_home",    "INTEGER"),
-            ("fixtures",     "ht_away",    "INTEGER"),
-            ("fixtures",     "venue",      "TEXT"),
-            ("fixtures",     "referee",    "TEXT"),
-            ("fixtures",     "elapsed",    "INTEGER"),
-            ("fixtures",     "updated_at", "TEXT"),
-            ("odds_history", "market",     "TEXT DEFAULT '1x2'"),
+            ("fixtures", "league_id", "INTEGER"),
+            ("fixtures", "ht_home", "INTEGER"),
+            ("fixtures", "ht_away", "INTEGER"),
+            ("fixtures", "venue", "TEXT"),
+            ("fixtures", "referee", "TEXT"),
+            ("fixtures", "elapsed", "INTEGER"),
+            ("fixtures", "updated_at", "TEXT"),
+            ("odds_history", "market", "TEXT DEFAULT '1x2'"),
         ],
     ),
     (

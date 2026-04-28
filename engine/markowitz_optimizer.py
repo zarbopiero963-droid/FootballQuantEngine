@@ -119,10 +119,15 @@ class MarkowitzOptimizer:
 
         exp_ret, variance, sharpe = portfolio_stats(weights, mu, cov)
         return PortfolioAllocation(
-            bets=bets, weights=weights, expected_return=exp_ret,
-            portfolio_variance=variance, portfolio_std=math.sqrt(max(variance, 0.0)),
-            sharpe_ratio=sharpe, total_allocated=sum(weights),
-            n_bets=len(bets), optimisation_method="max_sharpe",
+            bets=bets,
+            weights=weights,
+            expected_return=exp_ret,
+            portfolio_variance=variance,
+            portfolio_std=math.sqrt(max(variance, 0.0)),
+            sharpe_ratio=sharpe,
+            total_allocated=sum(weights),
+            n_bets=len(bets),
+            optimisation_method="max_sharpe",
         )
 
     def min_variance(self, bets: List[BetProposal]) -> PortfolioAllocation:
@@ -136,10 +141,15 @@ class MarkowitzOptimizer:
         weights = self._opt_gamma(bets, mu, cov, gamma=0.001)
         exp_ret, variance, sharpe = portfolio_stats(weights, mu, cov)
         return PortfolioAllocation(
-            bets=bets, weights=weights, expected_return=exp_ret,
-            portfolio_variance=variance, portfolio_std=math.sqrt(max(variance, 0.0)),
-            sharpe_ratio=sharpe, total_allocated=sum(weights),
-            n_bets=len(bets), optimisation_method="min_variance",
+            bets=bets,
+            weights=weights,
+            expected_return=exp_ret,
+            portfolio_variance=variance,
+            portfolio_std=math.sqrt(max(variance, 0.0)),
+            sharpe_ratio=sharpe,
+            total_allocated=sum(weights),
+            n_bets=len(bets),
+            optimisation_method="min_variance",
         )
 
     def kelly_naive(self, bets: List[BetProposal]) -> PortfolioAllocation:
@@ -150,7 +160,9 @@ class MarkowitzOptimizer:
 
         mu = [b.expected_return for b in bets]
         cov = self._cov(bets)
-        weights = [min(b.kelly_fraction, self.kelly_cap, b.max_stake_fraction) for b in bets]
+        weights = [
+            min(b.kelly_fraction, self.kelly_cap, b.max_stake_fraction) for b in bets
+        ]
         total = sum(weights)
         if total > self.bankroll_fraction:
             scale = self.bankroll_fraction / total
@@ -158,10 +170,15 @@ class MarkowitzOptimizer:
 
         exp_ret, variance, sharpe = portfolio_stats(weights, mu, cov)
         return PortfolioAllocation(
-            bets=bets, weights=weights, expected_return=exp_ret,
-            portfolio_variance=variance, portfolio_std=math.sqrt(max(variance, 0.0)),
-            sharpe_ratio=sharpe, total_allocated=sum(weights),
-            n_bets=len(bets), optimisation_method="kelly_naive",
+            bets=bets,
+            weights=weights,
+            expected_return=exp_ret,
+            portfolio_variance=variance,
+            portfolio_std=math.sqrt(max(variance, 0.0)),
+            sharpe_ratio=sharpe,
+            total_allocated=sum(weights),
+            n_bets=len(bets),
+            optimisation_method="kelly_naive",
         )
 
     def efficient_frontier(
@@ -174,7 +191,9 @@ class MarkowitzOptimizer:
         bets = filter_positive_edge(bets)
         if not bets:
             dummy = EfficientFrontierPoint(0.0, 0.0, 0.0, 0.0, [])
-            return EfficientFrontier(bets=[], points=[], max_sharpe_point=dummy, min_variance_point=dummy)
+            return EfficientFrontier(
+                bets=[], points=[], max_sharpe_point=dummy, min_variance_point=dummy
+            )
 
         mu = [b.expected_return for b in bets]
         cov = self._cov(bets)
@@ -188,14 +207,19 @@ class MarkowitzOptimizer:
         for gamma in gammas:
             w = self._opt_gamma(bets, mu, cov, gamma)
             exp_ret, variance, sharpe = portfolio_stats(w, mu, cov)
-            points.append(EfficientFrontierPoint(
-                risk_aversion=gamma, expected_return=exp_ret,
-                portfolio_std=math.sqrt(max(variance, 0.0)),
-                sharpe_ratio=sharpe, weights=list(w),
-            ))
+            points.append(
+                EfficientFrontierPoint(
+                    risk_aversion=gamma,
+                    expected_return=exp_ret,
+                    portfolio_std=math.sqrt(max(variance, 0.0)),
+                    sharpe_ratio=sharpe,
+                    weights=list(w),
+                )
+            )
 
         return EfficientFrontier(
-            bets=bets, points=points,
+            bets=bets,
+            points=points,
             max_sharpe_point=max(points, key=lambda pt: pt.sharpe_ratio),
             min_variance_point=min(points, key=lambda pt: pt.portfolio_std),
         )
@@ -205,15 +229,27 @@ class MarkowitzOptimizer:
     # ------------------------------------------------------------------
 
     def _cov(self, bets: List[BetProposal]) -> List[List[float]]:
-        return build_cov_matrix(bets, self.same_match_rho, self.within_group_rho, self.cross_group_rho)
+        return build_cov_matrix(
+            bets, self.same_match_rho, self.within_group_rho, self.cross_group_rho
+        )
 
     def _opt_gamma(
-        self, bets: List[BetProposal], mu: List[float], cov: List[List[float]], gamma: float
+        self,
+        bets: List[BetProposal],
+        mu: List[float],
+        cov: List[List[float]],
+        gamma: float,
     ) -> List[float]:
         return optimise_gamma(
-            bets, mu, cov, gamma,
-            self.learning_rate, self.max_iterations, self.tolerance,
-            self.kelly_cap, self.bankroll_fraction,
+            bets,
+            mu,
+            cov,
+            gamma,
+            self.learning_rate,
+            self.max_iterations,
+            self.tolerance,
+            self.kelly_cap,
+            self.bankroll_fraction,
         )
 
 
@@ -239,15 +275,17 @@ def optimise_portfolio(
     proposals: List[BetProposal] = []
     for raw in bets:
         try:
-            proposals.append(BetProposal(
-                bet_id=str(raw["bet_id"]),
-                description=str(raw["description"]),
-                odds=float(raw["odds"]),
-                model_prob=float(raw["model_prob"]),
-                correlation_group=str(raw["correlation_group"]),
-                same_match_group=str(raw.get("same_match_group", "")),
-                max_stake_fraction=float(raw.get("max_stake_fraction", 0.05)),
-            ))
+            proposals.append(
+                BetProposal(
+                    bet_id=str(raw["bet_id"]),
+                    description=str(raw["description"]),
+                    odds=float(raw["odds"]),
+                    model_prob=float(raw["model_prob"]),
+                    correlation_group=str(raw["correlation_group"]),
+                    same_match_group=str(raw.get("same_match_group", "")),
+                    max_stake_fraction=float(raw.get("max_stake_fraction", 0.05)),
+                )
+            )
         except KeyError as exc:
             raise ValueError(f"Missing required bet field: {exc}") from exc
 
@@ -257,8 +295,11 @@ def optimise_portfolio(
     logger.info(
         "Optimised portfolio: %d bets, total allocated=%.1f%%, "
         "E[R]=%.2f%%, Sharpe=%.3f, bankroll=%.2f",
-        allocation.n_bets, allocation.total_allocated * 100.0,
-        allocation.expected_return * 100.0, allocation.sharpe_ratio, bankroll,
+        allocation.n_bets,
+        allocation.total_allocated * 100.0,
+        allocation.expected_return * 100.0,
+        allocation.sharpe_ratio,
+        bankroll,
     )
 
     stake_amounts = [w * bankroll for w in allocation.weights]

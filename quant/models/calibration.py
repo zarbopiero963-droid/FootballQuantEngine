@@ -19,7 +19,7 @@ class ProbabilityCalibration:
 
     def __init__(self, shrink=0.08):
         self.shrink = shrink
-        self._platt: Optional[object] = None    # fitted sklearn calibrator
+        self._platt: Optional[object] = None  # fitted sklearn calibrator
         self._iso: Optional[object] = None
         self._use_platt: bool = False
 
@@ -75,11 +75,16 @@ class ProbabilityCalibration:
             from sklearn.linear_model import LogisticRegression
             from sklearn.metrics import log_loss
         except ImportError:
-            logger.warning("sklearn not available — ProbabilityCalibration.fit() skipped, using shrinkage")
+            logger.warning(
+                "sklearn not available — ProbabilityCalibration.fit() skipped, using shrinkage"
+            )
             return
 
         if len(predicted_probs) < 10:
-            logger.warning("Too few samples (%d) for calibration fit; using shrinkage", len(predicted_probs))
+            logger.warning(
+                "Too few samples (%d) for calibration fit; using shrinkage",
+                len(predicted_probs),
+            )
             return
 
         X = np.array(predicted_probs, dtype=float).reshape(-1, 1)
@@ -113,11 +118,17 @@ class ProbabilityCalibration:
         if platt_loss <= iso_loss and platt_loss < float("inf"):
             self._platt = platt
             self._use_platt = True
-            logger.info("ProbabilityCalibration: using Platt scaling (log-loss=%.5f)", platt_loss)
+            logger.info(
+                "ProbabilityCalibration: using Platt scaling (log-loss=%.5f)",
+                platt_loss,
+            )
         elif iso_loss < float("inf"):
             self._iso = iso
             self._use_platt = False
-            logger.info("ProbabilityCalibration: using isotonic regression (log-loss=%.5f)", iso_loss)
+            logger.info(
+                "ProbabilityCalibration: using isotonic regression (log-loss=%.5f)",
+                iso_loss,
+            )
         else:
             logger.warning("Both calibrators failed; falling back to linear shrinkage")
 
@@ -128,6 +139,7 @@ class ProbabilityCalibration:
         if self._use_platt and self._platt is not None:
             try:
                 import numpy as np
+
                 prob = self._platt.predict_proba(np.array([[p]]))[0, 1]
                 return float(np.clip(prob, 0.0001, 0.9999))
             except Exception:
@@ -135,6 +147,7 @@ class ProbabilityCalibration:
         elif not self._use_platt and self._iso is not None:
             try:
                 import numpy as np
+
                 prob = self._iso.predict(np.array([p]))[0]
                 return float(np.clip(prob, 0.0001, 0.9999))
             except Exception:

@@ -78,8 +78,7 @@ class TestUpsertAndRetrieve:
 class TestBulkUpsert:
     def test_bulk_inserts_all(self, repo):
         fixtures = [
-            {**_FIXTURE, "fixture_id": f"80{i:02d}", "home_goals": i}
-            for i in range(5)
+            {**_FIXTURE, "fixture_id": f"80{i:02d}", "home_goals": i} for i in range(5)
         ]
         count = repo.upsert_fixtures_bulk(fixtures)
         assert count == 5

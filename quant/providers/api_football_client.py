@@ -15,6 +15,7 @@ API-Football client — full endpoint coverage:
   Trophies       : title history for a player or coach
   Referee stats  : derived from completed fixtures
 """
+
 from __future__ import annotations
 
 import logging
@@ -59,7 +60,9 @@ class APIFootballClient:
 
         payload = resp.json()
         if "response" not in payload:
-            raise RuntimeError(f"API-Football: missing 'response' in payload for {path}")
+            raise RuntimeError(
+                f"API-Football: missing 'response' in payload for {path}"
+            )
         return payload["response"]
 
     def _paginate(self, path: str, params: dict) -> list[Any]:
@@ -103,11 +106,14 @@ class APIFootballClient:
 
     def get_completed_matches(self, league_id: int, season: int) -> list[dict]:
         """Only FT fixtures with goals."""
-        data = self._get("/fixtures", {
-            "league": league_id,
-            "season": season,
-            "status": "FT",
-        })
+        data = self._get(
+            "/fixtures",
+            {
+                "league": league_id,
+                "season": season,
+                "status": "FT",
+            },
+        )
         matches = []
         for item in data:
             f = self._parse_fixture(item)
@@ -117,11 +123,14 @@ class APIFootballClient:
 
     def get_upcoming_matches(self, league_id: int, season: int) -> list[dict]:
         """Fixtures not yet played (NS = Not Started)."""
-        data = self._get("/fixtures", {
-            "league": league_id,
-            "season": season,
-            "status": "NS",
-        })
+        data = self._get(
+            "/fixtures",
+            {
+                "league": league_id,
+                "season": season,
+                "status": "NS",
+            },
+        )
         return [self._parse_fixture(item) for item in data]
 
     def get_live_fixtures(self) -> list[dict]:
@@ -130,29 +139,29 @@ class APIFootballClient:
         return [self._parse_fixture(item) for item in data]
 
     def _parse_fixture(self, item: dict) -> dict:
-        fix    = item.get("fixture", {})
-        goals  = item.get("goals", {})
-        score  = item.get("score", {})
-        teams  = item.get("teams", {})
+        fix = item.get("fixture", {})
+        goals = item.get("goals", {})
+        score = item.get("score", {})
+        teams = item.get("teams", {})
         league = item.get("league", {})
-        ht     = score.get("halftime", {})
+        ht = score.get("halftime", {})
 
         return {
             "fixture_id": str(fix.get("id", "")),
-            "league_id":  league.get("id"),
-            "league":     league.get("name", ""),
-            "season":     league.get("season"),
-            "home_team":  teams.get("home", {}).get("name", ""),
-            "away_team":  teams.get("away", {}).get("name", ""),
+            "league_id": league.get("id"),
+            "league": league.get("name", ""),
+            "season": league.get("season"),
+            "home_team": teams.get("home", {}).get("name", ""),
+            "away_team": teams.get("away", {}).get("name", ""),
             "match_date": fix.get("date", ""),
-            "status":     fix.get("status", {}).get("short", ""),
-            "elapsed":    fix.get("status", {}).get("elapsed"),
-            "venue":      fix.get("venue", {}).get("name", ""),
-            "referee":    fix.get("referee", ""),
+            "status": fix.get("status", {}).get("short", ""),
+            "elapsed": fix.get("status", {}).get("elapsed"),
+            "venue": fix.get("venue", {}).get("name", ""),
+            "referee": fix.get("referee", ""),
             "home_goals": goals.get("home"),
             "away_goals": goals.get("away"),
-            "ht_home":    ht.get("home"),
-            "ht_away":    ht.get("away"),
+            "ht_home": ht.get("home"),
+            "ht_away": ht.get("away"),
         }
 
     # ------------------------------------------------------------------
@@ -189,22 +198,24 @@ class APIFootballClient:
                 except (TypeError, ValueError):
                     return None
 
-            result.update({
-                "home_corners":    safe_int(_val(home_stats, "Corner Kicks")),
-                "away_corners":    safe_int(_val(away_stats, "Corner Kicks")),
-                "home_shots":      safe_int(_val(home_stats, "Total Shots")),
-                "away_shots":      safe_int(_val(away_stats, "Total Shots")),
-                "home_shots_on":   safe_int(_val(home_stats, "Shots on Goal")),
-                "away_shots_on":   safe_int(_val(away_stats, "Shots on Goal")),
-                "home_possession": safe_float(_val(home_stats, "Ball Possession")),
-                "away_possession": safe_float(_val(away_stats, "Ball Possession")),
-                "home_yellow":     safe_int(_val(home_stats, "Yellow Cards")),
-                "away_yellow":     safe_int(_val(away_stats, "Yellow Cards")),
-                "home_red":        safe_int(_val(home_stats, "Red Cards")),
-                "away_red":        safe_int(_val(away_stats, "Red Cards")),
-                "home_xg":         safe_float(_val(home_stats, "expected_goals")),
-                "away_xg":         safe_float(_val(away_stats, "expected_goals")),
-            })
+            result.update(
+                {
+                    "home_corners": safe_int(_val(home_stats, "Corner Kicks")),
+                    "away_corners": safe_int(_val(away_stats, "Corner Kicks")),
+                    "home_shots": safe_int(_val(home_stats, "Total Shots")),
+                    "away_shots": safe_int(_val(away_stats, "Total Shots")),
+                    "home_shots_on": safe_int(_val(home_stats, "Shots on Goal")),
+                    "away_shots_on": safe_int(_val(away_stats, "Shots on Goal")),
+                    "home_possession": safe_float(_val(home_stats, "Ball Possession")),
+                    "away_possession": safe_float(_val(away_stats, "Ball Possession")),
+                    "home_yellow": safe_int(_val(home_stats, "Yellow Cards")),
+                    "away_yellow": safe_int(_val(away_stats, "Yellow Cards")),
+                    "home_red": safe_int(_val(home_stats, "Red Cards")),
+                    "away_red": safe_int(_val(away_stats, "Red Cards")),
+                    "home_xg": safe_float(_val(home_stats, "expected_goals")),
+                    "away_xg": safe_float(_val(away_stats, "expected_goals")),
+                }
+            )
 
         return result
 
@@ -232,7 +243,9 @@ class APIFootballClient:
                     }
                 stats_map[str(fixture_id)] = result
             except (KeyError, IndexError, TypeError, ValueError) as exc:
-                logger.warning("Failed to parse stats for fixture %s: %s", fixture_id, exc)
+                logger.warning(
+                    "Failed to parse stats for fixture %s: %s", fixture_id, exc
+                )
         return stats_map
 
     def get_team_xg_averages(self, league: int, season: int) -> dict[str, dict]:
@@ -249,28 +262,31 @@ class APIFootballClient:
                 continue
             home = match["home_team"]
             away = match["away_team"]
-            hs   = stats.get(home, {})
-            as_  = stats.get(away, {})
+            hs = stats.get(home, {})
+            as_ = stats.get(away, {})
 
             for team, scored, conceded in ((home, hs, as_), (away, as_, hs)):
                 if team not in team_acc:
                     team_acc[team] = {
-                        "xg_for": 0.0, "xg_against": 0.0,
-                        "shots": 0.0, "shots_on_target": 0.0, "n": 0,
+                        "xg_for": 0.0,
+                        "xg_against": 0.0,
+                        "shots": 0.0,
+                        "shots_on_target": 0.0,
+                        "n": 0,
                     }
-                team_acc[team]["xg_for"]          += scored.get("xg", 0.0)
-                team_acc[team]["xg_against"]       += conceded.get("xg", 0.0)
-                team_acc[team]["shots"]            += scored.get("shots", 0.0)
-                team_acc[team]["shots_on_target"]  += scored.get("shots_on_target", 0.0)
+                team_acc[team]["xg_for"] += scored.get("xg", 0.0)
+                team_acc[team]["xg_against"] += conceded.get("xg", 0.0)
+                team_acc[team]["shots"] += scored.get("shots", 0.0)
+                team_acc[team]["shots_on_target"] += scored.get("shots_on_target", 0.0)
                 team_acc[team]["n"] += 1
 
         averages: dict[str, dict] = {}
         for team, acc in team_acc.items():
             n = max(acc["n"], 1)
             averages[team] = {
-                "xg_for":          acc["xg_for"] / n,
-                "xg_against":      acc["xg_against"] / n,
-                "shots":           acc["shots"] / n,
+                "xg_for": acc["xg_for"] / n,
+                "xg_against": acc["xg_against"] / n,
+                "shots": acc["shots"] / n,
                 "shots_on_target": acc["shots_on_target"] / n,
             }
         return averages
@@ -316,7 +332,7 @@ class APIFootballClient:
         bets = bookmakers[0].get("bets", [])
 
         for bet in bets:
-            name:   str        = bet.get("name", "")
+            name: str = bet.get("name", "")
             values: list[dict] = bet.get("values", [])
 
             if name == "Match Winner":
@@ -331,8 +347,13 @@ class APIFootballClient:
             elif name == "Both Teams Score":
                 result["btts"] = self._extract_btts(values)
 
-            elif name in ("Goals Over/Under First Half", "First Half - Goals Over/Under"):
-                entry = self._extract_ou(values, "1.5") or self._extract_ou_first(values)
+            elif name in (
+                "Goals Over/Under First Half",
+                "First Half - Goals Over/Under",
+            ):
+                entry = self._extract_ou(values, "1.5") or self._extract_ou_first(
+                    values
+                )
                 if entry:
                     result["ht_ou15"] = entry
 
@@ -352,7 +373,7 @@ class APIFootballClient:
         out: dict = {}
         for v in values:
             label = v.get("value", "")
-            odd   = self._parse_odd(v.get("odd"))
+            odd = self._parse_odd(v.get("odd"))
             if odd is None:
                 continue
             if label == "Home":
@@ -367,7 +388,7 @@ class APIFootballClient:
         out: dict = {}
         for v in values:
             label: str = v.get("value", "")
-            odd        = self._parse_odd(v.get("odd"))
+            odd = self._parse_odd(v.get("odd"))
             if odd is None:
                 continue
             if f"Over {line}" in label or label == f"Over({line})":
@@ -381,7 +402,7 @@ class APIFootballClient:
         out: dict = {}
         for v in values:
             label: str = v.get("value", "")
-            odd        = self._parse_odd(v.get("odd"))
+            odd = self._parse_odd(v.get("odd"))
             if odd is None:
                 continue
             if "Over" in label and "over" not in out:
@@ -394,7 +415,7 @@ class APIFootballClient:
         out: dict = {}
         for v in values:
             label = v.get("value", "").lower()
-            odd   = self._parse_odd(v.get("odd"))
+            odd = self._parse_odd(v.get("odd"))
             if odd is None:
                 continue
             if label in ("yes", "si"):
@@ -407,7 +428,7 @@ class APIFootballClient:
         out: dict = {}
         for v in values:
             label: str = v.get("value", "")
-            odd        = self._parse_odd(v.get("odd"))
+            odd = self._parse_odd(v.get("odd"))
             if odd is not None:
                 out[label] = odd
         return out
@@ -428,7 +449,11 @@ class APIFootballClient:
         """All countries supported by API-Football."""
         data = self._get("/countries")
         return [
-            {"name": c.get("name", ""), "code": c.get("code", ""), "flag": c.get("flag", "")}
+            {
+                "name": c.get("name", ""),
+                "code": c.get("code", ""),
+                "flag": c.get("flag", ""),
+            }
             for c in data
         ]
 
@@ -465,12 +490,12 @@ class APIFootballClient:
         data = self._get("/venues", params or None)
         return [
             {
-                "id":       v.get("id"),
-                "name":     v.get("name", ""),
-                "city":     v.get("city", ""),
-                "country":  v.get("country", ""),
+                "id": v.get("id"),
+                "name": v.get("name", ""),
+                "city": v.get("city", ""),
+                "country": v.get("country", ""),
                 "capacity": v.get("capacity"),
-                "surface":  v.get("surface", ""),
+                "surface": v.get("surface", ""),
             }
             for v in data
         ]
@@ -500,43 +525,53 @@ class APIFootballClient:
         data = self._get("/teams", params or None)
         return [
             {
-                "id":      item.get("team", {}).get("id"),
-                "name":    item.get("team", {}).get("name", ""),
-                "code":    item.get("team", {}).get("code", ""),
+                "id": item.get("team", {}).get("id"),
+                "name": item.get("team", {}).get("name", ""),
+                "code": item.get("team", {}).get("code", ""),
                 "country": item.get("team", {}).get("country", ""),
                 "founded": item.get("team", {}).get("founded"),
-                "venue":   item.get("venue", {}).get("name", ""),
+                "venue": item.get("venue", {}).get("name", ""),
             }
             for item in data
         ]
 
     def get_team_statistics(self, team: int, league: int, season: int) -> dict:
         """Season-level aggregated statistics for a single team."""
-        data = self._get("/teams/statistics", {"team": team, "league": league, "season": season})
+        data = self._get(
+            "/teams/statistics", {"team": team, "league": league, "season": season}
+        )
         if not data:
             return {}
         d = data[0] if isinstance(data, list) else data
         fixtures = d.get("fixtures", {})
-        goals    = d.get("goals", {})
-        cards    = d.get("cards", {})
+        goals = d.get("goals", {})
+        cards = d.get("cards", {})
         return {
-            "team":            d.get("team", {}).get("name", ""),
-            "league":          d.get("league", {}).get("name", ""),
-            "season":          d.get("league", {}).get("season"),
-            "played_home":     fixtures.get("played", {}).get("home", 0),
-            "played_away":     fixtures.get("played", {}).get("away", 0),
-            "wins_home":       fixtures.get("wins", {}).get("home", 0),
-            "wins_away":       fixtures.get("wins", {}).get("away", 0),
-            "draws_home":      fixtures.get("draws", {}).get("home", 0),
-            "draws_away":      fixtures.get("draws", {}).get("away", 0),
-            "loses_home":      fixtures.get("loses", {}).get("home", 0),
-            "loses_away":      fixtures.get("loses", {}).get("away", 0),
-            "goals_for_home":  goals.get("for", {}).get("total", {}).get("home", 0),
-            "goals_for_away":  goals.get("for", {}).get("total", {}).get("away", 0),
-            "goals_against_home": goals.get("against", {}).get("total", {}).get("home", 0),
-            "goals_against_away": goals.get("against", {}).get("total", {}).get("away", 0),
-            "yellow_cards":    sum(v.get("total", 0) or 0 for v in cards.get("yellow", {}).values()),
-            "red_cards":       sum(v.get("total", 0) or 0 for v in cards.get("red", {}).values()),
+            "team": d.get("team", {}).get("name", ""),
+            "league": d.get("league", {}).get("name", ""),
+            "season": d.get("league", {}).get("season"),
+            "played_home": fixtures.get("played", {}).get("home", 0),
+            "played_away": fixtures.get("played", {}).get("away", 0),
+            "wins_home": fixtures.get("wins", {}).get("home", 0),
+            "wins_away": fixtures.get("wins", {}).get("away", 0),
+            "draws_home": fixtures.get("draws", {}).get("home", 0),
+            "draws_away": fixtures.get("draws", {}).get("away", 0),
+            "loses_home": fixtures.get("loses", {}).get("home", 0),
+            "loses_away": fixtures.get("loses", {}).get("away", 0),
+            "goals_for_home": goals.get("for", {}).get("total", {}).get("home", 0),
+            "goals_for_away": goals.get("for", {}).get("total", {}).get("away", 0),
+            "goals_against_home": goals.get("against", {})
+            .get("total", {})
+            .get("home", 0),
+            "goals_against_away": goals.get("against", {})
+            .get("total", {})
+            .get("away", 0),
+            "yellow_cards": sum(
+                v.get("total", 0) or 0 for v in cards.get("yellow", {}).values()
+            ),
+            "red_cards": sum(
+                v.get("total", 0) or 0 for v in cards.get("red", {}).values()
+            ),
         }
 
     # ------------------------------------------------------------------
@@ -581,7 +616,9 @@ class APIFootballClient:
         return [self._parse_player(item) for item in data]
 
     def get_top_yellow_cards(self, league: int, season: int) -> list[dict]:
-        data = self._get("/players/topyellowcards", {"league": league, "season": season})
+        data = self._get(
+            "/players/topyellowcards", {"league": league, "season": season}
+        )
         return [self._parse_player(item) for item in data]
 
     def get_top_red_cards(self, league: int, season: int) -> list[dict]:
@@ -589,40 +626,40 @@ class APIFootballClient:
         return [self._parse_player(item) for item in data]
 
     def _parse_player(self, item: dict) -> dict:
-        p    = item.get("player", {})
+        p = item.get("player", {})
         stat = (item.get("statistics") or [{}])[0]
         team = stat.get("team", {})
-        lg   = stat.get("league", {})
-        gls  = stat.get("goals", {})
-        drb  = stat.get("dribbles", {})
-        pas  = stat.get("passes", {})
-        sht  = stat.get("shots", {})
-        crd  = stat.get("cards", {})
-        sub  = stat.get("substitutes", {})
+        lg = stat.get("league", {})
+        gls = stat.get("goals", {})
+        drb = stat.get("dribbles", {})
+        pas = stat.get("passes", {})
+        sht = stat.get("shots", {})
+        crd = stat.get("cards", {})
+        sub = stat.get("substitutes", {})
         return {
-            "player_id":  p.get("id"),
-            "name":       p.get("name", ""),
-            "age":        p.get("age"),
-            "nationality":p.get("nationality", ""),
-            "team_id":    team.get("id"),
-            "team":       team.get("name", ""),
-            "league_id":  lg.get("id"),
-            "league":     lg.get("name", ""),
-            "season":     lg.get("season"),
-            "appearances":stat.get("games", {}).get("appearences"),
-            "minutes":    stat.get("games", {}).get("minutes"),
-            "goals":      gls.get("total"),
-            "assists":    gls.get("assists"),
-            "shots":      sht.get("total"),
-            "shots_on":   sht.get("on"),
-            "passes":     pas.get("total"),
+            "player_id": p.get("id"),
+            "name": p.get("name", ""),
+            "age": p.get("age"),
+            "nationality": p.get("nationality", ""),
+            "team_id": team.get("id"),
+            "team": team.get("name", ""),
+            "league_id": lg.get("id"),
+            "league": lg.get("name", ""),
+            "season": lg.get("season"),
+            "appearances": stat.get("games", {}).get("appearences"),
+            "minutes": stat.get("games", {}).get("minutes"),
+            "goals": gls.get("total"),
+            "assists": gls.get("assists"),
+            "shots": sht.get("total"),
+            "shots_on": sht.get("on"),
+            "passes": pas.get("total"),
             "key_passes": pas.get("key"),
-            "dribbles":   drb.get("attempts"),
+            "dribbles": drb.get("attempts"),
             "dribbles_success": drb.get("success"),
             "yellow_cards": crd.get("yellow"),
-            "red_cards":    crd.get("red"),
-            "sub_in":     sub.get("in"),
-            "sub_out":    sub.get("out"),
+            "red_cards": crd.get("red"),
+            "sub_in": sub.get("in"),
+            "sub_out": sub.get("out"),
         }
 
     # ------------------------------------------------------------------
@@ -637,16 +674,16 @@ class APIFootballClient:
         c = data[0]
         career = c.get("career", [])
         return {
-            "id":          c.get("id"),
-            "name":        c.get("name", ""),
+            "id": c.get("id"),
+            "name": c.get("name", ""),
             "nationality": c.get("nationality", ""),
-            "age":         c.get("age"),
-            "team":        c.get("team", {}).get("name", ""),
-            "career":      [
+            "age": c.get("age"),
+            "team": c.get("team", {}).get("name", ""),
+            "career": [
                 {
-                    "team":  e.get("team", {}).get("name", ""),
+                    "team": e.get("team", {}).get("name", ""),
                     "start": e.get("start"),
-                    "end":   e.get("end"),
+                    "end": e.get("end"),
                 }
                 for e in career
             ],
@@ -656,10 +693,10 @@ class APIFootballClient:
         data = self._get("/coachs", {"search": search})
         return [
             {
-                "id":          c.get("id"),
-                "name":        c.get("name", ""),
+                "id": c.get("id"),
+                "name": c.get("name", ""),
                 "nationality": c.get("nationality", ""),
-                "team":        c.get("team", {}).get("name", ""),
+                "team": c.get("team", {}).get("name", ""),
             }
             for c in data
         ]
@@ -684,14 +721,16 @@ class APIFootballClient:
         for item in data:
             player = item.get("player", {})
             for t in item.get("transfers", []):
-                out.append({
-                    "player_id":   player.get("id"),
-                    "player":      player.get("name", ""),
-                    "date":        t.get("date", ""),
-                    "type":        t.get("type", ""),
-                    "from_team":   t.get("teams", {}).get("out", {}).get("name", ""),
-                    "to_team":     t.get("teams", {}).get("in", {}).get("name", ""),
-                })
+                out.append(
+                    {
+                        "player_id": player.get("id"),
+                        "player": player.get("name", ""),
+                        "date": t.get("date", ""),
+                        "type": t.get("type", ""),
+                        "from_team": t.get("teams", {}).get("out", {}).get("name", ""),
+                        "to_team": t.get("teams", {}).get("in", {}).get("name", ""),
+                    }
+                )
         return out
 
     # ------------------------------------------------------------------
@@ -710,10 +749,10 @@ class APIFootballClient:
     def _parse_trophies(data: list) -> list[dict]:
         return [
             {
-                "league":  t.get("league", ""),
+                "league": t.get("league", ""),
                 "country": t.get("country", ""),
-                "season":  t.get("season", ""),
-                "place":   t.get("place", ""),
+                "season": t.get("season", ""),
+                "place": t.get("place", ""),
             }
             for t in data
         ]
@@ -735,9 +774,9 @@ class APIFootballClient:
     def _parse_sidelined(data: list) -> list[dict]:
         return [
             {
-                "type":  s.get("type", ""),
+                "type": s.get("type", ""),
                 "start": s.get("start", ""),
-                "end":   s.get("end", ""),
+                "end": s.get("end", ""),
             }
             for s in data
         ]
@@ -755,25 +794,41 @@ class APIFootballClient:
         if not data:
             return {}
         p = data[0]
-        pred    = p.get("predictions", {})
-        winner  = pred.get("winner", {})
+        pred = p.get("predictions", {})
+        winner = pred.get("winner", {})
         percent = pred.get("percent", {})
-        teams   = p.get("teams", {})
+        teams = p.get("teams", {})
         return {
-            "fixture_id":    str(fixture_id),
-            "winner_id":     winner.get("id"),
-            "winner_name":   winner.get("name", ""),
-            "winner_comment":winner.get("comment", ""),
-            "home_pct":      percent.get("home", ""),
-            "draw_pct":      percent.get("draws", ""),
-            "away_pct":      percent.get("away", ""),
-            "advice":        pred.get("advice", ""),
-            "home_form":     teams.get("home", {}).get("last_5", {}).get("form", ""),
-            "away_form":     teams.get("away", {}).get("last_5", {}).get("form", ""),
-            "home_goals_for_avg":     teams.get("home", {}).get("last_5", {}).get("goals", {}).get("for", {}).get("average"),
-            "away_goals_for_avg":     teams.get("away", {}).get("last_5", {}).get("goals", {}).get("for", {}).get("average"),
-            "home_goals_against_avg": teams.get("home", {}).get("last_5", {}).get("goals", {}).get("against", {}).get("average"),
-            "away_goals_against_avg": teams.get("away", {}).get("last_5", {}).get("goals", {}).get("against", {}).get("average"),
+            "fixture_id": str(fixture_id),
+            "winner_id": winner.get("id"),
+            "winner_name": winner.get("name", ""),
+            "winner_comment": winner.get("comment", ""),
+            "home_pct": percent.get("home", ""),
+            "draw_pct": percent.get("draws", ""),
+            "away_pct": percent.get("away", ""),
+            "advice": pred.get("advice", ""),
+            "home_form": teams.get("home", {}).get("last_5", {}).get("form", ""),
+            "away_form": teams.get("away", {}).get("last_5", {}).get("form", ""),
+            "home_goals_for_avg": teams.get("home", {})
+            .get("last_5", {})
+            .get("goals", {})
+            .get("for", {})
+            .get("average"),
+            "away_goals_for_avg": teams.get("away", {})
+            .get("last_5", {})
+            .get("goals", {})
+            .get("for", {})
+            .get("average"),
+            "home_goals_against_avg": teams.get("home", {})
+            .get("last_5", {})
+            .get("goals", {})
+            .get("against", {})
+            .get("average"),
+            "away_goals_against_avg": teams.get("away", {})
+            .get("last_5", {})
+            .get("goals", {})
+            .get("against", {})
+            .get("average"),
         }
 
     # ------------------------------------------------------------------
@@ -805,12 +860,14 @@ class APIFootballClient:
             for bk in item.get("odds", []):
                 bk_name = bk.get("name", "")
                 for b in bk.get("bets", []):
-                    out.append({
-                        "fixture_id":  str(fid),
-                        "bookmaker":   bk_name,
-                        "market":      b.get("name", ""),
-                        "values":      b.get("values", []),
-                    })
+                    out.append(
+                        {
+                            "fixture_id": str(fid),
+                            "bookmaker": bk_name,
+                            "market": b.get("name", ""),
+                            "values": b.get("values", []),
+                        }
+                    )
         return out
 
     def get_live_odds_bets(self) -> list[dict]:
@@ -832,14 +889,16 @@ class APIFootballClient:
             return []
         result: list[dict] = []
         for row in rows:
-            result.append({
-                "team":      row["team"]["name"],
-                "position":  int(row["rank"]),
-                "points":    int(row["points"]),
-                "goal_diff": int(row["goalsDiff"]),
-                "wins":      int(row["all"]["win"]),
-                "losses":    int(row["all"]["lose"]),
-            })
+            result.append(
+                {
+                    "team": row["team"]["name"],
+                    "position": int(row["rank"]),
+                    "points": int(row["points"]),
+                    "goal_diff": int(row["goalsDiff"]),
+                    "wins": int(row["all"]["win"]),
+                    "losses": int(row["all"]["lose"]),
+                }
+            )
         return result
 
     # ------------------------------------------------------------------
@@ -851,8 +910,8 @@ class APIFootballClient:
         injuries: dict[str, list[dict]] = {}
         for item in data:
             try:
-                team     = item["team"]["name"]
-                player   = item["player"]["name"]
+                team = item["team"]["name"]
+                player = item["player"]["name"]
                 position = item["player"].get("position", "Midfielder")
                 inj_type = item["injury"].get("type", "Unknown")
                 injuries.setdefault(team, []).append(
@@ -880,12 +939,12 @@ class APIFootballClient:
 
         stats: dict[str, dict] = {}
         for ref, acc in ref_acc.items():
-            n          = max(acc["n"], 1)
-            total      = acc["home_cards"] + acc["away_cards"]
-            home_bias  = (acc["home_cards"] - acc["away_cards"]) / n
+            n = max(acc["n"], 1)
+            total = acc["home_cards"] + acc["away_cards"]
+            home_bias = (acc["home_cards"] - acc["away_cards"]) / n
             stats[ref] = {
-                "home_bias":  round(home_bias, 3),
+                "home_bias": round(home_bias, 3),
                 "strictness": round(total / n, 2),
-                "games":      n,
+                "games": n,
             }
         return stats

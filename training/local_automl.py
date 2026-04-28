@@ -74,7 +74,9 @@ def _save_model(model: Any, meta: dict) -> str:
 
         joblib.dump(payload, MODEL_PATH)
     except Exception as exc:
-        logger.warning("joblib.dump failed (%s); falling back to pickle for %s", exc, MODEL_PATH)
+        logger.warning(
+            "joblib.dump failed (%s); falling back to pickle for %s", exc, MODEL_PATH
+        )
         with open(MODEL_PATH, "wb") as fh:
             pickle.dump(payload, fh)
 
@@ -125,7 +127,9 @@ def load_best_model() -> dict | None:
 
         return joblib.load(MODEL_PATH)
     except Exception as exc:
-        logger.warning("joblib.load failed for %s: %s — trying pickle fallback", MODEL_PATH, exc)
+        logger.warning(
+            "joblib.load failed for %s: %s — trying pickle fallback", MODEL_PATH, exc
+        )
 
     try:
         with open(MODEL_PATH, "rb") as fh:

@@ -13,6 +13,7 @@ Usage
     bootstrap = DataBootstrap()
     bootstrap.run_full(league_id=135, progress_cb=print)
 """
+
 from __future__ import annotations
 
 import logging
@@ -48,6 +49,7 @@ class DataBootstrap:
         Returns a summary dict:
             {'seasons_downloaded': int, 'fixtures_saved': int, 'stats_saved': int}
         """
+
         def _log(msg: str) -> None:
             logger.info(msg)
             if progress_cb:
@@ -57,7 +59,9 @@ class DataBootstrap:
         _log(f"[Bootstrap] Checking available seasons for {lname} (ID {league_id})…")
         all_seasons = self.client.get_available_seasons(league_id)
         if not all_seasons:
-            _log(f"[Bootstrap] No seasons found for {lname} — check league_id and API key.")
+            _log(
+                f"[Bootstrap] No seasons found for {lname} — check league_id and API key."
+            )
             return {"seasons_downloaded": 0, "fixtures_saved": 0, "stats_saved": 0}
 
         already_done = self._get_downloaded_seasons(league_id)
@@ -75,12 +79,16 @@ class DataBootstrap:
         for season in missing:
             _log(f"[Bootstrap] {lname} — Downloading season {season}…")
             try:
-                n_fix, n_stats = self._download_season(league_id, season, fetch_stats, _log)
+                n_fix, n_stats = self._download_season(
+                    league_id, season, fetch_stats, _log
+                )
                 self._mark_season_done(league_id, lname, season, n_fix)
                 seasons_ok += 1
                 total_fixtures += n_fix
                 total_stats += n_stats
-                _log(f"[Bootstrap] {lname} {season} done — {n_fix} fixtures, {n_stats} stat records.")
+                _log(
+                    f"[Bootstrap] {lname} {season} done — {n_fix} fixtures, {n_stats} stat records."
+                )
             except Exception as exc:
                 _log(f"[Bootstrap] ERROR on {lname} season {season}: {exc}")
                 logger.exception("Bootstrap season %s failed for %s", season, lname)
@@ -106,6 +114,7 @@ class DataBootstrap:
         Always runs (ignores downloaded_seasons cache for this season).
         Returns number of fixtures upserted.
         """
+
         def _log(msg: str) -> None:
             logger.info(msg)
             if progress_cb:
@@ -115,7 +124,9 @@ class DataBootstrap:
         _log(f"[Bootstrap] Updating {lname} (ID {league_id}) — season {season}…")
         n_fix, _ = self._download_season(league_id, season, fetch_stats=False, log=_log)
         self._mark_season_done(league_id, lname, season, n_fix)
-        _log(f"[Bootstrap] {lname} season {season} updated — {n_fix} fixtures refreshed.")
+        _log(
+            f"[Bootstrap] {lname} season {season} updated — {n_fix} fixtures refreshed."
+        )
         return n_fix
 
     # ------------------------------------------------------------------
@@ -246,13 +257,20 @@ class DataBootstrap:
             """,
             (
                 s.get("fixture_id"),
-                s.get("home_corners"), s.get("away_corners"),
-                s.get("home_shots"), s.get("away_shots"),
-                s.get("home_shots_on"), s.get("away_shots_on"),
-                s.get("home_possession"), s.get("away_possession"),
-                s.get("home_yellow"), s.get("away_yellow"),
-                s.get("home_red"), s.get("away_red"),
-                s.get("home_xg"), s.get("away_xg"),
+                s.get("home_corners"),
+                s.get("away_corners"),
+                s.get("home_shots"),
+                s.get("away_shots"),
+                s.get("home_shots_on"),
+                s.get("away_shots_on"),
+                s.get("home_possession"),
+                s.get("away_possession"),
+                s.get("home_yellow"),
+                s.get("away_yellow"),
+                s.get("home_red"),
+                s.get("away_red"),
+                s.get("home_xg"),
+                s.get("away_xg"),
                 datetime.now(timezone.utc).isoformat(),
             ),
         )
@@ -283,7 +301,13 @@ class DataBootstrap:
                     n_fixtures    = excluded.n_fixtures,
                     downloaded_at = excluded.downloaded_at
                 """,
-                (league_id, lname, season, n_fixtures, datetime.now(timezone.utc).isoformat()),
+                (
+                    league_id,
+                    lname,
+                    season,
+                    n_fixtures,
+                    datetime.now(timezone.utc).isoformat(),
+                ),
             )
             conn.commit()
             conn.close()

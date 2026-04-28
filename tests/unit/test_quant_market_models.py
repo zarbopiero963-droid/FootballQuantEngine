@@ -16,41 +16,60 @@ from quant.models.halftime_model import HalftimeModel
 from quant.models.correct_score_model import CorrectScoreModel
 from quant.markets.multi_market_engine import MultiMarketEngine
 
-
 # ---------------------------------------------------------------------------
 # Fixtures shared across all classes
 # ---------------------------------------------------------------------------
 
 _MATCHES = [
     {
-        "home_team": "Juventus", "away_team": "Inter",
-        "home_goals": 2, "away_goals": 1,
-        "ht_home": 1, "ht_away": 0,
-        "home_corners": 6, "away_corners": 4,
+        "home_team": "Juventus",
+        "away_team": "Inter",
+        "home_goals": 2,
+        "away_goals": 1,
+        "ht_home": 1,
+        "ht_away": 0,
+        "home_corners": 6,
+        "away_corners": 4,
     },
     {
-        "home_team": "AC Milan", "away_team": "Roma",
-        "home_goals": 1, "away_goals": 1,
-        "ht_home": 0, "ht_away": 1,
-        "home_corners": 5, "away_corners": 5,
+        "home_team": "AC Milan",
+        "away_team": "Roma",
+        "home_goals": 1,
+        "away_goals": 1,
+        "ht_home": 0,
+        "ht_away": 1,
+        "home_corners": 5,
+        "away_corners": 5,
     },
     {
-        "home_team": "Napoli", "away_team": "Lazio",
-        "home_goals": 3, "away_goals": 0,
-        "ht_home": 2, "ht_away": 0,
-        "home_corners": 8, "away_corners": 3,
+        "home_team": "Napoli",
+        "away_team": "Lazio",
+        "home_goals": 3,
+        "away_goals": 0,
+        "ht_home": 2,
+        "ht_away": 0,
+        "home_corners": 8,
+        "away_corners": 3,
     },
     {
-        "home_team": "Inter", "away_team": "Napoli",
-        "home_goals": 2, "away_goals": 2,
-        "ht_home": 1, "ht_away": 1,
-        "home_corners": 5, "away_corners": 6,
+        "home_team": "Inter",
+        "away_team": "Napoli",
+        "home_goals": 2,
+        "away_goals": 2,
+        "ht_home": 1,
+        "ht_away": 1,
+        "home_corners": 5,
+        "away_corners": 6,
     },
     {
-        "home_team": "Roma", "away_team": "Juventus",
-        "home_goals": 1, "away_goals": 2,
-        "ht_home": 0, "ht_away": 1,
-        "home_corners": 4, "away_corners": 7,
+        "home_team": "Roma",
+        "away_team": "Juventus",
+        "home_goals": 1,
+        "away_goals": 2,
+        "ht_home": 0,
+        "ht_away": 1,
+        "home_corners": 4,
+        "away_corners": 7,
     },
 ]
 
@@ -58,6 +77,7 @@ _MATCHES = [
 # ===========================================================================
 # CornersModel
 # ===========================================================================
+
 
 class TestCornersModel:
 
@@ -149,6 +169,7 @@ class TestCornersModel:
 # HalftimeModel
 # ===========================================================================
 
+
 class TestHalftimeModel:
 
     def test_default_ratio(self):
@@ -167,22 +188,32 @@ class TestHalftimeModel:
         # Manufacture 25 valid rows
         rows = []
         for i in range(25):
-            rows.append({
-                "home_goals": 2, "away_goals": 2,
-                "ht_home": 1, "ht_away": 1,
-            })
+            rows.append(
+                {
+                    "home_goals": 2,
+                    "away_goals": 2,
+                    "ht_home": 1,
+                    "ht_away": 1,
+                }
+            )
         m.fit(rows)
         assert m._ht_ratio_home == pytest.approx(0.5, abs=0.05)
 
     def test_fit_clamps_ratio_to_range(self):
         m = HalftimeModel()
-        rows = [{"home_goals": 4, "away_goals": 4, "ht_home": 4, "ht_away": 4} for _ in range(25)]
+        rows = [
+            {"home_goals": 4, "away_goals": 4, "ht_home": 4, "ht_away": 4}
+            for _ in range(25)
+        ]
         m.fit(rows)
         assert 0.30 <= m._ht_ratio_home <= 0.55
 
     def test_fit_skips_zero_goals(self):
         m = HalftimeModel()
-        rows = [{"home_goals": 0, "away_goals": 0, "ht_home": 0, "ht_away": 0} for _ in range(25)]
+        rows = [
+            {"home_goals": 0, "away_goals": 0, "ht_home": 0, "ht_away": 0}
+            for _ in range(25)
+        ]
         m.fit(rows)  # all filtered out — default ratio stays
         assert m._ht_ratio_home == pytest.approx(0.42)
 
@@ -192,14 +223,25 @@ class TestHalftimeModel:
         assert "ht" in result
         assert "sh" in result
         for half in ("ht", "sh"):
-            for key in ("lambda_home", "lambda_away", "lambda_total", "line", "over", "under"):
+            for key in (
+                "lambda_home",
+                "lambda_away",
+                "lambda_total",
+                "line",
+                "over",
+                "under",
+            ):
                 assert key in result[half]
 
     def test_probabilities_sum_to_one(self):
         m = HalftimeModel()
         result = m.probabilities(1.5, 1.2, line_ht=1.5, line_sh=1.5)
-        assert result["ht"]["over"] + result["ht"]["under"] == pytest.approx(1.0, abs=0.001)
-        assert result["sh"]["over"] + result["sh"]["under"] == pytest.approx(1.0, abs=0.001)
+        assert result["ht"]["over"] + result["ht"]["under"] == pytest.approx(
+            1.0, abs=0.001
+        )
+        assert result["sh"]["over"] + result["sh"]["under"] == pytest.approx(
+            1.0, abs=0.001
+        )
 
     def test_all_lines_returns_four_markets(self):
         m = HalftimeModel()
@@ -220,6 +262,7 @@ class TestHalftimeModel:
 # ===========================================================================
 # CorrectScoreModel
 # ===========================================================================
+
 
 class TestCorrectScoreModel:
 
@@ -297,6 +340,7 @@ class TestCorrectScoreModel:
 # MultiMarketEngine
 # ===========================================================================
 
+
 class TestMultiMarketEngine:
 
     @pytest.fixture
@@ -305,16 +349,30 @@ class TestMultiMarketEngine:
         # Need enough matches for PoissonEngine to produce usable lambdas
         matches = []
         for i, (h, a) in enumerate(
-            [("Juventus","Inter"),("AC Milan","Roma"),("Napoli","Lazio"),
-             ("Inter","Napoli"),("Roma","Juventus"),("Lazio","AC Milan"),
-             ("Juventus","Roma"),("Inter","Lazio"),("AC Milan","Napoli")]
+            [
+                ("Juventus", "Inter"),
+                ("AC Milan", "Roma"),
+                ("Napoli", "Lazio"),
+                ("Inter", "Napoli"),
+                ("Roma", "Juventus"),
+                ("Lazio", "AC Milan"),
+                ("Juventus", "Roma"),
+                ("Inter", "Lazio"),
+                ("AC Milan", "Napoli"),
+            ]
         ):
-            matches.append({
-                "home_team": h, "away_team": a,
-                "home_goals": (i % 3), "away_goals": (i % 2),
-                "ht_home": (i % 2), "ht_away": 0,
-                "home_corners": 5 + i % 3, "away_corners": 4 + i % 2,
-            })
+            matches.append(
+                {
+                    "home_team": h,
+                    "away_team": a,
+                    "home_goals": (i % 3),
+                    "away_goals": (i % 2),
+                    "ht_home": (i % 2),
+                    "ht_away": 0,
+                    "home_corners": 5 + i % 3,
+                    "away_corners": 4 + i % 2,
+                }
+            )
         engine.fit(matches)
         return engine
 
@@ -328,31 +386,57 @@ class TestMultiMarketEngine:
 
     def test_predict_all_not_fitted_returns_empty(self):
         engine = MultiMarketEngine()
-        result = engine.predict_all([{"fixture_id": "1", "home_team": "A", "away_team": "B"}])
+        result = engine.predict_all(
+            [{"fixture_id": "1", "home_team": "A", "away_team": "B"}]
+        )
         assert result == []
 
     def test_predict_all_returns_rows(self, fitted_engine):
-        upcoming = [{"fixture_id": "999", "home_team": "Juventus", "away_team": "Inter",
-                     "match_date": "2025-01-01", "league": "Serie A"}]
+        upcoming = [
+            {
+                "fixture_id": "999",
+                "home_team": "Juventus",
+                "away_team": "Inter",
+                "match_date": "2025-01-01",
+                "league": "Serie A",
+            }
+        ]
         rows = fitted_engine.predict_all(upcoming)
         assert len(rows) > 0
 
     def test_predict_all_row_structure(self, fitted_engine):
-        upcoming = [{"fixture_id": "999", "home_team": "Juventus", "away_team": "Inter"}]
+        upcoming = [
+            {"fixture_id": "999", "home_team": "Juventus", "away_team": "Inter"}
+        ]
         rows = fitted_engine.predict_all(upcoming)
-        required_keys = {"fixture_id", "home", "away", "market", "selection",
-                         "probability", "fair_odds", "edge", "ev", "kelly", "created_at"}
+        required_keys = {
+            "fixture_id",
+            "home",
+            "away",
+            "market",
+            "selection",
+            "probability",
+            "fair_odds",
+            "edge",
+            "ev",
+            "kelly",
+            "created_at",
+        }
         for row in rows[:5]:
             assert required_keys.issubset(row.keys())
 
     def test_predict_all_probability_in_range(self, fitted_engine):
-        upcoming = [{"fixture_id": "999", "home_team": "Juventus", "away_team": "Inter"}]
+        upcoming = [
+            {"fixture_id": "999", "home_team": "Juventus", "away_team": "Inter"}
+        ]
         rows = fitted_engine.predict_all(upcoming)
         for row in rows:
             assert 0.0 <= row["probability"] <= 1.0
 
     def test_predict_all_markets_present(self, fitted_engine):
-        upcoming = [{"fixture_id": "999", "home_team": "Juventus", "away_team": "Inter"}]
+        upcoming = [
+            {"fixture_id": "999", "home_team": "Juventus", "away_team": "Inter"}
+        ]
         rows = fitted_engine.predict_all(upcoming)
         markets = {r["market"] for r in rows}
         assert "1x2" in markets
@@ -368,26 +452,34 @@ class TestMultiMarketEngine:
         assert rows == []
 
     def test_predict_all_with_odds_map(self, fitted_engine):
-        upcoming = [{"fixture_id": "999", "home_team": "Juventus", "away_team": "Inter"}]
+        upcoming = [
+            {"fixture_id": "999", "home_team": "Juventus", "away_team": "Inter"}
+        ]
         odds_map = {"999": {"1x2": {"home": 1.9, "draw": 3.4, "away": 3.8}}}
         rows = fitted_engine.predict_all(upcoming, odds_map=odds_map)
         assert len(rows) > 0
 
     def test_ou_from_matrix_over_under_sum(self):
         # 3x3 identity-style matrix
-        matrix = [[1/9] * 3 for _ in range(3)]
+        matrix = [[1 / 9] * 3 for _ in range(3)]
         over, under = MultiMarketEngine._ou_from_matrix(matrix, 2.5)
         assert over + under == pytest.approx(1.0, abs=0.001)
 
     def test_row_static_method_fair_odds(self):
-        row = MultiMarketEngine._row("1","H","A","1x2","home",0.5,None,"2025-01-01T00:00:00",{})
+        row = MultiMarketEngine._row(
+            "1", "H", "A", "1x2", "home", 0.5, None, "2025-01-01T00:00:00", {}
+        )
         assert row["fair_odds"] == pytest.approx(2.0, abs=0.01)
         assert row["edge"] == 0.0  # no market odds
 
     def test_row_zero_probability_gives_999_odds(self):
-        row = MultiMarketEngine._row("1","H","A","1x2","home",0.0,None,"2025-01-01T00:00:00",{})
+        row = MultiMarketEngine._row(
+            "1", "H", "A", "1x2", "home", 0.0, None, "2025-01-01T00:00:00", {}
+        )
         assert row["fair_odds"] == 999.0
 
     def test_row_kelly_non_negative(self):
-        row = MultiMarketEngine._row("1","H","A","1x2","home",0.1,5.0,"2025-01-01T00:00:00",{})
+        row = MultiMarketEngine._row(
+            "1", "H", "A", "1x2", "home", 0.1, 5.0, "2025-01-01T00:00:00", {}
+        )
         assert row["kelly"] >= 0.0

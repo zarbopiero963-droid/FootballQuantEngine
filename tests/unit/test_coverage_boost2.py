@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ===========================================================================
 # quant/providers/league_registry.py  (29% → 70%+)
 # ===========================================================================
@@ -47,7 +46,7 @@ class TestLeagueRegistry:
     def test_all_known_includes_main_leagues(self):
         d = all_known()
         assert 135 in d  # Serie A
-        assert 39  in d  # Premier League
+        assert 39 in d  # Premier League
 
     def test_static_table_non_empty(self):
         assert len(_STATIC) > 0
@@ -164,8 +163,8 @@ class TestGaussianCopulaEngine:
     @pytest.fixture
     def two_legs(self):
         return [
-            BetLeg("Home Win",  market_odds=1.9, model_prob=0.55),
-            BetLeg("Over 2.5",  market_odds=1.8, model_prob=0.52),
+            BetLeg("Home Win", market_odds=1.9, model_prob=0.55),
+            BetLeg("Over 2.5", market_odds=1.8, model_prob=0.52),
         ]
 
     def test_constructor_raises_below_1000_sims(self):
@@ -227,6 +226,7 @@ class TestBacktestEngine:
     def in_memory_conn(self):
         """In-memory SQLite with minimal schema for BacktestEngine."""
         import sqlite3
+
         conn = sqlite3.connect(":memory:")
         conn.executescript("""
             CREATE TABLE fixtures (
@@ -256,6 +256,7 @@ class TestBacktestEngine:
 
     def test_load_predictions_empty_db_returns_empty(self, engine, in_memory_conn):
         from unittest.mock import patch
+
         pytest.importorskip("pandas")
         with patch("training.backtest_engine.connect", return_value=in_memory_conn):
             result = engine.load_predictions_with_results()
@@ -263,6 +264,7 @@ class TestBacktestEngine:
 
     def test_run_empty_db_returns_empty(self, engine, in_memory_conn):
         from unittest.mock import patch
+
         pytest.importorskip("pandas")
         with patch("training.backtest_engine.connect", return_value=in_memory_conn):
             result = engine.run()
@@ -277,6 +279,7 @@ class TestBacktestEngine:
                 VALUES('f1',0.55,0.25,0.20);
         """)
         from unittest.mock import patch
+
         with patch("training.backtest_engine.connect", return_value=in_memory_conn):
             result = engine.load_predictions_with_results()
         assert len(result) == 1
@@ -313,6 +316,7 @@ class TestSerializable:
     def test_serialisable_unknown_type(self):
         class Foo:
             pass
+
         result = _serialisable(Foo())
         assert isinstance(result, str)  # falls back to str()
 
@@ -341,17 +345,22 @@ class TestTrainingManager:
 
     def test_dataset_summary_with_data(self, manager):
         pd = pytest.importorskip("pandas")
-        df = pd.DataFrame({
-            "league": ["SerieA", "SerieA"],
-            "match_date": ["2024-01-01", "2024-01-02"],
-            "home_win_odds": [1.9, 2.1],
-        })
+        df = pd.DataFrame(
+            {
+                "league": ["SerieA", "SerieA"],
+                "match_date": ["2024-01-01", "2024-01-02"],
+                "home_win_odds": [1.9, 2.1],
+            }
+        )
         summary = manager.dataset_summary(df)
         assert summary["rows"] == 2
         assert "leagues" in summary
 
-    def test_load_best_model_returns_none_when_absent(self, manager, tmp_path, monkeypatch):
+    def test_load_best_model_returns_none_when_absent(
+        self, manager, tmp_path, monkeypatch
+    ):
         import training.local_automl as la
+
         monkeypatch.setattr(la, "MODEL_PATH", str(tmp_path / "model.pkl"))
         result = manager.load_best_model()
         assert result is None

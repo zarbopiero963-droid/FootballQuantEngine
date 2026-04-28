@@ -247,9 +247,11 @@ class MarkovGameEngine:
                             f"Model {tp.p_home_scores:.3f} vs book implied {book_implied:.3f} "
                             f"(+{(tp.p_home_scores / book_implied - 1) * 100:.1f}%)"
                         ),
-                        urgency="HIGH"
-                        if tp.p_home_scores > book_implied * 1.15
-                        else "MEDIUM",
+                        urgency=(
+                            "HIGH"
+                            if tp.p_home_scores > book_implied * 1.15
+                            else "MEDIUM"
+                        ),
                     )
                 )
 
@@ -265,9 +267,11 @@ class MarkovGameEngine:
                             f"Model {tp.p_away_scores:.3f} vs book implied {book_implied:.3f} "
                             f"(+{(tp.p_away_scores / book_implied - 1) * 100:.1f}%)"
                         ),
-                        urgency="HIGH"
-                        if tp.p_away_scores > book_implied * 1.15
-                        else "MEDIUM",
+                        urgency=(
+                            "HIGH"
+                            if tp.p_away_scores > book_implied * 1.15
+                            else "MEDIUM"
+                        ),
                     )
                 )
 

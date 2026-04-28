@@ -13,7 +13,12 @@ from pathlib import Path
 
 import pytest
 
-from ranking.match_ranker import kelly_fraction, expected_value, sharpe_ratio, MatchRanker
+from ranking.match_ranker import (
+    kelly_fraction,
+    expected_value,
+    sharpe_ratio,
+    MatchRanker,
+)
 from quant.models.calibration import ProbabilityCalibration
 from quant.models.elo_engine import EloEngine
 from quant.models.form_engine import FormEngine
@@ -24,10 +29,10 @@ from quant.services.no_bet_filter import QuantNoBetFilter
 from quant.services.market_tools import MarketTools
 from export.csv_exporter import CsvExporter
 
-
 # ---------------------------------------------------------------------------
 # kelly_fraction — boundary values
 # ---------------------------------------------------------------------------
+
 
 def test_kelly_fraction_extreme_probability_zero():
     assert kelly_fraction(0.0, 2.0) == 0.0
@@ -67,6 +72,7 @@ def test_kelly_fraction_large_odds():
 # expected_value — boundary values
 # ---------------------------------------------------------------------------
 
+
 def test_expected_value_zero_probability():
     assert expected_value(0.0, 2.0) < 0
 
@@ -93,6 +99,7 @@ def test_expected_value_large_odds():
 # sharpe_ratio — boundary values
 # ---------------------------------------------------------------------------
 
+
 def test_sharpe_ratio_zero_ev():
     assert sharpe_ratio(0.5, 0.0) == pytest.approx(0.0, abs=1e-9)
 
@@ -110,6 +117,7 @@ def test_sharpe_ratio_extreme_probability():
 # ---------------------------------------------------------------------------
 # ProbabilityCalibration — edge cases
 # ---------------------------------------------------------------------------
+
 
 def test_calibration_zero_inputs_returns_uniform():
     cal = ProbabilityCalibration()
@@ -143,6 +151,7 @@ def test_calibration_three_way_all_ones_still_valid():
 # MatchRanker.score_one — edge cases
 # ---------------------------------------------------------------------------
 
+
 def test_match_ranker_handles_missing_fields():
     assert MatchRanker().score_one({"probability": 0.55}) is None
 
@@ -152,11 +161,17 @@ def test_match_ranker_handles_nan_probability():
 
 
 def test_match_ranker_score_one_zero_probability():
-    assert MatchRanker().score_one({"probability": 0.0, "odds": 2.1, "decision": "BET"}) is None
+    assert (
+        MatchRanker().score_one({"probability": 0.0, "odds": 2.1, "decision": "BET"})
+        is None
+    )
 
 
 def test_match_ranker_score_one_below_min_odds():
-    assert MatchRanker().score_one({"probability": 0.9, "odds": 1.02, "decision": "BET"}) is None
+    assert (
+        MatchRanker().score_one({"probability": 0.9, "odds": 1.02, "decision": "BET"})
+        is None
+    )
 
 
 def test_match_ranker_rank_empty_list():
@@ -182,6 +197,7 @@ def test_match_ranker_include_no_bet_flag():
 # CsvExporter — edge cases
 # ---------------------------------------------------------------------------
 
+
 def test_csv_exporter_empty_records(tmp_path):
     exporter = CsvExporter(output_dir=str(tmp_path))
     result = exporter.export([], mode="full")
@@ -192,6 +208,7 @@ def test_csv_exporter_empty_records(tmp_path):
 # ---------------------------------------------------------------------------
 # MarketTools — boundary values
 # ---------------------------------------------------------------------------
+
 
 def test_market_tools_zero_odds_all_returns_uniform():
     mt = MarketTools()
@@ -219,6 +236,7 @@ def test_market_tools_edge_none_bookmaker_odds():
 # AgreementEngine — boundary values
 # ---------------------------------------------------------------------------
 
+
 def test_agreement_engine_empty_list():
     assert AgreementEngine().three_way_agreement([]) == 0.0
 
@@ -237,6 +255,7 @@ def test_agreement_engine_missing_keys_no_crash():
 # QuantConfidenceEngine — boundary values
 # ---------------------------------------------------------------------------
 
+
 def test_confidence_all_zeros():
     assert QuantConfidenceEngine().score(0.0, 0.0, 0.0, 0.0) == pytest.approx(0.0)
 
@@ -254,6 +273,7 @@ def test_confidence_output_bounded():
 # QuantNoBetFilter — boundary values
 # ---------------------------------------------------------------------------
 
+
 def test_no_bet_filter_all_zeros_is_no_bet():
     assert QuantNoBetFilter().decide(0.0, 0.0, 0.0, 0.0) == "NO_BET"
 
@@ -265,6 +285,7 @@ def test_no_bet_filter_perfect_inputs_is_bet():
 # ---------------------------------------------------------------------------
 # EloEngine — boundary values
 # ---------------------------------------------------------------------------
+
 
 def test_elo_unknown_team_returns_base_rating():
     assert EloEngine(base_rating=1500.0).get_rating("Unknown Team") == 1500.0
@@ -285,6 +306,7 @@ def test_elo_expected_score_equal_ratings_is_half():
 # FormEngine — boundary values
 # ---------------------------------------------------------------------------
 
+
 def test_form_unknown_team_returns_half():
     form = FormEngine()
     form.fit([])
@@ -300,6 +322,7 @@ def test_form_fit_empty_list_no_crash():
 # ---------------------------------------------------------------------------
 # PoissonEngine — boundary values
 # ---------------------------------------------------------------------------
+
 
 def test_poisson_empty_fit_baseline_lambdas():
     engine = PoissonEngine()
@@ -319,7 +342,16 @@ def test_poisson_probabilities_sum_to_one_after_empty_fit():
 def test_poisson_lambda_floor_prevents_zero():
     engine = PoissonEngine()
     # Even a very weak team should not produce lambda=0
-    engine.fit([{"home_team": "Weak", "away_team": "Strong",
-                 "home_goals": 0, "away_goals": 10}] * 20)
+    engine.fit(
+        [
+            {
+                "home_team": "Weak",
+                "away_team": "Strong",
+                "home_goals": 0,
+                "away_goals": 10,
+            }
+        ]
+        * 20
+    )
     lh, _ = engine.expected_goals("Weak", "Strong")
     assert lh >= 0.2

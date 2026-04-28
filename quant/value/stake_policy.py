@@ -70,23 +70,37 @@ class StakePolicy:
         from engine.markowitz_optimizer import MarkowitzOptimizer, BetProposal
 
         if not bets:
-            return {"weights": {}, "stakes": {}, "expected_return": 0.0, "portfolio_variance": 0.0}
+            return {
+                "weights": {},
+                "stakes": {},
+                "expected_return": 0.0,
+                "portfolio_variance": 0.0,
+            }
 
         proposals = []
         for b in bets:
             try:
-                proposals.append(BetProposal(
-                    bet_id=str(b["bet_id"]),
-                    description=str(b.get("description", b["bet_id"])),
-                    odds=float(b["odds"]),
-                    model_prob=float(b["model_prob"]),
-                    correlation_group=str(b.get("correlation_group", "default")),
-                ))
+                proposals.append(
+                    BetProposal(
+                        bet_id=str(b["bet_id"]),
+                        description=str(b.get("description", b["bet_id"])),
+                        odds=float(b["odds"]),
+                        model_prob=float(b["model_prob"]),
+                        correlation_group=str(b.get("correlation_group", "default")),
+                    )
+                )
             except (KeyError, ValueError, TypeError) as exc:
-                logger.warning("suggest_portfolio: skipping malformed bet %s — %s", b, exc)
+                logger.warning(
+                    "suggest_portfolio: skipping malformed bet %s — %s", b, exc
+                )
 
         if not proposals:
-            return {"weights": {}, "stakes": {}, "expected_return": 0.0, "portfolio_variance": 0.0}
+            return {
+                "weights": {},
+                "stakes": {},
+                "expected_return": 0.0,
+                "portfolio_variance": 0.0,
+            }
 
         for p in proposals:
             p.max_stake_fraction = max_stake_fraction

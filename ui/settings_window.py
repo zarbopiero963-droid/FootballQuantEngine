@@ -32,7 +32,9 @@ class SettingsWindow(QWidget):
         self.season_input = QLineEdit()
         self.season_input.setPlaceholderText("e.g. 2024")
         self.openweather_input = QLineEdit()
-        self.openweather_input.setPlaceholderText("Optional — openweathermap.org free key")
+        self.openweather_input.setPlaceholderText(
+            "Optional — openweathermap.org free key"
+        )
 
         # League selector — shows names, stores IDs
         self.league_combo = QComboBox()
@@ -74,6 +76,7 @@ class SettingsWindow(QWidget):
                 return
         # ID not in static list — add a temporary entry
         from quant.providers.league_registry import name as league_name
+
         label = f"{league_name(league_id)}  [{league_id}]"
         self.league_combo.insertItem(0, label)
         self._league_items.insert(0, (league_id, label))
@@ -85,7 +88,9 @@ class SettingsWindow(QWidget):
             return self._league_items[idx][0]
         # User typed a raw ID
         try:
-            return int(self.league_combo.currentText().strip().split("[")[-1].rstrip("]"))
+            return int(
+                self.league_combo.currentText().strip().split("[")[-1].rstrip("]")
+            )
         except (ValueError, IndexError):
             return 135
 

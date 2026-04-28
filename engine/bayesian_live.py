@@ -166,8 +166,10 @@ class BayesianLiveEngine:
             minute=current_minute,
             home_score=current_score[0],
             away_score=current_score[1],
-            alpha_home=ah, beta_home=bh,
-            alpha_away=aa, beta_away=ba,
+            alpha_home=ah,
+            beta_home=bh,
+            alpha_away=aa,
+            beta_away=ba,
             events_processed=events_done,
             last_event_minute=last_event_min,
         )
@@ -194,12 +196,14 @@ class BayesianLiveEngine:
             elapsed_frac = minute / 90.0
             return self._build_state(
                 minute=minute,
-                home_score=score[0], away_score=score[1],
+                home_score=score[0],
+                away_score=score[1],
                 alpha_home=self._init_alpha_home,
                 beta_home=self._init_beta_home + elapsed_frac,
                 alpha_away=self._init_alpha_away,
                 beta_away=self._init_beta_away + elapsed_frac,
-                events_processed=0, last_event_minute=0,
+                events_processed=0,
+                last_event_minute=0,
             )
         interim = self.process_events(filtered, score)
         if interim.minute == minute:
@@ -207,7 +211,8 @@ class BayesianLiveEngine:
         extra_frac = max(0.0, (minute - interim.last_event_minute) / 90.0)
         return self._build_state(
             minute=minute,
-            home_score=score[0], away_score=score[1],
+            home_score=score[0],
+            away_score=score[1],
             alpha_home=interim.alpha_home,
             beta_home=interim.beta_home + extra_frac,
             alpha_away=interim.alpha_away,
@@ -228,7 +233,9 @@ class BayesianLiveEngine:
     ) -> Tuple[float, float]:
         """Soft downward revision of α when no shot recorded for elapsed minutes."""
         penalty = self.quiet_penalty * (elapsed_quiet_minutes / self.quiet_window)
-        return max(_MIN_ALPHA, alpha_home - penalty), max(_MIN_ALPHA, alpha_away - penalty)
+        return max(_MIN_ALPHA, alpha_home - penalty), max(
+            _MIN_ALPHA, alpha_away - penalty
+        )
 
     def _build_state(
         self,
@@ -252,17 +259,27 @@ class BayesianLiveEngine:
 
         p_hw, p_d, p_aw = compute_win_probs(rem_lh, rem_la, home_score, away_score)
         already_scored = home_score + away_score
-        p_over, p_under = compute_over_under(rem_lh, rem_la, already_scored, threshold=2.5)
+        p_over, p_under = compute_over_under(
+            rem_lh, rem_la, already_scored, threshold=2.5
+        )
         p_btts = compute_btts(rem_lh, rem_la, home_score, away_score)
 
         return BayesianState(
             minute=minute,
-            home_score=home_score, away_score=away_score,
-            alpha_home=alpha_home, beta_home=beta_home,
-            alpha_away=alpha_away, beta_away=beta_away,
-            posterior_lambda_home=post_lh, posterior_lambda_away=post_la,
-            p_home_win=p_hw, p_draw=p_d, p_away_win=p_aw,
-            p_over_25=p_over, p_under_25=p_under, p_btts=p_btts,
+            home_score=home_score,
+            away_score=away_score,
+            alpha_home=alpha_home,
+            beta_home=beta_home,
+            alpha_away=alpha_away,
+            beta_away=beta_away,
+            posterior_lambda_home=post_lh,
+            posterior_lambda_away=post_la,
+            p_home_win=p_hw,
+            p_draw=p_d,
+            p_away_win=p_aw,
+            p_over_25=p_over,
+            p_under_25=p_under,
+            p_btts=p_btts,
             events_processed=events_processed,
             last_event_minute=last_event_minute,
         )

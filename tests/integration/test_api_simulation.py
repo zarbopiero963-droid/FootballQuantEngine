@@ -135,12 +135,14 @@ def mock_resp():
         r.json.return_value = payload
         r.status_code = 200
         return r
+
     return _make
 
 
 def test_parse_fixture_from_api_response(mock_resp):
     with patch("requests.get", return_value=mock_resp(FIXTURE_RESPONSE)):
         from quant.providers.api_football_client import APIFootballClient
+
         client = APIFootballClient(api_key="test_key")
         matches = client.get_completed_matches(135, 2024)
 
@@ -157,6 +159,7 @@ def test_parse_fixture_from_api_response(mock_resp):
 def test_parse_upcoming_fixture(mock_resp):
     with patch("requests.get", return_value=mock_resp(UPCOMING_RESPONSE)):
         from quant.providers.api_football_client import APIFootballClient
+
         client = APIFootballClient(api_key="test_key")
         upcoming = client.get_upcoming_matches(135, 2024)
 
@@ -168,6 +171,7 @@ def test_parse_upcoming_fixture(mock_resp):
 def test_parse_prematch_odds_1x2(mock_resp):
     with patch("requests.get", return_value=mock_resp(ODDS_RESPONSE)):
         from quant.providers.api_football_client import APIFootballClient
+
         client = APIFootballClient(api_key="test_key")
         odds = client.get_prematch_odds([2001])
 
@@ -181,6 +185,7 @@ def test_parse_prematch_odds_all_markets_present(mock_resp):
     """Client parses 1x2, ou25, and btts markets from the same response."""
     with patch("requests.get", return_value=mock_resp(ODDS_RESPONSE)):
         from quant.providers.api_football_client import APIFootballClient
+
         client = APIFootballClient(api_key="test_key")
         odds = client.get_prematch_odds([2001])
 
@@ -194,6 +199,7 @@ def test_parse_prematch_odds_missing_fixture(mock_resp):
     """Unknown fixture_id returns empty dict (no KeyError)."""
     with patch("requests.get", return_value=mock_resp({"response": []})):
         from quant.providers.api_football_client import APIFootballClient
+
         client = APIFootballClient(api_key="test_key")
         odds = client.get_prematch_odds([9999])
 
@@ -203,6 +209,7 @@ def test_parse_prematch_odds_missing_fixture(mock_resp):
 def test_parse_standings(mock_resp):
     with patch("requests.get", return_value=mock_resp(STANDINGS_RESPONSE)):
         from quant.providers.api_football_client import APIFootballClient
+
         client = APIFootballClient(api_key="test_key")
         standings = client.get_standings(135, 2024)
 

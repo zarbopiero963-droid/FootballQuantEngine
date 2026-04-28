@@ -94,7 +94,9 @@ def _with_retry(fn, max_attempts: int = 4, base_delay: float = 2.0):
         try:
             resp = fn()
             if resp.status_code == 429:
-                retry_after = float(resp.headers.get("Retry-After", base_delay * attempt))
+                retry_after = float(
+                    resp.headers.get("Retry-After", base_delay * attempt)
+                )
                 logger.warning(
                     "API-Football 429 rate limit; waiting %.0fs (attempt %d/%d)",
                     retry_after,
@@ -128,7 +130,9 @@ def _with_retry(fn, max_attempts: int = 4, base_delay: float = 2.0):
                 max_attempts,
             )
             time.sleep(delay)
-    raise RuntimeError("All retry attempts exhausted")  # unreachable but satisfies linters
+    raise RuntimeError(
+        "All retry attempts exhausted"
+    )  # unreachable but satisfies linters
 
 
 # ---------------------------------------------------------------------------
@@ -294,9 +298,7 @@ class ApiFootballCollector:
         )
         return fixtures
 
-    def get_league_season(
-        self, league_id: int, season: int
-    ) -> List[Dict]:
+    def get_league_season(self, league_id: int, season: int) -> List[Dict]:
         """
         Fetch all fixtures for a given league and season.
 

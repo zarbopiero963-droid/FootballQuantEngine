@@ -7,6 +7,7 @@ already computed by PoissonEngine.
 Returns the top-N most likely scores ranked by probability, plus
 fair odds for each.
 """
+
 from __future__ import annotations
 
 import math
@@ -43,13 +44,15 @@ class CorrectScoreModel:
             for ag, prob in enumerate(row):
                 if prob <= 0:
                     continue
-                scores.append({
-                    "score":       f"{hg}-{ag}",
-                    "home_goals":  hg,
-                    "away_goals":  ag,
-                    "probability": round(prob, 5),
-                    "fair_odds":   round(1.0 / prob, 2) if prob > 0 else 999.0,
-                })
+                scores.append(
+                    {
+                        "score": f"{hg}-{ag}",
+                        "home_goals": hg,
+                        "away_goals": ag,
+                        "probability": round(prob, 5),
+                        "fair_odds": round(1.0 / prob, 2) if prob > 0 else 999.0,
+                    }
+                )
 
         scores.sort(key=lambda x: x["probability"], reverse=True)  # type: ignore[arg-type,return-value]
         return scores[:top_n]
@@ -88,9 +91,11 @@ class CorrectScoreModel:
 
     def _poisson_pmf(self, k: int, lam: float) -> float:
         lam = max(0.01, lam)
-        return math.exp(-lam) * (lam ** k) / math.factorial(min(k, 170))
+        return math.exp(-lam) * (lam**k) / math.factorial(min(k, 170))
 
-    def _build_matrix(self, lam_h: float, lam_a: float, max_g: int) -> list[list[float]]:
+    def _build_matrix(
+        self, lam_h: float, lam_a: float, max_g: int
+    ) -> list[list[float]]:
         raw = []
         for hg in range(max_g + 1):
             row = []

@@ -331,9 +331,7 @@ class LeaguePredictabilityAnalyser:
                 actual_winner = (
                     "home"
                     if outcome == "home_win"
-                    else "away"
-                    if outcome == "away_win"
-                    else "draw"
+                    else "away" if outcome == "away_win" else "draw"
                 )
                 if actual_winner != "draw" and actual_winner != implied_fav:
                     upsets += 1
@@ -552,7 +550,9 @@ class LeaguePredictability:
         try:
             import pandas as pd
         except ImportError as exc:
-            raise ImportError("pandas is required for LeaguePredictability.score()") from exc
+            raise ImportError(
+                "pandas is required for LeaguePredictability.score()"
+            ) from exc
 
         records = []
         for row in df.itertuples(index=False):

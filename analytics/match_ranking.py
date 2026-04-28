@@ -171,10 +171,10 @@ class MatchRanking:
             "tiers": tier_counts,
             "ev_mean": round(float(df["ev"].mean()), 5) if "ev" in df.columns else 0.0,
             "ev_max": round(float(df["ev"].max()), 5) if "ev" in df.columns else 0.0,
-            "kelly_mean": round(float(df["kelly"].mean()), 5)
-            if "kelly" in df.columns
-            else 0.0,
-            "sharpe_mean": round(float(df["sharpe"].mean()), 4)
-            if "sharpe" in df.columns
-            else 0.0,
+            "kelly_mean": (
+                round(float(df["kelly"].mean()), 5) if "kelly" in df.columns else 0.0
+            ),
+            "sharpe_mean": (
+                round(float(df["sharpe"].mean()), 4) if "sharpe" in df.columns else 0.0
+            ),
         }

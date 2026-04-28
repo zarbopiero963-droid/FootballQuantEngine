@@ -8,6 +8,7 @@ Resolution order:
   2. Local DB  (fixtures table — populated after first bootstrap)
   3. API call  (last resort, requires API key)
 """
+
 from __future__ import annotations
 
 import logging
@@ -20,16 +21,16 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 _STATIC: dict[int, str] = {
     # UEFA
-    2:   "UEFA Champions League",
-    3:   "UEFA Europa League",
+    2: "UEFA Champions League",
+    3: "UEFA Europa League",
     848: "UEFA Europa Conference League",
     # England
-    39:  "Premier League",
-    40:  "Championship",
-    41:  "League One",
-    42:  "League Two",
-    45:  "FA Cup",
-    48:  "Carabao Cup",
+    39: "Premier League",
+    40: "Championship",
+    41: "League One",
+    42: "League Two",
+    45: "FA Cup",
+    48: "Carabao Cup",
     # Italy
     135: "Serie A",
     136: "Serie B",
@@ -39,20 +40,20 @@ _STATIC: dict[int, str] = {
     141: "La Liga 2",
     143: "Copa del Rey",
     # Germany
-    78:  "Bundesliga",
-    79:  "2. Bundesliga",
-    81:  "DFB Pokal",
+    78: "Bundesliga",
+    79: "2. Bundesliga",
+    81: "DFB Pokal",
     # France
-    61:  "Ligue 1",
-    62:  "Ligue 2",
-    66:  "Coupe de France",
+    61: "Ligue 1",
+    62: "Ligue 2",
+    66: "Coupe de France",
     # Netherlands
-    88:  "Eredivisie",
-    89:  "Eerste Divisie",
+    88: "Eredivisie",
+    89: "Eerste Divisie",
     # Portugal
-    94:  "Primeira Liga",
-    95:  "Liga Portugal 2",
-    96:  "Taca de Portugal",
+    94: "Primeira Liga",
+    95: "Liga Portugal 2",
+    96: "Taca de Portugal",
     # Belgium
     144: "Pro League",
     145: "Eerste Klasse B",
@@ -62,8 +63,8 @@ _STATIC: dict[int, str] = {
     # Russia
     235: "Premier League Russia",
     # Brazil
-    71:  "Serie A Brazil",
-    72:  "Serie B Brazil",
+    71: "Serie A Brazil",
+    72: "Serie B Brazil",
     # Argentina
     128: "Liga Profesional",
     # Mexico
@@ -95,7 +96,7 @@ _STATIC: dict[int, str] = {
     # Serbia
     286: "Super Liga Serbia",
     # Japan
-    98:  "J1 League",
+    98: "J1 League",
     # South Korea
     292: "K League 1",
     # China
@@ -164,6 +165,7 @@ def _from_db(league_id: int, db_name: str) -> str:
 def _from_api(league_id: int, api_key: str) -> str:
     try:
         import requests
+
         resp = requests.get(
             "https://v3.football.api-sports.io/leagues",
             headers={"x-apisports-key": api_key},

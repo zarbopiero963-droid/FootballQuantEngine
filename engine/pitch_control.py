@@ -56,17 +56,17 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-_PITCH_LENGTH = 105.0   # metres (x axis: 0 = own goal line, 105 = opp goal line)
-_PITCH_WIDTH = 68.0     # metres (y axis)
+_PITCH_LENGTH = 105.0  # metres (x axis: 0 = own goal line, 105 = opp goal line)
+_PITCH_WIDTH = 68.0  # metres (y axis)
 
-_REACTION_TIME = 0.7    # seconds — player reaction before accelerating
-_SIGMA_T = 0.45         # seconds — Gaussian kernel spread on time
+_REACTION_TIME = 0.7  # seconds — player reaction before accelerating
+_SIGMA_T = 0.45  # seconds — Gaussian kernel spread on time
 _DEFAULT_MAX_SPEED = 8.0  # m/s typical sprint speed
 _EPSILON = 1e-9
 
 # Final-third boundaries
-_HOME_FINAL_THIRD_MIN_X = 70.0   # home team attacks toward x=105
-_AWAY_FINAL_THIRD_MAX_X = 35.0   # away team attacks toward x=0
+_HOME_FINAL_THIRD_MIN_X = 70.0  # home team attacks toward x=105
+_AWAY_FINAL_THIRD_MAX_X = 35.0  # away team attacks toward x=0
 
 
 # ---------------------------------------------------------------------------
@@ -79,11 +79,11 @@ class PlayerState:
     """Instantaneous kinematic state of one player."""
 
     player_id: str
-    team: str           # "home" | "away"
-    x: float            # metres along pitch (0–105)
-    y: float            # metres across pitch (0–68)
-    vx: float = 0.0     # velocity component in x (m/s)
-    vy: float = 0.0     # velocity component in y (m/s)
+    team: str  # "home" | "away"
+    x: float  # metres along pitch (0–105)
+    y: float  # metres across pitch (0–68)
+    vx: float = 0.0  # velocity component in x (m/s)
+    vy: float = 0.0  # velocity component in y (m/s)
     max_speed: float = _DEFAULT_MAX_SPEED  # sprint speed (m/s)
 
 
@@ -109,19 +109,19 @@ class PitchControlResult:
     home_control: List[List[float]] = field(default_factory=list)
     # [row][col] = 1 - home_control[row][col]
     away_control: List[List[float]] = field(default_factory=list)
-    home_territory_pct: float = 0.0   # fraction of cells where home_control > 0.5
+    home_territory_pct: float = 0.0  # fraction of cells where home_control > 0.5
     away_territory_pct: float = 0.0
-    dangerous_home_pct: float = 0.0   # home-controlled cells in home final third
-    dangerous_away_pct: float = 0.0   # away-controlled cells in away final third
+    dangerous_home_pct: float = 0.0  # home-controlled cells in home final third
+    dangerous_away_pct: float = 0.0  # away-controlled cells in away final third
 
 
 @dataclass
 class DangerousControlSummary:
     """xT-weighted pitch control per team."""
 
-    home_xt_control: float   # sum(pc_home × xt) over all cells
+    home_xt_control: float  # sum(pc_home × xt) over all cells
     away_xt_control: float
-    home_dominance: float    # (home - away) / (home + away + eps)
+    home_dominance: float  # (home - away) / (home + away + eps)
     interpretation: str
 
 
@@ -284,7 +284,9 @@ class PitchControlModel:
                     chars.append("A")
             lines.append("|" + "".join(chars) + "|")
         lines.append("+" + "-" * result.grid_cols + "+")
-        lines.append("Legend: H=home dominant  h=home lean  .=contested  a=away lean  A=away dominant")
+        lines.append(
+            "Legend: H=home dominant  h=home lean  .=contested  a=away lean  A=away dominant"
+        )
         return "\n".join(lines)
 
     # ------------------------------------------------------------------
@@ -315,18 +317,14 @@ class PitchControlModel:
     def _player_influence(self, player: PlayerState, tx: float, ty: float) -> float:
         """Gaussian influence of one player at target point (tx, ty)."""
         t_intercept = self._time_to_intercept(player, tx, ty)
-        return math.exp(-(t_intercept ** 2) / self._two_sigma_sq)
+        return math.exp(-(t_intercept**2) / self._two_sigma_sq)
 
     def _cell_control(
         self, frame: PitchControlFrame, tx: float, ty: float
     ) -> Tuple[float, float]:
         """Return (pc_home, pc_away) for target point (tx, ty)."""
-        home_inf = sum(
-            self._player_influence(p, tx, ty) for p in frame.home_players
-        )
-        away_inf = sum(
-            self._player_influence(p, tx, ty) for p in frame.away_players
-        )
+        home_inf = sum(self._player_influence(p, tx, ty) for p in frame.home_players)
+        away_inf = sum(self._player_influence(p, tx, ty) for p in frame.away_players)
         total = home_inf + away_inf + _EPSILON
         return home_inf / total, away_inf / total
 
@@ -337,18 +335,222 @@ class PitchControlModel:
 
 # Default xT grid from expected_threat.py (12 rows × 16 cols, home attacking left→right)
 _DEFAULT_XT_GRID: List[List[float]] = [
-    [0.001, 0.002, 0.003, 0.004, 0.005, 0.007, 0.010, 0.014, 0.020, 0.030, 0.050, 0.080, 0.120, 0.180, 0.260, 0.340],
-    [0.001, 0.002, 0.004, 0.005, 0.007, 0.010, 0.014, 0.019, 0.028, 0.042, 0.068, 0.105, 0.155, 0.220, 0.300, 0.380],
-    [0.002, 0.003, 0.005, 0.007, 0.010, 0.014, 0.019, 0.027, 0.039, 0.058, 0.090, 0.135, 0.190, 0.260, 0.340, 0.430],
-    [0.002, 0.004, 0.006, 0.009, 0.013, 0.018, 0.025, 0.035, 0.050, 0.075, 0.115, 0.165, 0.230, 0.310, 0.400, 0.490],
-    [0.003, 0.005, 0.008, 0.011, 0.016, 0.022, 0.031, 0.043, 0.062, 0.093, 0.140, 0.200, 0.275, 0.365, 0.460, 0.550],
-    [0.003, 0.006, 0.009, 0.013, 0.019, 0.026, 0.037, 0.052, 0.074, 0.110, 0.165, 0.235, 0.320, 0.420, 0.520, 0.610],
-    [0.003, 0.006, 0.009, 0.013, 0.019, 0.026, 0.037, 0.052, 0.074, 0.110, 0.165, 0.235, 0.320, 0.420, 0.520, 0.610],
-    [0.003, 0.005, 0.008, 0.011, 0.016, 0.022, 0.031, 0.043, 0.062, 0.093, 0.140, 0.200, 0.275, 0.365, 0.460, 0.550],
-    [0.002, 0.004, 0.006, 0.009, 0.013, 0.018, 0.025, 0.035, 0.050, 0.075, 0.115, 0.165, 0.230, 0.310, 0.400, 0.490],
-    [0.002, 0.003, 0.005, 0.007, 0.010, 0.014, 0.019, 0.027, 0.039, 0.058, 0.090, 0.135, 0.190, 0.260, 0.340, 0.430],
-    [0.001, 0.002, 0.004, 0.005, 0.007, 0.010, 0.014, 0.019, 0.028, 0.042, 0.068, 0.105, 0.155, 0.220, 0.300, 0.380],
-    [0.001, 0.002, 0.003, 0.004, 0.005, 0.007, 0.010, 0.014, 0.020, 0.030, 0.050, 0.080, 0.120, 0.180, 0.260, 0.340],
+    [
+        0.001,
+        0.002,
+        0.003,
+        0.004,
+        0.005,
+        0.007,
+        0.010,
+        0.014,
+        0.020,
+        0.030,
+        0.050,
+        0.080,
+        0.120,
+        0.180,
+        0.260,
+        0.340,
+    ],
+    [
+        0.001,
+        0.002,
+        0.004,
+        0.005,
+        0.007,
+        0.010,
+        0.014,
+        0.019,
+        0.028,
+        0.042,
+        0.068,
+        0.105,
+        0.155,
+        0.220,
+        0.300,
+        0.380,
+    ],
+    [
+        0.002,
+        0.003,
+        0.005,
+        0.007,
+        0.010,
+        0.014,
+        0.019,
+        0.027,
+        0.039,
+        0.058,
+        0.090,
+        0.135,
+        0.190,
+        0.260,
+        0.340,
+        0.430,
+    ],
+    [
+        0.002,
+        0.004,
+        0.006,
+        0.009,
+        0.013,
+        0.018,
+        0.025,
+        0.035,
+        0.050,
+        0.075,
+        0.115,
+        0.165,
+        0.230,
+        0.310,
+        0.400,
+        0.490,
+    ],
+    [
+        0.003,
+        0.005,
+        0.008,
+        0.011,
+        0.016,
+        0.022,
+        0.031,
+        0.043,
+        0.062,
+        0.093,
+        0.140,
+        0.200,
+        0.275,
+        0.365,
+        0.460,
+        0.550,
+    ],
+    [
+        0.003,
+        0.006,
+        0.009,
+        0.013,
+        0.019,
+        0.026,
+        0.037,
+        0.052,
+        0.074,
+        0.110,
+        0.165,
+        0.235,
+        0.320,
+        0.420,
+        0.520,
+        0.610,
+    ],
+    [
+        0.003,
+        0.006,
+        0.009,
+        0.013,
+        0.019,
+        0.026,
+        0.037,
+        0.052,
+        0.074,
+        0.110,
+        0.165,
+        0.235,
+        0.320,
+        0.420,
+        0.520,
+        0.610,
+    ],
+    [
+        0.003,
+        0.005,
+        0.008,
+        0.011,
+        0.016,
+        0.022,
+        0.031,
+        0.043,
+        0.062,
+        0.093,
+        0.140,
+        0.200,
+        0.275,
+        0.365,
+        0.460,
+        0.550,
+    ],
+    [
+        0.002,
+        0.004,
+        0.006,
+        0.009,
+        0.013,
+        0.018,
+        0.025,
+        0.035,
+        0.050,
+        0.075,
+        0.115,
+        0.165,
+        0.230,
+        0.310,
+        0.400,
+        0.490,
+    ],
+    [
+        0.002,
+        0.003,
+        0.005,
+        0.007,
+        0.010,
+        0.014,
+        0.019,
+        0.027,
+        0.039,
+        0.058,
+        0.090,
+        0.135,
+        0.190,
+        0.260,
+        0.340,
+        0.430,
+    ],
+    [
+        0.001,
+        0.002,
+        0.004,
+        0.005,
+        0.007,
+        0.010,
+        0.014,
+        0.019,
+        0.028,
+        0.042,
+        0.068,
+        0.105,
+        0.155,
+        0.220,
+        0.300,
+        0.380,
+    ],
+    [
+        0.001,
+        0.002,
+        0.003,
+        0.004,
+        0.005,
+        0.007,
+        0.010,
+        0.014,
+        0.020,
+        0.030,
+        0.050,
+        0.080,
+        0.120,
+        0.180,
+        0.260,
+        0.340,
+    ],
 ]
 # _DEFAULT_XT_GRID[row][col]: row 0=bottom, row 11=top; col 0=own goal, col 15=opp goal
 
@@ -384,8 +586,10 @@ class DangerousControlMap:
                 )
                 # Away team attacks in the opposite direction: mirror the x-axis
                 xt_away = self._interpolate_xt(
-                    pc_result.grid_cols - 1 - col, row,
-                    pc_result.grid_cols, pc_result.grid_rows,
+                    pc_result.grid_cols - 1 - col,
+                    row,
+                    pc_result.grid_cols,
+                    pc_result.grid_rows,
                 )
                 pc_h = pc_result.home_control[row][col]
                 pc_a = pc_result.away_control[row][col]

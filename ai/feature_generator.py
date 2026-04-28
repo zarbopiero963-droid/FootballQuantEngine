@@ -468,9 +468,11 @@ class FeatureGenerator:
             self._h2h.record(
                 home,
                 away,
-                "A"
-                if outcome == "home_win"
-                else ("B" if outcome == "away_win" else "D"),
+                (
+                    "A"
+                    if outcome == "home_win"
+                    else ("B" if outcome == "away_win" else "D")
+                ),
                 int(hg),
                 int(ag),
             )

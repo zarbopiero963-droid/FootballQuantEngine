@@ -27,7 +27,9 @@ class MonteCarloSimulator:
     # Original — raw Poisson sampling (kept for backward compatibility)
     # ------------------------------------------------------------------
 
-    def simulate(self, lambda_home: float, lambda_away: float, simulations: int = 20000) -> dict:
+    def simulate(
+        self, lambda_home: float, lambda_away: float, simulations: int = 20000
+    ) -> dict:
         home_goals = np.random.poisson(lambda_home, simulations)
         away_goals = np.random.poisson(lambda_away, simulations)
         return {
@@ -59,6 +61,7 @@ class MonteCarloSimulator:
         # Poisson ppf via scipy if available, else numpy searchsorted fallback
         try:
             from scipy.stats import poisson as _poisson
+
             h1 = _poisson.ppf(u_h, lambda_home).astype(int)
             h2 = _poisson.ppf(1 - u_h, lambda_home).astype(int)
             a1 = _poisson.ppf(u_a, lambda_away).astype(int)
@@ -106,11 +109,11 @@ class MonteCarloSimulator:
         home_win = draw = away_win = 0.0
 
         for hg in range(max_goals + 1):
-            p_h = math.exp(-lh) * (lh ** hg) / math.factorial(hg)
+            p_h = math.exp(-lh) * (lh**hg) / math.factorial(hg)
             if p_h < 1e-12:
                 break
             for ag in range(max_goals + 1):
-                p_a = math.exp(-la) * (la ** ag) / math.factorial(ag)
+                p_a = math.exp(-la) * (la**ag) / math.factorial(ag)
                 if p_a < 1e-12:
                     break
                 p = p_h * p_a
@@ -144,11 +147,11 @@ class MonteCarloSimulator:
         over = under = btts_yes = btts_no = 0.0
 
         for hg in range(max_goals + 1):
-            p_h = math.exp(-lh) * (lh ** hg) / math.factorial(hg)
+            p_h = math.exp(-lh) * (lh**hg) / math.factorial(hg)
             if p_h < 1e-12:
                 break
             for ag in range(max_goals + 1):
-                p_a = math.exp(-la) * (la ** ag) / math.factorial(ag)
+                p_a = math.exp(-la) * (la**ag) / math.factorial(ag)
                 if p_a < 1e-12:
                     break
                 p = p_h * p_a
@@ -175,9 +178,11 @@ class MonteCarloSimulator:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _ppf_numpy(u: np.ndarray, lam: float, max_g: int) -> np.ndarray:
     """Poisson inverse CDF via cumulative PMF table + searchsorted."""
-    pmf = np.array([math.exp(-lam) * (lam ** k) / math.factorial(k)
-                    for k in range(max_g + 1)])
+    pmf = np.array(
+        [math.exp(-lam) * (lam**k) / math.factorial(k) for k in range(max_g + 1)]
+    )
     cdf = np.cumsum(pmf)
     return np.searchsorted(cdf, u, side="left").astype(int)

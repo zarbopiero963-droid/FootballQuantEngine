@@ -21,37 +21,72 @@ class TestBetProposalValidation:
 
     def test_prob_zero_raises_value_error(self):
         with pytest.raises(ValueError, match="model_prob"):
-            BetProposal(bet_id="b1", description="X", odds=2.0,
-                        model_prob=0.0, correlation_group="g1")
+            BetProposal(
+                bet_id="b1",
+                description="X",
+                odds=2.0,
+                model_prob=0.0,
+                correlation_group="g1",
+            )
 
     def test_prob_one_raises_value_error(self):
         with pytest.raises(ValueError, match="model_prob"):
-            BetProposal(bet_id="b1", description="X", odds=2.0,
-                        model_prob=1.0, correlation_group="g1")
+            BetProposal(
+                bet_id="b1",
+                description="X",
+                odds=2.0,
+                model_prob=1.0,
+                correlation_group="g1",
+            )
 
     def test_prob_negative_raises_value_error(self):
         with pytest.raises(ValueError, match="model_prob"):
-            BetProposal(bet_id="b1", description="X", odds=2.0,
-                        model_prob=-0.1, correlation_group="g1")
+            BetProposal(
+                bet_id="b1",
+                description="X",
+                odds=2.0,
+                model_prob=-0.1,
+                correlation_group="g1",
+            )
 
     def test_prob_above_one_raises_value_error(self):
         with pytest.raises(ValueError, match="model_prob"):
-            BetProposal(bet_id="b1", description="X", odds=2.0,
-                        model_prob=1.01, correlation_group="g1")
+            BetProposal(
+                bet_id="b1",
+                description="X",
+                odds=2.0,
+                model_prob=1.01,
+                correlation_group="g1",
+            )
 
     def test_odds_one_raises_value_error(self):
         with pytest.raises(ValueError, match="odds"):
-            BetProposal(bet_id="b1", description="X", odds=1.0,
-                        model_prob=0.5, correlation_group="g1")
+            BetProposal(
+                bet_id="b1",
+                description="X",
+                odds=1.0,
+                model_prob=0.5,
+                correlation_group="g1",
+            )
 
     def test_odds_below_one_raises_value_error(self):
         with pytest.raises(ValueError, match="odds"):
-            BetProposal(bet_id="b1", description="X", odds=0.5,
-                        model_prob=0.5, correlation_group="g1")
+            BetProposal(
+                bet_id="b1",
+                description="X",
+                odds=0.5,
+                model_prob=0.5,
+                correlation_group="g1",
+            )
 
     def test_valid_proposal_does_not_raise(self):
-        p = BetProposal(bet_id="b1", description="X", odds=2.0,
-                        model_prob=0.5, correlation_group="g1")
+        p = BetProposal(
+            bet_id="b1",
+            description="X",
+            odds=2.0,
+            model_prob=0.5,
+            correlation_group="g1",
+        )
         assert p.expected_return == pytest.approx(0.0, abs=0.001)
 
 
@@ -189,7 +224,7 @@ class TestCorrelatedParlayEngine:
         engine = CorrelatedParlayEngine(1.5, 1.2)
         events = [
             SingleEvent("Home Win", "1x2_home", 0.0, 1.9, 0.55),
-            SingleEvent("O2.5",     "over_goals", 2.5, 1.8, 0.52),
+            SingleEvent("O2.5", "over_goals", 2.5, 1.8, 0.52),
         ]
         with pytest.raises(ValueError, match="min_legs"):
             engine.find_value_parlays(events, min_legs=1)
@@ -198,7 +233,7 @@ class TestCorrelatedParlayEngine:
         engine = CorrelatedParlayEngine(1.5, 1.2)
         events = [
             SingleEvent("Home Win", "1x2_home", 0.0, 1.9, 0.55),
-            SingleEvent("O2.5",     "over_goals", 2.5, 1.8, 0.52),
+            SingleEvent("O2.5", "over_goals", 2.5, 1.8, 0.52),
         ]
         with pytest.raises(ValueError, match="max_legs"):
             engine.find_value_parlays(events, min_legs=3, max_legs=2)
@@ -243,9 +278,11 @@ class TestCalibrationBoundaries:
 
     def test_calibrate_three_way_zero_input_returns_uniform(self):
         cal = ProbabilityCalibration()
-        result = cal.calibrate_three_way({"home_win": 0.0, "draw": 0.0, "away_win": 0.0})
+        result = cal.calibrate_three_way(
+            {"home_win": 0.0, "draw": 0.0, "away_win": 0.0}
+        )
         for v in result.values():
-            assert v == pytest.approx(1/3, abs=1e-9)
+            assert v == pytest.approx(1 / 3, abs=1e-9)
 
     def test_calibrate_three_way_sums_to_one(self):
         cal = ProbabilityCalibration()
@@ -275,14 +312,20 @@ class TestPoissonEngineEdges:
 
     def test_score_matrix_shape(self):
         engine = PoissonEngine(max_goals=4)
-        engine.fit([{"home_team":"A","away_team":"B","home_goals":2,"away_goals":1}] * 10)
+        engine.fit(
+            [{"home_team": "A", "away_team": "B", "home_goals": 2, "away_goals": 1}]
+            * 10
+        )
         m = engine.score_matrix("A", "B")
-        assert len(m) == 5       # 0..4
+        assert len(m) == 5  # 0..4
         assert len(m[0]) == 5
 
     def test_score_matrix_sums_near_one(self):
         engine = PoissonEngine(max_goals=6)
-        engine.fit([{"home_team":"A","away_team":"B","home_goals":1,"away_goals":1}] * 10)
+        engine.fit(
+            [{"home_team": "A", "away_team": "B", "home_goals": 1, "away_goals": 1}]
+            * 10
+        )
         m = engine.score_matrix("A", "B")
         total = sum(p for row in m for p in row)
         assert total == pytest.approx(1.0, abs=0.01)
@@ -307,13 +350,14 @@ class TestPoissonEngineEdges:
 # ---------------------------------------------------------------------------
 
 
-
 class TestDbManagerConnect:
 
     def test_connect_returns_connection(self, tmp_path, monkeypatch):
         from config import constants
+
         monkeypatch.setattr(constants, "DATABASE_NAME", str(tmp_path / "test.db"))
         import database.db_manager as dbm
+
         monkeypatch.setattr(dbm, "DATABASE_NAME", str(tmp_path / "test.db"))
         conn = dbm.connect()
         assert conn is not None

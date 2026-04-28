@@ -44,6 +44,11 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      - name: Security audit (pip-audit)
+        run: |
+          pip install pip-audit
+          pip-audit
+
       - name: Install UPX
         run: |
           choco install upx --no-progress -y
@@ -63,8 +68,8 @@ jobs:
 
       - name: Type-check (mypy)
         run: |
-          pip install mypy
-          mypy config/ quant/models/ quant/services/ ranking/ database/ notifications/ --ignore-missing-imports || true
+          pip install mypy types-requests
+          mypy config/ quant/models/ quant/services/ ranking/ database/ notifications/ --ignore-missing-imports --explicit-package-bases --follow-imports=silent
 
       - name: Run unit tests
         run: |

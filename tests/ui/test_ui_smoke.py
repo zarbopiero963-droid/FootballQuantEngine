@@ -116,12 +116,12 @@ def test_save_settings_writes_only_non_secrets(tmp_path, monkeypatch):
         assert "api_football_key" not in data, "env-backed secret must not be written"
 
 
-def test_save_settings_preserves_existing_file_credentials(tmp_path, monkeypatch):
-    """save_settings() keeps credentials already on disk when no env var overrides."""
+def test_save_settings_never_writes_credentials(tmp_path, monkeypatch):
+    """save_settings() must NEVER write credentials to disk — security policy."""
     import json
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("API_FOOTBALL_KEY", raising=False)
-    # Pre-seed the file with a credential
+    # Pre-seed the file with a credential (simulating a legacy settings.json)
     (tmp_path / "settings.json").write_text(
         json.dumps({"league_id": 135, "season": 2024, "api_football_key": "file_key"})
     )
@@ -129,7 +129,10 @@ def test_save_settings_preserves_existing_file_credentials(tmp_path, monkeypatch
     s = load_settings()
     save_settings(s)
     data = json.loads((tmp_path / "settings.json").read_text())
-    assert data.get("api_football_key") == "file_key"
+    # Credentials must NOT be written back regardless of whether env var is set
+    assert "api_football_key" not in data, (
+        "save_settings() must never persist credentials to disk"
+    )
 
 
 # ---------------------------------------------------------------------------

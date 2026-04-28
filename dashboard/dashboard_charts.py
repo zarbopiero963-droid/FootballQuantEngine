@@ -5,7 +5,7 @@ No matplotlib — pure SVG generated as strings, embedded in QTextBrowser.
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QSizePolicy, QTableWidget, QTableWidgetItem

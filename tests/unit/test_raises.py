@@ -150,7 +150,7 @@ class TestLuckIndex:
 # engine/correlated_parlay.py
 # ---------------------------------------------------------------------------
 
-from engine.correlated_parlay import CorrelatedParlayEngine, SingleEvent, build_same_game_parlay
+from engine.correlated_parlay import CorrelatedParlayEngine, SingleEvent
 
 
 class TestCorrelatedParlayEngine:
@@ -306,13 +306,11 @@ class TestPoissonEngineEdges:
 # database/db_manager — missing schema path guard
 # ---------------------------------------------------------------------------
 
-from database.db_manager import connect
 
 
 class TestDbManagerConnect:
 
     def test_connect_returns_connection(self, tmp_path, monkeypatch):
-        import sqlite3
         from config import constants
         monkeypatch.setattr(constants, "DATABASE_NAME", str(tmp_path / "test.db"))
         import database.db_manager as dbm
@@ -326,7 +324,7 @@ class TestDbManagerConnect:
 # ranking/match_ranker.py — division-by-zero guards
 # ---------------------------------------------------------------------------
 
-from ranking.match_ranker import kelly_fraction, expected_value
+from ranking.match_ranker import kelly_fraction
 
 
 class TestKellyFractionRaises:

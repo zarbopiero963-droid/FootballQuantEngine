@@ -12,7 +12,6 @@ with a note on how to run them locally:
 
 from __future__ import annotations
 
-import pytest
 
 
 # ---------------------------------------------------------------------------
@@ -29,12 +28,8 @@ def test_config_settings_manager_importable():
 def test_config_constants_importable():
     from config.constants import (
         DATABASE_NAME,
-        BASE_URL_API_FOOTBALL,
         EDGE_THRESHOLD,
         DEFAULT_LEAGUE_ID,
-        DEFAULT_SEASON,
-        XG_STRONG_THRESHOLD,
-        XG_WEAK_THRESHOLD,
     )
     assert isinstance(DATABASE_NAME, str)
     assert DATABASE_NAME.endswith(".db")
@@ -104,7 +99,7 @@ def test_load_settings_returns_defaults(tmp_path, monkeypatch):
 
 def test_save_settings_writes_only_non_secrets(tmp_path, monkeypatch):
     """save_settings() must not write api_football_key when set via env var."""
-    import json, os
+    import json
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("API_FOOTBALL_KEY", "env_key_should_not_be_written")
     from config.settings_manager import load_settings, save_settings

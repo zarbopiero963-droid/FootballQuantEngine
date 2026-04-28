@@ -28,7 +28,6 @@ from engine.bayesian_math import (
 from engine.bayesian_runner import run_bayesian_live
 from engine.bayesian_types import (
     _EVENT_DELTA_ALPHA,
-    _MAX_GOALS,
     _MIN_ALPHA,
     BayesianAlert,
     BayesianState,

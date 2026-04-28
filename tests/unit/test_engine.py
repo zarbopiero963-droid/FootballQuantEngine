@@ -5,7 +5,6 @@ portfolio optimization, PSD regularisation.
 
 from __future__ import annotations
 
-import math
 import pytest
 
 from engine.markowitz_optimizer import (

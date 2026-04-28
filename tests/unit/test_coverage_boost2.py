@@ -256,19 +256,20 @@ class TestBacktestEngine:
 
     def test_load_predictions_empty_db_returns_empty(self, engine, in_memory_conn):
         from unittest.mock import patch
+        pytest.importorskip("pandas")
         with patch("training.backtest_engine.connect", return_value=in_memory_conn):
             result = engine.load_predictions_with_results()
-        pd = pytest.importorskip("pandas")
         assert hasattr(result, "empty") and result.empty
 
     def test_run_empty_db_returns_empty(self, engine, in_memory_conn):
         from unittest.mock import patch
+        pytest.importorskip("pandas")
         with patch("training.backtest_engine.connect", return_value=in_memory_conn):
             result = engine.run()
-        pd = pytest.importorskip("pandas")
         assert hasattr(result, "empty") and result.empty
 
     def test_load_with_predictions_returns_dataframe(self, engine, in_memory_conn):
+        pytest.importorskip("pandas")
         in_memory_conn.executescript("""
             INSERT INTO fixtures VALUES
                 ('f1','Juve','Inter',2,1,'2024-01-01','FT',135,'SerieA',2024);
@@ -278,7 +279,6 @@ class TestBacktestEngine:
         from unittest.mock import patch
         with patch("training.backtest_engine.connect", return_value=in_memory_conn):
             result = engine.load_predictions_with_results()
-        pd = pytest.importorskip("pandas")
         assert len(result) == 1
         assert "actual_home_win" in result.columns
 

@@ -5,9 +5,7 @@ and strategies.value_bet_strategy.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
 
-import pytest
 
 from strategies.edge_detector import EdgeDetector
 from strategies.no_bet_filter import NoBetFilter

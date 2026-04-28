@@ -304,7 +304,6 @@ class TestMultiMarketEngine:
         engine = MultiMarketEngine()
         # Need enough matches for PoissonEngine to produce usable lambdas
         matches = []
-        teams = ["Juventus", "Inter", "AC Milan", "Roma", "Napoli", "Lazio"]
         for i, (h, a) in enumerate(
             [("Juventus","Inter"),("AC Milan","Roma"),("Napoli","Lazio"),
              ("Inter","Napoli"),("Roma","Juventus"),("Lazio","AC Milan"),

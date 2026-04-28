@@ -8,7 +8,7 @@ run_bayesian_live() is re-exported from engine.bayesian_live for backward compat
 from __future__ import annotations
 
 import time
-from typing import Dict, List, Tuple
+from typing import List, Tuple
 
 from engine.bayesian_types import BayesianState, LiveEvent, PreMatchPrior
 

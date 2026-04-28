@@ -536,7 +536,7 @@ class LeaguePredictability:
     def __init__(self, **kwargs) -> None:
         self._analyser = LeaguePredictabilityAnalyser(**kwargs)
 
-    def score(self, df) -> "pd.DataFrame":  # type: ignore[name-defined]
+    def score(self, df) -> "pd.DataFrame":  # type: ignore[name-defined]  # noqa: F821
         """
         Score each league in *df* and return a tidy summary DataFrame.
 

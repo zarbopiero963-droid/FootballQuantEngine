@@ -9,7 +9,6 @@ ELO expected-score prediction vs. the actual match result.
 
 from __future__ import annotations
 
-import copy
 import logging
 from typing import Optional
 

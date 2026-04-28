@@ -13,7 +13,7 @@ from pathlib import Path
 def _read_csv(path: str):
     """Read a CSV file, skipping # comment lines."""
     with open(path, encoding="utf-8-sig") as f:
-        lines = [l for l in f if not l.startswith("#")]
+        lines = [line for line in f if not line.startswith("#")]
     return list(csv.DictReader(io.StringIO("".join(lines))))
 
 import pytest

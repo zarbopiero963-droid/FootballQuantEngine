@@ -8,7 +8,7 @@ if str(ROOT_DIR) not in sys.path:
 
 import pytest
 import sqlite3
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 SCHEMA_PATH = ROOT_DIR / "database" / "schema.sql"
 

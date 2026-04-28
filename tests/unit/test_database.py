@@ -86,8 +86,6 @@ def test_get_db_commits_on_success(monkeypatch):
 
     monkeypatch.setattr(dm, "DATABASE_NAME", shared_uri)
     # connect() must use uri=True for shared-cache URIs.
-    original_connect = dm.connect
-
     def _uri_connect():
         return sqlite3.connect(dm.DATABASE_NAME, uri=True)
 

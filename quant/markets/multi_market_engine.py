@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any
 
 from quant.models.corners_model import CornersModel
 from quant.models.correct_score_model import CorrectScoreModel

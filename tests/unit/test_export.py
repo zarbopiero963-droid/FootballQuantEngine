@@ -102,7 +102,7 @@ def test_csv_export_bets_only_has_bet_rows(tmp_path):
 
     with open(path, newline="", encoding="utf-8-sig") as f:
         # Skip comment lines
-        lines = [l for l in f if not l.startswith("#")]
+        lines = [line for line in f if not line.startswith("#")]
 
     reader = csv.DictReader(lines)
     rows = list(reader)

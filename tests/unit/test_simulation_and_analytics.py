@@ -5,7 +5,6 @@ analytics/market_inefficiency_scanner.py — coverage targets.
 
 from __future__ import annotations
 
-import math
 import time
 
 import pytest

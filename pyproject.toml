@@ -6,4 +6,7 @@ profile = "black"
 
 [tool.ruff]
 line-length = 88
-fix = true 
+fix = true
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["E402"]

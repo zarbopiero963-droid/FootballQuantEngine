@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _dict_factory(cursor, row) -> Dict[str, Any]:
+def _dict_factory(cursor: Any, row: Any) -> Dict[str, Any]:
     return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
 
 

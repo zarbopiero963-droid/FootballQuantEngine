@@ -51,7 +51,7 @@ class CorrectScoreModel:
                     "fair_odds":   round(1.0 / prob, 2) if prob > 0 else 999.0,
                 })
 
-        scores.sort(key=lambda x: x["probability"], reverse=True)
+        scores.sort(key=lambda x: x["probability"], reverse=True)  # type: ignore[arg-type,return-value]
         return scores[:top_n]
 
     def top_scores_dict(

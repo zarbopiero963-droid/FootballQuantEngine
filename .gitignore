@@ -3,6 +3,12 @@ __pycache__/
 *.pyo
 *.pyd
 
+# pytest / coverage artefacts
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+
 dist/
 build/
 *.egg-info/

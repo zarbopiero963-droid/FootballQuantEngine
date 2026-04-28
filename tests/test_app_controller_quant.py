@@ -14,8 +14,7 @@ def test_app_controller_quant_flow(mock_api_client, tmp_path):
         patch("app.controller.init_db"),
     ):
         controller = AppController(output_dir=str(tmp_path))
-
-    results = controller.run_predictions()
+        results = controller.run_predictions()
 
     assert isinstance(results, list)
     assert len(results) > 0

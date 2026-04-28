@@ -386,7 +386,12 @@ class TestOfflineController:
         result = ctrl.import_csv_data()
         assert result == {}
 
-    def test_run_reports_returns_truthy(self):
+    def test_run_reports_delegates_without_ranked_df(self):
+        from unittest.mock import MagicMock, patch
         ctrl = OfflineController()
-        result = ctrl.run_reports()
-        assert result is not None
+        mock_engine = MagicMock()
+        mock_engine.run_reports.return_value = True
+        with patch.object(ctrl, "engine", mock_engine):
+            result = ctrl.run_reports()
+        mock_engine.run_reports.assert_called_once_with()
+        assert result is True

@@ -37,14 +37,10 @@ jobs:
             ${{ runner.os }}-pip-
 
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pyinstaller
+        run: pip install -r requirements.txt pyinstaller pip-audit mypy types-requests
 
       - name: Security audit (pip-audit)
-        run: |
-          pip install pip-audit
-          pip-audit
+        run: pip-audit
 
       - name: Install UPX
         run: |
@@ -64,9 +60,7 @@ jobs:
           isort --check-only .
 
       - name: Type-check (mypy)
-        run: |
-          pip install mypy types-requests
-          mypy config/ quant/models/ quant/services/ ranking/ database/ notifications/ --ignore-missing-imports --explicit-package-bases --follow-imports=silent
+        run: mypy config/ quant/models/ quant/services/ ranking/ database/ notifications/
 
       - name: Run unit tests
         run: |

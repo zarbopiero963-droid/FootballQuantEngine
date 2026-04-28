@@ -6,8 +6,6 @@ name: CI
 
 on:
   push:
-    branches-ignore:
-      - main
   pull_request:
 
 jobs:
@@ -38,25 +36,19 @@ jobs:
             ${{ runner.os }}-pip-
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt pip-audit ruff black isort mypy types-requests
 
       - name: Security audit (pip-audit)
-        run: |
-          pip install pip-audit
-          pip-audit
+        run: pip-audit
 
       - name: Lint
         run: |
-          pip install ruff black isort
           ruff check .
           black --check .
           isort --check-only .
 
       - name: Type-check (mypy)
-        run: |
-          pip install mypy types-requests
-          mypy config/ quant/models/ quant/services/ ranking/ database/ notifications/ \
-            --ignore-missing-imports --explicit-package-bases --follow-imports=silent
+        run: mypy config/ quant/models/ quant/services/ ranking/ database/ notifications/
 
       - name: Run unit tests
         run: |

@@ -11,8 +11,7 @@ def test_app_quant_controller_runs(mock_api_client):
         return_value=mock_api_client,
     ):
         controller = AppQuantController()
-
-    results = controller.run_quant_cycle()
+        results = controller.run_quant_cycle()
 
     assert isinstance(results, list)
     assert len(results) > 0

@@ -11,8 +11,7 @@ def test_job_runner_returns_quant_results(mock_api_client):
         return_value=mock_api_client,
     ):
         runner = JobRunner()
-
-    results = runner.run_cycle()
+        results = runner.run_cycle()
 
     assert isinstance(results, list)
     assert len(results) > 0

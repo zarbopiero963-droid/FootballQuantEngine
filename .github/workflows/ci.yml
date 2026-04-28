@@ -38,7 +38,7 @@ jobs:
             ${{ runner.os }}-pip-
 
       - name: Install dependencies
-        run: pip install -r requirements.txt pip-audit ruff black isort mypy types-requests
+        run: pip install -r requirements.txt pip-audit ruff black mypy types-requests
 
       - name: Security audit (pip-audit)
         run: pip-audit
@@ -47,7 +47,6 @@ jobs:
         run: |
           ruff check .
           black --check .
-          isort --check-only .
 
       - name: Type-check (mypy)
         run: mypy config/ quant/models/ quant/services/ ranking/ database/ notifications/

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from quant.live.edge_stability_detector import EdgeStabilityDetector
 from quant.live.league_performance_analyzer import LeaguePerformanceAnalyzer
 from quant.live.market_optimizer import LeagueMarketPerformanceOptimizer
+
+from quant.live.edge_stability_detector import EdgeStabilityDetector
 
 
 class IntegratedAnalytics:

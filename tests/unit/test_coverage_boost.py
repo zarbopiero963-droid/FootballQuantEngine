@@ -23,11 +23,9 @@ from engine.correlated_parlay import (
     CorrelatedParlayEngine,
     SingleEvent,
     _build_score_matrix,
-)
-from engine.correlated_parlay import _poisson_pmf as parlay_pmf
-from engine.correlated_parlay import (
     build_same_game_parlay,
 )
+from engine.correlated_parlay import _poisson_pmf as parlay_pmf
 from engine.luck_index import LuckIndex, MatchRecord, compute_luck_report
 from engine.offline_controller import OfflineController
 from engine.sentiment_engine import SentimentEngine, SentimentScore, TextItem

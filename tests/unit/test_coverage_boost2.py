@@ -71,6 +71,8 @@ from engine.gaussian_copula import (
     CopulaCorrelation,
     CopulaResult,
     GaussianCopulaEngine,
+)
+from engine.copula_math import (
     _normal_cdf,
     _normal_pdf,
     _normal_ppf,

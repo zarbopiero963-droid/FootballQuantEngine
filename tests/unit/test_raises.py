@@ -70,7 +70,7 @@ class TestOptimisePortfolio:
 # engine/gaussian_copula.py
 # ---------------------------------------------------------------------------
 
-from engine.gaussian_copula import _normal_ppf, _cholesky
+from engine.copula_math import _normal_ppf, _cholesky
 
 
 class TestNormalPPF:

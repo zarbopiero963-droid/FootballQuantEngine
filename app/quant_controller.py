@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from quant.services.quant_job_runner import QuantJobRunner
 
 

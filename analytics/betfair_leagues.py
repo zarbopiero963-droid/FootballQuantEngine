@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 BETFAIR_EXCHANGE_ITALIA_LEAGUES = {
     "Serie A",
     "Serie B",

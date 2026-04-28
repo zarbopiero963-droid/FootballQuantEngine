@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 def map_odds_events_to_match_id(odds_events):
 
     odds_data = {}

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from quant.markets.market_expansion_runner import MarketExpansionRunner
 
 

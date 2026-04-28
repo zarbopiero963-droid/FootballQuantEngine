@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import pandas as pd
 
 
-def build_team_stats(fixtures_df):
+def build_team_stats(fixtures_df: pd.DataFrame) -> pd.DataFrame:
 
     if fixtures_df.empty:
         return pd.DataFrame()

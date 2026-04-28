@@ -1,6 +1,15 @@
+from __future__ import annotations
+
+
 class QuantConfidenceEngine:
 
-    def score(self, probability, edge, agreement, xg_support=0.0):
+    def score(
+        self,
+        probability: float,
+        edge: float,
+        agreement: float,
+        xg_support: float = 0.0,
+    ) -> float:
         probability = max(0.0, min(1.0, float(probability)))
         edge = max(0.0, float(edge))
         agreement = max(0.0, min(1.0, float(agreement)))

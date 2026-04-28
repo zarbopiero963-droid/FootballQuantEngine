@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from utils.dashboard_metrics_loader import compute_dashboard_metrics
 from utils.run_history_manager import RunHistoryManager
 

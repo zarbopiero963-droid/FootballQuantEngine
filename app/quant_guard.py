@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from quant.guard.quant_guard_runner import QuantGuardRunner
 
 

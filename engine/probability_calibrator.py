@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 class ProbabilityCalibrator:
 
     def __init__(self, shrink=0.12):

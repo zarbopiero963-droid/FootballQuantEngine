@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from config.constants import (
     XG_STRONG_THRESHOLD,
     XG_SUPPORT_AGAINST,

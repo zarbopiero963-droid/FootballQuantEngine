@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 class SampleAPIFootballClient:
     def get_completed_matches(self, league=None, season=None):
         return [

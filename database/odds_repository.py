@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime
 
 from database.db_manager import connect
@@ -5,7 +7,13 @@ from database.db_manager import connect
 
 class OddsRepository:
 
-    def save_odds(self, fixture_id, home_odds, draw_odds, away_odds):
+    def save_odds(
+        self,
+        fixture_id: int | str,
+        home_odds: float,
+        draw_odds: float,
+        away_odds: float,
+    ) -> None:
 
         conn = connect()
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from app.app_metadata import (
     APP_AUTHOR,
     APP_DESCRIPTION,

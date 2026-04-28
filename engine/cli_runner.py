@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from engine.job_runner import JobRunner
 
 

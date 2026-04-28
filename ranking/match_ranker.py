@@ -228,7 +228,7 @@ class MatchRanker:
         """
         try:
             prob = float(record.get("probability", 0.0))
-            odds = float(record.get("odds", 0.0))
+            odds = float(record.get("odds") or record.get("bookmaker_odds") or 0.0)
         except (TypeError, ValueError):
             return None
 

@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 class ManualBlendModel:
     """
     Weighted blend of multiple probability-space components.

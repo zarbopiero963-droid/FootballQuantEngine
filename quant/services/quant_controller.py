@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from quant.providers.api_football_provider import APIFootballProvider
 from quant.services.quant_engine import QuantEngine
 from quant.services.result_serializer import to_records

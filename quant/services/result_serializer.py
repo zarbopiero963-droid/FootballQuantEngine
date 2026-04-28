@@ -1,5 +1,10 @@
-def to_records(results):
-    records = []
+from __future__ import annotations
+
+from typing import Any
+
+
+def to_records(results: list[Any]) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
 
     for item in results:
         records.append(

@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 class FormEngine:
 
     def __init__(self, lookback=5):

@@ -1,10 +1,15 @@
+from __future__ import annotations
+
+from typing import Any
+
+
 class AgreementEngine:
 
-    def three_way_agreement(self, probs_list):
+    def three_way_agreement(self, probs_list: list[dict[str, Any]]) -> float:
         if not probs_list:
             return 0.0
 
-        def dispersion(values):
+        def dispersion(values: list[float]) -> float:
             if not values:
                 return 1.0
             mean_value = sum(values) / len(values)

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from quant.clv.clv_runner import CLVRunner
 
 

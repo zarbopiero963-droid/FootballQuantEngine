@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from quant.fusion.live_fusion_runner import LiveFusionRunner
 
 

@@ -1,9 +1,10 @@
 """
-Boundary value and error-path tests — 30+ cases.
+Boundary value and error-path tests — 50+ cases.
 
 Covers kelly_fraction, expected_value, ProbabilityCalibration,
 MatchRanker, CsvExporter, MarketTools, AgreementEngine,
-QuantConfidenceEngine, QuantNoBetFilter, EloEngine, FormEngine, PoissonEngine.
+QuantConfidenceEngine, QuantNoBetFilter, EloEngine, FormEngine, PoissonEngine,
+EdgeDetector, NoBetFilter, ValueBetStrategy, settings_manager, local_automl.
 """
 
 from __future__ import annotations
@@ -28,6 +29,8 @@ from ranking.match_ranker import (
     kelly_fraction,
     sharpe_ratio,
 )
+from strategies.edge_detector import EdgeDetector
+from strategies.no_bet_filter import NoBetFilter
 
 # ---------------------------------------------------------------------------
 # kelly_fraction — boundary values
@@ -355,3 +358,170 @@ def test_poisson_lambda_floor_prevents_zero():
     )
     lh, _ = engine.expected_goals("Weak", "Strong")
     assert lh >= 0.2
+
+
+# ---------------------------------------------------------------------------
+# EdgeDetector — NaN / inf / boundary inputs
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("prob", [float("nan"), float("inf"), -0.01, 1.01])
+def test_edge_detector_abnormal_probability_returns_bool(prob):
+    """is_value_bet must return a bool even for out-of-range probabilities."""
+    detector = EdgeDetector()
+    result = detector.is_value_bet(prob, 2.0)
+    assert isinstance(result, bool)
+
+
+@pytest.mark.parametrize("odds", [0.0, -1.0])
+def test_edge_detector_abnormal_odds_zero_edge(odds):
+    """Zero and negative odds should return 0.0 edge (guarded by <= 0 check)."""
+    detector = EdgeDetector()
+    assert detector.calculate_edge(0.5, odds) == 0.0
+
+
+@pytest.mark.parametrize("odds", [float("nan"), float("inf")])
+def test_edge_detector_special_float_odds_does_not_raise(odds):
+    """NaN and inf odds pass the > 0 guard; result is a float (possibly nan/inf)."""
+    detector = EdgeDetector()
+    edge = detector.calculate_edge(0.5, odds)
+    assert isinstance(edge, float)  # must not raise
+
+
+def test_edge_detector_probability_one_high_odds():
+    detector = EdgeDetector()
+    edge = detector.calculate_edge(1.0, 100.0)
+    assert edge == pytest.approx(0.99, abs=0.001)
+
+
+def test_edge_detector_probability_zero_any_odds():
+    detector = EdgeDetector()
+    assert detector.calculate_edge(0.0, 2.0) == pytest.approx(-0.5)
+
+
+# ---------------------------------------------------------------------------
+# NoBetFilter — boundary combinations
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "prob,edge,conf,agree,expected",
+    [
+        (1.0, 1.0, 1.0, 1.0, "BET"),  # all maximums
+        (0.0, 0.0, 0.0, 0.0, "NO_BET"),  # all minimums
+        (0.54, 0.05, 0.65, 0.60, "BET"),  # exact thresholds
+        (0.539, 0.05, 0.65, 0.60, "WATCHLIST"),  # just under prob threshold
+    ],
+)
+def test_no_bet_filter_parametrized(prob, edge, conf, agree, expected):
+    assert NoBetFilter().decide(prob, edge, conf, agree) == expected
+
+
+# ---------------------------------------------------------------------------
+# ProbabilityCalibration — extreme probability inputs
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "home,draw,away",
+    [(0.001, 0.001, 0.998), (0.998, 0.001, 0.001), (1 / 3, 1 / 3, 1 / 3)],
+)
+def test_calibration_extreme_inputs_no_crash(home, draw, away):
+    cal = ProbabilityCalibration()
+    result = cal.calibrate_three_way({"home_win": home, "draw": draw, "away_win": away})
+    assert len(result) == 3
+    total = sum(result.values())
+    assert total == pytest.approx(1.0, abs=0.02)
+
+
+# ---------------------------------------------------------------------------
+# EloEngine — division-by-zero and extreme rating gaps
+# ---------------------------------------------------------------------------
+
+
+def test_elo_extreme_rating_gap_diff_bounded():
+    engine = EloEngine()
+    matches = [
+        {"home_team": "Top", "away_team": "Bottom", "home_goals": 5, "away_goals": 0}
+    ] * 50
+    engine.fit(matches)
+    diff = engine.get_elo_diff("Top", "Bottom")
+    assert isinstance(diff, float)
+
+
+def test_elo_unknown_teams_diff_equals_home_advantage():
+    engine = EloEngine()
+    # Unknown teams use default rating; diff = default + home_adv - default = home_adv
+    diff = engine.get_elo_diff("Ghost A", "Ghost B")
+    assert diff == pytest.approx(engine.home_advantage, abs=0.01)
+
+
+# ---------------------------------------------------------------------------
+# settings_manager — credential source warning emitted when file supplies key
+# ---------------------------------------------------------------------------
+
+
+def test_settings_manager_warns_on_file_credential(tmp_path, monkeypatch, caplog):
+    import json
+    import logging
+
+    settings_json = tmp_path / "settings.json"
+    settings_json.write_text(
+        json.dumps({"api_football_key": "TESTKEY123", "league_id": 135, "season": 2024})
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("API_FOOTBALL_KEY", raising=False)
+
+    import config.settings_manager as sm
+
+    with caplog.at_level(logging.WARNING, logger="config.settings_manager"):
+        settings = sm.load_settings()
+
+    assert settings.api_football_key == "TESTKEY123"
+    assert any("API_FOOTBALL_KEY" in r.message for r in caplog.records)
+
+
+def test_settings_manager_no_warning_when_env_var_set(tmp_path, monkeypatch, caplog):
+    import logging
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("API_FOOTBALL_KEY", "ENV_KEY")
+
+    import config.settings_manager as sm
+
+    with caplog.at_level(logging.WARNING, logger="config.settings_manager"):
+        settings = sm.load_settings()
+
+    assert settings.api_football_key == "ENV_KEY"
+    assert not any("API_FOOTBALL_KEY" in r.message for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# local_automl — load_best_model returns None when SHA-256 sidecar is missing
+# ---------------------------------------------------------------------------
+
+
+def test_load_best_model_missing_sidecar_returns_none(tmp_path, monkeypatch):
+    import training.local_automl as lam
+
+    monkeypatch.setattr(lam, "MODEL_PATH", str(tmp_path / "model.pkl"))
+    monkeypatch.setattr(lam, "_SHA256_PATH", str(tmp_path / "model.pkl.sha256"))
+    (tmp_path / "model.pkl").write_bytes(b"fake model data")
+    # No sidecar written — should refuse to load
+    result = lam.load_best_model()
+    assert result is None
+
+
+def test_load_best_model_checksum_mismatch_returns_none(tmp_path, monkeypatch):
+    import training.local_automl as lam
+
+    model_path = tmp_path / "model.pkl"
+    sha_path = tmp_path / "model.pkl.sha256"
+    monkeypatch.setattr(lam, "MODEL_PATH", str(model_path))
+    monkeypatch.setattr(lam, "_SHA256_PATH", str(sha_path))
+    model_path.write_bytes(b"fake model data")
+    sha_path.write_text(
+        "0000000000000000000000000000000000000000000000000000000000000000\n"
+    )
+    result = lam.load_best_model()
+    assert result is None

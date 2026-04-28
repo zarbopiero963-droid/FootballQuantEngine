@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import logging
 import sqlite3
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -46,7 +49,7 @@ def connect() -> sqlite3.Connection:
 
 
 @contextmanager
-def get_db():
+def get_db() -> Generator[sqlite3.Connection, None, None]:
     conn = connect()
     try:
         yield conn

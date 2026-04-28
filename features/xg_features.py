@@ -1,12 +1,12 @@
+from __future__ import annotations
+
 import pandas as pd
 
 
-def extract_xg(team_data):
-
-    rows = []
+def extract_xg(team_data: list[dict]) -> pd.DataFrame:
+    rows: list[dict] = []
 
     for match in team_data:
-
         rows.append(
             {
                 "date": match.get("datetime"),
@@ -16,6 +16,4 @@ def extract_xg(team_data):
             }
         )
 
-    df = pd.DataFrame(rows)
-
-    return df
+    return pd.DataFrame(rows)

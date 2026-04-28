@@ -12,17 +12,29 @@ from __future__ import annotations
 
 import pytest
 
+from engine.copula_math import (
+    _make_positive_definite,
+    _normal_cdf,
+    _normal_pdf,
+    _normal_ppf,
+)
+from engine.gaussian_copula import (
+    BetLeg,
+    CopulaCorrelation,
+    CopulaResult,
+    GaussianCopulaEngine,
+)
+from engine.training_manager import TrainingManager, _serialisable
 from quant.providers.league_registry import _STATIC, all_known
 from quant.providers.league_registry import name as league_name
+from training.backtest_engine import BacktestEngine
 
 # ===========================================================================
 # quant/providers/league_registry.py  (29% → 70%+)
 # ===========================================================================
 
 
-
 class TestLeagueRegistry:
-
     def test_serie_a_known_statically(self):
         assert league_name(135) == "Serie A"
 
@@ -54,7 +66,6 @@ class TestLeagueRegistry:
         assert len(_STATIC) > 0
 
     def test_name_with_no_db_no_api_uses_static(self):
-        # Pass None for db_name and api_key — should resolve from static table
         result = league_name(62, db_name=None, api_key=None)
         assert result == "Ligue 2"
 
@@ -67,22 +78,8 @@ class TestLeagueRegistry:
 # engine/gaussian_copula.py  (35% → 60%+)
 # ===========================================================================
 
-from engine.copula_math import (
-    _make_positive_definite,
-    _normal_cdf,
-    _normal_pdf,
-    _normal_ppf,
-)
-from engine.gaussian_copula import (
-    BetLeg,
-    CopulaCorrelation,
-    CopulaResult,
-    GaussianCopulaEngine,
-)
-
 
 class TestGaussianHelpers:
-
     def test_normal_pdf_peak_at_zero(self):
         assert _normal_pdf(0.0) == pytest.approx(0.3989, abs=0.001)
 
@@ -104,17 +101,14 @@ class TestGaussianHelpers:
             assert _normal_cdf(z) == pytest.approx(p, abs=0.001)
 
     def test_make_positive_definite_returns_matrix(self):
-        # Near-PSD matrix
         m = [[1.0, 0.99], [0.99, 1.0]]
         result = _make_positive_definite(m)
         assert len(result) == 2
         assert len(result[0]) == 2
-        # Diagonal must still be 1.0
         assert result[0][0] == pytest.approx(1.0, abs=0.01)
 
 
 class TestBetLeg:
-
     def test_valid_leg(self):
         leg = BetLeg(name="Home Win", market_odds=2.0, model_prob=0.55)
         assert leg.bookmaker_implied == pytest.approx(0.5, abs=0.001)
@@ -137,7 +131,6 @@ class TestBetLeg:
 
 
 class TestCopulaCorrelation:
-
     def test_valid_correlation(self):
         corr = CopulaCorrelation(leg_i=0, leg_j=1, rho=0.5)
         assert corr.rho == 0.5
@@ -156,10 +149,8 @@ class TestCopulaCorrelation:
 
 
 class TestGaussianCopulaEngine:
-
     @pytest.fixture
     def engine(self):
-        # n_simulations must be >= 1000; use minimum for speed
         return GaussianCopulaEngine(n_simulations=1000, seed=42)
 
     @pytest.fixture
@@ -178,7 +169,6 @@ class TestGaussianCopulaEngine:
             GaussianCopulaEngine(default_correlation=1.0)
 
     def test_evaluate_returns_copula_result(self, engine, two_legs):
-        # evaluate requires event_types when no explicit correlation_matrix
         result = engine.evaluate(
             two_legs,
             event_types=["home_win", "over_goals"],
@@ -219,11 +209,8 @@ class TestGaussianCopulaEngine:
 # training/backtest_engine.py  (17% → 50%+)
 # ===========================================================================
 
-from training.backtest_engine import BacktestEngine
-
 
 class TestBacktestEngine:
-
     @pytest.fixture
     def in_memory_conn(self):
         """In-memory SQLite with minimal schema for BacktestEngine."""
@@ -292,11 +279,8 @@ class TestBacktestEngine:
 # engine/training_manager.py  (33% → 55%+)
 # ===========================================================================
 
-from engine.training_manager import TrainingManager, _serialisable
-
 
 class TestSerializable:
-
     def test_serialisable_int(self):
         assert _serialisable(42) == 42
 
@@ -324,7 +308,6 @@ class TestSerializable:
 
 
 class TestTrainingManager:
-
     @pytest.fixture
     def manager(self):
         return TrainingManager(n_optuna_trials=1)

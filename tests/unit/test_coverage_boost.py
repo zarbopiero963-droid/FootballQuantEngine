@@ -13,20 +13,32 @@ Targeted modules:
 
 from __future__ import annotations
 
+import math
 import time
 
 import pytest
 
 from analytics.betfair_leagues import BETFAIR_EXCHANGE_ITALIA_LEAGUES, is_betfair_league
+from engine.correlated_parlay import (
+    CorrelatedParlayEngine,
+    SingleEvent,
+    _build_score_matrix,
+)
+from engine.correlated_parlay import _poisson_pmf as parlay_pmf
+from engine.correlated_parlay import (
+    build_same_game_parlay,
+)
+from engine.luck_index import LuckIndex, MatchRecord, compute_luck_report
+from engine.offline_controller import OfflineController
+from engine.sentiment_engine import SentimentEngine, SentimentScore, TextItem
+from training.import_validator import ImportValidator
 
 # ===========================================================================
 # analytics/betfair_leagues.py  (5 lines → 100%)
 # ===========================================================================
 
 
-
 class TestBetfairLeagues:
-
     def test_serie_a_is_betfair(self):
         assert is_betfair_league("Serie A") is True
 
@@ -54,11 +66,8 @@ class TestBetfairLeagues:
 # training/import_validator.py  (40% → 90%+)
 # ===========================================================================
 
-from training.import_validator import ImportValidator
-
 
 class TestImportValidator:
-
     @pytest.fixture
     def validator(self):
         return ImportValidator()
@@ -131,11 +140,8 @@ class TestImportValidator:
 # engine/luck_index.py  (43% → 65%+)
 # ===========================================================================
 
-from engine.luck_index import LuckIndex, MatchRecord, compute_luck_report
-
 
 class TestLuckIndexAnalysis:
-
     @pytest.fixture
     def engine(self):
         return LuckIndex(max_goals=6)
@@ -162,7 +168,6 @@ class TestLuckIndexAnalysis:
         assert report.team_stats == {}
 
     def test_analyse_single_match(self, engine):
-        # MatchRecord: home_team, away_team, home_goals, away_goals, home_xg, away_xg
         matches = [
             MatchRecord(
                 home_team="Juve",
@@ -218,19 +223,8 @@ class TestLuckIndexAnalysis:
 # engine/correlated_parlay.py  (42% → 65%+)
 # ===========================================================================
 
-from engine.correlated_parlay import (
-    CorrelatedParlayEngine,
-    SingleEvent,
-    _build_score_matrix,
-)
-from engine.correlated_parlay import _poisson_pmf as parlay_pmf
-from engine.correlated_parlay import (
-    build_same_game_parlay,
-)
-
 
 class TestCorrelatedParlayFull:
-
     @pytest.fixture
     def engine(self):
         return CorrelatedParlayEngine(lambda_home=1.8, lambda_away=1.2)
@@ -299,12 +293,9 @@ class TestCorrelatedParlayFull:
         assert total == pytest.approx(1.0, abs=0.01)
 
     def test_poisson_pmf_zero_k(self):
-        import math
-
         assert parlay_pmf(0, 2.0) == pytest.approx(math.exp(-2.0), rel=1e-5)
 
     def test_build_same_game_parlay_runs(self):
-        # build_same_game_parlay takes lambda_home, lambda_away, events (List[SingleEvent])
         events = [
             SingleEvent("Home Win", "1x2_home", 0.0, 1.9, 0.55),
             SingleEvent("O2.5", "over_goals", 2.5, 1.8, 0.52),
@@ -318,17 +309,13 @@ class TestCorrelatedParlayFull:
 # engine/sentiment_engine.py  (37% → 55%+)
 # ===========================================================================
 
-from engine.sentiment_engine import SentimentEngine, SentimentScore, TextItem
-
 
 class TestSentimentEngine:
-
     @pytest.fixture
     def engine(self):
         return SentimentEngine(half_life_hours=24.0)
 
     def _make_item(self, text: str, teams=("Juve",)) -> TextItem:
-        # TextItem fields: text, source, team_mentions (list), timestamp, language
         return TextItem(
             text=text,
             source="twitter",
@@ -348,17 +335,12 @@ class TestSentimentEngine:
         assert score.final_score >= 0.0
 
     def test_score_text_negative_keywords_hit(self, engine):
-        # Engine: injury/negative keywords carry positive weights → final_score > 0
-        # and the category is set to the dominant negative bucket
         item = self._make_item("Player crisis collapse disaster sacked")
         score = engine.score_text(item, "Inter")
         assert score.category in ("INJURY", "TENSION", "NEGATIVE")
-        assert (
-            score.final_score > 0
-        )  # positive score = bad news in this engine's convention
+        assert score.final_score > 0
 
     def test_aggregate_empty_returns_neutral(self, engine):
-        # aggregate(items, team) — items first, then team
         report = engine.aggregate([], "Juve")
         assert report.weighted_score == 0.0
 
@@ -369,12 +351,10 @@ class TestSentimentEngine:
         assert -1.0 <= report.weighted_score <= 1.0
 
     def test_elo_adjustment_neutral_score(self, engine):
-        # elo_adjustment returns 0 for scores >= -0.30
         adj = engine.elo_adjustment(0.0)
         assert adj == pytest.approx(0.0, abs=0.01)
 
     def test_elo_adjustment_positive_score_returns_zero(self, engine):
-        # Positive score → no Elo adjustment (only negative scores trigger it)
         adj = engine.elo_adjustment(0.5)
         assert adj == pytest.approx(0.0, abs=0.01)
 
@@ -406,11 +386,8 @@ class TestSentimentEngine:
 # engine/offline_controller.py  (46% → 60%+)
 # ===========================================================================
 
-from engine.offline_controller import OfflineController
-
 
 class TestOfflineController:
-
     def test_constructor(self):
         ctrl = OfflineController()
         assert ctrl.engine is not None

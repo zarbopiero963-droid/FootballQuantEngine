@@ -10,16 +10,21 @@ from __future__ import annotations
 
 import pytest
 
+from engine.copula_math import _cholesky, _normal_ppf
+from engine.correlated_parlay import CorrelatedParlayEngine, SingleEvent
+from engine.luck_index import LuckIndex
 from engine.markowitz_optimizer import BetProposal, optimise_portfolio
+from engine.sentiment_engine import SentimentEngine
+from quant.models.calibration import ProbabilityCalibration
+from quant.models.poisson_engine import PoissonEngine
+from ranking.match_ranker import kelly_fraction
 
 # ---------------------------------------------------------------------------
 # engine/markowitz_optimizer.py
 # ---------------------------------------------------------------------------
 
 
-
 class TestBetProposalValidation:
-
     def test_prob_zero_raises_value_error(self):
         with pytest.raises(ValueError, match="model_prob"):
             BetProposal(
@@ -92,7 +97,6 @@ class TestBetProposalValidation:
 
 
 class TestOptimisePortfolio:
-
     def test_empty_bets_raises_value_error(self):
         with pytest.raises(ValueError, match="empty"):
             optimise_portfolio([])
@@ -103,14 +107,11 @@ class TestOptimisePortfolio:
 
 
 # ---------------------------------------------------------------------------
-# engine/gaussian_copula.py
+# engine/copula_math.py
 # ---------------------------------------------------------------------------
-
-from engine.copula_math import _cholesky, _normal_ppf
 
 
 class TestNormalPPF:
-
     def test_zero_raises_value_error(self):
         with pytest.raises(ValueError, match="_normal_ppf"):
             _normal_ppf(0.0)
@@ -137,13 +138,11 @@ class TestNormalPPF:
 
 
 class TestCholesky:
-
     def test_non_square_matrix_raises_value_error(self):
         with pytest.raises(ValueError, match="square"):
             _cholesky([[1.0, 0.0]])  # 1x2 — not square
 
     def test_non_positive_definite_raises_value_error(self):
-        # Negative diagonal makes it non-PD
         with pytest.raises(ValueError):
             _cholesky([[-1.0, 0.0], [0.0, 1.0]])
 
@@ -152,11 +151,8 @@ class TestCholesky:
 # engine/luck_index.py
 # ---------------------------------------------------------------------------
 
-from engine.luck_index import LuckIndex
-
 
 class TestLuckIndex:
-
     def test_zero_max_goals_raises_value_error(self):
         with pytest.raises(ValueError, match="max_goals"):
             LuckIndex(max_goals=0)
@@ -177,7 +173,6 @@ class TestLuckIndex:
 
     def test_xpts_zero_xg_gives_low_home_xpts(self):
         idx = LuckIndex()
-        # 0 home xG — home almost certainly loses
         xph, xpa = idx.xpts_from_xg(0.0, 3.0)
         assert xph < xpa
 
@@ -186,11 +181,8 @@ class TestLuckIndex:
 # engine/correlated_parlay.py
 # ---------------------------------------------------------------------------
 
-from engine.correlated_parlay import CorrelatedParlayEngine, SingleEvent
-
 
 class TestCorrelatedParlayEngine:
-
     def test_zero_home_lambda_raises_value_error(self):
         with pytest.raises(ValueError, match="positive"):
             CorrelatedParlayEngine(0.0, 1.5)
@@ -244,11 +236,8 @@ class TestCorrelatedParlayEngine:
 # engine/sentiment_engine.py
 # ---------------------------------------------------------------------------
 
-from engine.sentiment_engine import SentimentEngine
-
 
 class TestSentimentEngine:
-
     def test_zero_half_life_raises_value_error(self):
         with pytest.raises(ValueError, match="half_life"):
             SentimentEngine(half_life_hours=0.0)
@@ -266,11 +255,8 @@ class TestSentimentEngine:
 # quant/models/calibration.py — boundary invariants
 # ---------------------------------------------------------------------------
 
-from quant.models.calibration import ProbabilityCalibration
-
 
 class TestCalibrationBoundaries:
-
     def test_calibrate_binary_clamps_to_open_interval(self):
         cal = ProbabilityCalibration()
         for p in [-1.0, 0.0, 0.0001, 0.5, 0.9999, 1.0, 1.5]:
@@ -297,7 +283,6 @@ class TestCalibrationBoundaries:
 
     def test_calibrate_binary_shrinks_toward_half(self):
         cal = ProbabilityCalibration(shrink=0.5)
-        # With 50% shrinkage, calibrate(1.0) should be halfway between p and 0.5
         result = cal.calibrate_binary(0.9999)
         assert result < 0.9999  # pulled toward 0.5
 
@@ -306,11 +291,8 @@ class TestCalibrationBoundaries:
 # quant/models/poisson_engine.py — invalid score matrix size
 # ---------------------------------------------------------------------------
 
-from quant.models.poisson_engine import PoissonEngine
-
 
 class TestPoissonEngineEdges:
-
     def test_score_matrix_shape(self):
         engine = PoissonEngine(max_goals=4)
         engine.fit(
@@ -352,7 +334,6 @@ class TestPoissonEngineEdges:
 
 
 class TestDbManagerConnect:
-
     def test_connect_returns_connection(self, tmp_path, monkeypatch):
         from config import constants
 
@@ -369,13 +350,9 @@ class TestDbManagerConnect:
 # ranking/match_ranker.py — division-by-zero guards
 # ---------------------------------------------------------------------------
 
-from ranking.match_ranker import kelly_fraction
-
 
 class TestKellyFractionRaises:
-
     def test_exact_break_even_odds(self):
-        # p=0.5, odds=2.0 → edge=0 → kelly=0
         result = kelly_fraction(0.5, 2.0)
         assert result == pytest.approx(0.0, abs=0.01)
 

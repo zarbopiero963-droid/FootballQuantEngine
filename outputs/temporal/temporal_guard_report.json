@@ -6,12 +6,12 @@
       {
         "name": "rows_minimum",
         "passed": true,
-        "value": 100
+        "value": 200
       },
       {
         "name": "bet_count_minimum",
         "passed": true,
-        "value": 33
+        "value": 66
       },
       {
         "name": "roi_threshold",
@@ -31,18 +31,18 @@
       {
         "name": "avg_ev_threshold",
         "passed": true,
-        "value": 0.184115
+        "value": 0.161591
       }
     ],
     "metrics": {
-      "rows": 100,
-      "bet_count": 33,
+      "rows": 200,
+      "bet_count": 66,
       "total_stake": 0.0,
       "total_pnl": 0.0,
       "roi": 0.0,
       "yield": 0.0,
       "hit_rate": 0.0,
-      "avg_ev": 0.184115,
+      "avg_ev": 0.161591,
       "avg_clv_abs": NaN,
       "avg_clv_pct": NaN
     }
@@ -120,6 +120,81 @@
       "yield": 0.0,
       "hit_rate": 0.0,
       "avg_ev": 0.164169,
+      "avg_clv_abs": NaN,
+      "avg_clv_pct": NaN
+    },
+    {
+      "window_id": 6,
+      "train_start": "2026-03-08 13:56:07.591652+00:00",
+      "train_end": "2026-04-27 16:13:03.636253+00:00",
+      "test_start": "2026-04-27 16:13:03.642418+00:00",
+      "test_end": "2026-04-28 05:56:16.926365+00:00",
+      "rows": 20,
+      "bet_count": 6,
+      "roi": 0.0,
+      "yield": 0.0,
+      "hit_rate": 0.0,
+      "avg_ev": 0.138872,
+      "avg_clv_abs": NaN,
+      "avg_clv_pct": NaN
+    },
+    {
+      "window_id": 7,
+      "train_start": "2026-03-08 14:53:56.798889+00:00",
+      "train_end": "2026-04-28 05:56:16.926365+00:00",
+      "test_start": "2026-04-28 05:56:16.931380+00:00",
+      "test_end": "2026-04-28 05:56:35.651048+00:00",
+      "rows": 20,
+      "bet_count": 7,
+      "roi": 0.0,
+      "yield": 0.0,
+      "hit_rate": 0.0,
+      "avg_ev": 0.14663,
+      "avg_clv_abs": NaN,
+      "avg_clv_pct": NaN
+    },
+    {
+      "window_id": 8,
+      "train_start": "2026-03-08 15:07:32.384059+00:00",
+      "train_end": "2026-04-28 05:56:35.651048+00:00",
+      "test_start": "2026-04-28 05:56:35.665747+00:00",
+      "test_end": "2026-04-28 06:03:27.396988+00:00",
+      "rows": 20,
+      "bet_count": 8,
+      "roi": 0.0,
+      "yield": 0.0,
+      "hit_rate": 0.0,
+      "avg_ev": 0.132084,
+      "avg_clv_abs": NaN,
+      "avg_clv_pct": NaN
+    },
+    {
+      "window_id": 9,
+      "train_start": "2026-04-27 16:13:03.821794+00:00",
+      "train_end": "2026-04-28 06:03:27.396988+00:00",
+      "test_start": "2026-04-28 06:03:27.413226+00:00",
+      "test_end": "2026-04-28 10:13:53.481803+00:00",
+      "rows": 20,
+      "bet_count": 6,
+      "roi": 0.0,
+      "yield": 0.0,
+      "hit_rate": 0.0,
+      "avg_ev": 0.138872,
+      "avg_clv_abs": NaN,
+      "avg_clv_pct": NaN
+    },
+    {
+      "window_id": 10,
+      "train_start": "2026-04-28 05:56:35.450246+00:00",
+      "train_end": "2026-04-28 10:13:53.481803+00:00",
+      "test_start": "2026-04-28 10:13:53.500427+00:00",
+      "test_end": "2026-04-28 10:16:48.103701+00:00",
+      "rows": 20,
+      "bet_count": 6,
+      "roi": 0.0,
+      "yield": 0.0,
+      "hit_rate": 0.0,
+      "avg_ev": 0.138872,
       "avg_clv_abs": NaN,
       "avg_clv_pct": NaN
     }

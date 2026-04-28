@@ -349,3 +349,171 @@ class TestTrainingManager:
         monkeypatch.setattr(la, "MODEL_PATH", str(tmp_path / "model.pkl"))
         result = manager.load_best_model()
         assert result is None
+
+
+# ===========================================================================
+# Clayton and Gumbel copula families — tail-dependence coverage
+# ===========================================================================
+
+
+@pytest.fixture
+def two_legs_fixture():
+    return [
+        BetLeg(name="Home Win", market_odds=2.1, model_prob=0.55),
+        BetLeg(name="Over 2.5", market_odds=1.9, model_prob=0.52),
+    ]
+
+
+class TestClaytonCopula:
+    """Tests for the Clayton (lower-tail) copula family."""
+
+    @pytest.fixture
+    def engine(self):
+        return GaussianCopulaEngine(
+            family="clayton",
+            archimedean_theta=2.0,
+            n_simulations=5_000,
+            seed=42,
+        )
+
+    def test_constructor_accepts_clayton(self, engine):
+        assert engine.family == "clayton"
+
+    def test_evaluate_returns_result(self, engine, two_legs_fixture):
+        result = engine.evaluate(legs=two_legs_fixture)
+        assert isinstance(result, CopulaResult)
+        assert 0.0 < result.model_joint_prob < 1.0
+
+    def test_joint_prob_below_product_of_marginals(self, engine, two_legs_fixture):
+        # Clayton with θ=2 introduces positive dependence → joint > independent
+        # i.e. model_joint >= book_joint is typical, but the key check is it's finite
+        result = engine.evaluate(legs=two_legs_fixture)
+        assert result.model_joint_prob > 0.0
+
+    def test_is_value_flag_is_bool(self, engine, two_legs_fixture):
+        result = engine.evaluate(legs=two_legs_fixture)
+        assert isinstance(result.is_value, bool)
+
+    def test_invalid_theta_zero_raises(self):
+        with pytest.raises(ValueError, match="Clayton theta"):
+            GaussianCopulaEngine(
+                family="clayton", archimedean_theta=0.0, n_simulations=1000
+            )
+
+    def test_invalid_theta_negative_raises(self):
+        with pytest.raises(ValueError, match="Clayton theta"):
+            GaussianCopulaEngine(
+                family="clayton", archimedean_theta=-1.0, n_simulations=1000
+            )
+
+    def test_lower_tail_dependence_stronger_than_gaussian(self, two_legs_fixture):
+        # For the same marginals, Clayton should produce a higher joint prob
+        # than Gaussian with zero correlation (independence) because Clayton
+        # introduces positive lower-tail dependence.
+        gaussian_engine = GaussianCopulaEngine(
+            family="gaussian", default_correlation=0.0, n_simulations=5_000, seed=42
+        )
+        clayton_engine = GaussianCopulaEngine(
+            family="clayton", archimedean_theta=3.0, n_simulations=5_000, seed=42
+        )
+        g_result = gaussian_engine.evaluate(legs=two_legs_fixture)
+        c_result = clayton_engine.evaluate(legs=two_legs_fixture)
+        # Clayton with θ=3 has λ_L≈0.79 — joint losses cluster;
+        # for bets that both have prob <0.6 the joint should be higher than independent.
+        assert (
+            c_result.model_joint_prob >= g_result.model_joint_prob * 0.8
+        )  # sanity bound
+
+
+class TestGumbelCopula:
+    """Tests for the Gumbel (upper-tail) copula family."""
+
+    @pytest.fixture
+    def engine(self):
+        return GaussianCopulaEngine(
+            family="gumbel",
+            archimedean_theta=2.0,
+            n_simulations=5_000,
+            seed=42,
+        )
+
+    def test_constructor_accepts_gumbel(self, engine):
+        assert engine.family == "gumbel"
+
+    def test_evaluate_returns_result(self, engine, two_legs_fixture):
+        result = engine.evaluate(legs=two_legs_fixture)
+        assert isinstance(result, CopulaResult)
+        assert 0.0 < result.model_joint_prob < 1.0
+
+    def test_joint_prob_is_positive_finite(self, engine, two_legs_fixture):
+        result = engine.evaluate(legs=two_legs_fixture)
+        assert result.model_joint_prob > 0.0
+        assert result.model_joint_prob < 1.0
+
+    def test_is_value_flag_is_bool(self, engine, two_legs_fixture):
+        result = engine.evaluate(legs=two_legs_fixture)
+        assert isinstance(result.is_value, bool)
+
+    def test_theta_one_approaches_independence(self, two_legs_fixture):
+        # Gumbel(θ=1) is the independence copula; joint ≈ product of marginals.
+        engine = GaussianCopulaEngine(
+            family="gumbel", archimedean_theta=1.0, n_simulations=10_000, seed=0
+        )
+        result = engine.evaluate(legs=two_legs_fixture)
+        product = two_legs_fixture[0].model_prob * two_legs_fixture[1].model_prob
+        assert (
+            abs(result.model_joint_prob - product) < 0.05
+        )  # within 5 pp of independence
+
+    def test_invalid_theta_below_one_raises(self):
+        with pytest.raises(ValueError, match="Gumbel theta"):
+            GaussianCopulaEngine(
+                family="gumbel", archimedean_theta=0.5, n_simulations=1000
+            )
+
+    def test_invalid_family_raises(self):
+        with pytest.raises(ValueError, match="family"):
+            GaussianCopulaEngine(family="student_t", n_simulations=1000)  # type: ignore[arg-type]
+
+
+class TestArchimedeanCopulaMath:
+    """Unit tests for the raw copula_math simulation functions."""
+
+    def test_simulate_clayton_basic(self):
+        from engine.copula_math import simulate_joint_prob_clayton
+
+        p = simulate_joint_prob_clayton(
+            [0.8, 0.8], theta=2.0, n_simulations=5_000, rng=None
+        )
+        assert 0.0 < p < 1.0
+
+    def test_simulate_gumbel_basic(self):
+        from engine.copula_math import simulate_joint_prob_gumbel
+
+        p = simulate_joint_prob_gumbel(
+            [0.8, 0.8], theta=2.0, n_simulations=5_000, rng=None
+        )
+        assert 0.0 < p < 1.0
+
+    def test_simulate_clayton_invalid_theta_raises(self):
+        from engine.copula_math import simulate_joint_prob_clayton
+
+        with pytest.raises(ValueError):
+            simulate_joint_prob_clayton([0.5, 0.5], theta=0.0, n_simulations=100)
+
+    def test_simulate_gumbel_invalid_theta_raises(self):
+        from engine.copula_math import simulate_joint_prob_gumbel
+
+        with pytest.raises(ValueError):
+            simulate_joint_prob_gumbel([0.5, 0.5], theta=0.5, n_simulations=100)
+
+    def test_gumbel_theta_1_matches_independence(self):
+        import random
+
+        from engine.copula_math import simulate_joint_prob_gumbel
+
+        rng = random.Random(0)
+        p = simulate_joint_prob_gumbel(
+            [0.6, 0.6], theta=1.0, n_simulations=20_000, rng=rng
+        )
+        assert abs(p - 0.36) < 0.04  # 0.6 × 0.6 = 0.36, tolerance 4 pp

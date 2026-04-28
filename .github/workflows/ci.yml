@@ -1,0 +1,63 @@
+name: CI
+
+# Runs on every branch and every pull request — NO secrets injected.
+# Only lint, type-check, and unit tests.  Windows EXE build lives in
+# build.yml and only runs on main where secrets are authorized.
+
+on:
+  push:
+    branches-ignore:
+      - main
+  pull_request:
+
+jobs:
+
+  test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Security audit (pip-audit)
+        run: |
+          pip install pip-audit
+          pip-audit
+
+      - name: Lint
+        run: |
+          pip install ruff black isort
+          ruff check .
+          black --check .
+          isort --check-only .
+
+      - name: Type-check (mypy)
+        run: |
+          pip install mypy types-requests
+          mypy config/ quant/models/ quant/services/ ranking/ database/ notifications/ \
+            --ignore-missing-imports --explicit-package-bases --follow-imports=silent
+
+      - name: Run unit tests
+        run: |
+          pytest -q --ignore=tests/exe

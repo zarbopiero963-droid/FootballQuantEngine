@@ -11,10 +11,10 @@ import math
 
 import pytest
 
-from quant.models.corners_model import CornersModel
-from quant.models.halftime_model import HalftimeModel
-from quant.models.correct_score_model import CorrectScoreModel
 from quant.markets.multi_market_engine import MultiMarketEngine
+from quant.models.corners_model import CornersModel
+from quant.models.correct_score_model import CorrectScoreModel
+from quant.models.halftime_model import HalftimeModel
 
 # ---------------------------------------------------------------------------
 # Fixtures shared across all classes

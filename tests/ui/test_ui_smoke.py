@@ -18,7 +18,7 @@ from __future__ import annotations
 
 
 def test_config_settings_manager_importable():
-    from config.settings_manager import load_settings, save_settings, Settings
+    from config.settings_manager import Settings, load_settings, save_settings
 
     assert callable(load_settings)
     assert callable(save_settings)
@@ -28,8 +28,8 @@ def test_config_settings_manager_importable():
 def test_config_constants_importable():
     from config.constants import (
         DATABASE_NAME,
-        EDGE_THRESHOLD,
         DEFAULT_LEAGUE_ID,
+        EDGE_THRESHOLD,
     )
 
     assert isinstance(DATABASE_NAME, str)
@@ -39,7 +39,7 @@ def test_config_constants_importable():
 
 
 def test_ranking_match_ranker_importable():
-    from ranking.match_ranker import MatchRanker, kelly_fraction, expected_value
+    from ranking.match_ranker import MatchRanker, expected_value, kelly_fraction
 
     assert callable(kelly_fraction)
     assert callable(expected_value)
@@ -61,11 +61,11 @@ def test_database_modules_importable():
 
 
 def test_quant_models_importable():
-    from quant.models.poisson_engine import PoissonEngine
+    from quant.models.calibration import ProbabilityCalibration
     from quant.models.dixon_coles_engine import DixonColesEngine
     from quant.models.elo_engine import EloEngine
     from quant.models.form_engine import FormEngine
-    from quant.models.calibration import ProbabilityCalibration
+    from quant.models.poisson_engine import PoissonEngine
 
     for cls in (
         PoissonEngine,
@@ -78,8 +78,8 @@ def test_quant_models_importable():
 
 
 def test_analytics_modules_importable():
-    from analytics.probability_markets import ProbabilityMarkets
     from analytics.league_predictability import LeaguePredictabilityAnalyser
+    from analytics.probability_markets import ProbabilityMarkets
 
     assert ProbabilityMarkets is not None
     assert LeaguePredictabilityAnalyser is not None
@@ -161,6 +161,7 @@ def test_save_settings_never_writes_credentials(tmp_path, monkeypatch):
 def test_database_name_not_in_source_tree():
     """DATABASE_NAME must not resolve inside the repo (read-only install safety)."""
     import os
+
     from config.constants import DATABASE_NAME
 
     # Either env override or user home dir — either way not in CWD/source

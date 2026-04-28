@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import pytest
 
+from engine.markowitz_optimizer import BetProposal, optimise_portfolio
+
 # ---------------------------------------------------------------------------
 # engine/markowitz_optimizer.py
 # ---------------------------------------------------------------------------
 
-from engine.markowitz_optimizer import BetProposal, optimise_portfolio
 
 
 class TestBetProposalValidation:
@@ -105,7 +106,7 @@ class TestOptimisePortfolio:
 # engine/gaussian_copula.py
 # ---------------------------------------------------------------------------
 
-from engine.copula_math import _normal_ppf, _cholesky
+from engine.copula_math import _cholesky, _normal_ppf
 
 
 class TestNormalPPF:

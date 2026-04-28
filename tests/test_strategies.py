@@ -5,7 +5,6 @@ and strategies.value_bet_strategy.
 
 from __future__ import annotations
 
-
 from strategies.edge_detector import EdgeDetector
 from strategies.no_bet_filter import NoBetFilter
 from strategies.value_bet_strategy import ValueBetStrategy

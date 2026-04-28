@@ -13,14 +13,14 @@ ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from ranking.match_ranker import (
-    kelly_fraction,
-    expected_value,
-    sharpe_ratio,
-    MatchRanker,
-)
 from quant.models.calibration import ProbabilityCalibration
 from quant.services.market_tools import MarketTools
+from ranking.match_ranker import (
+    MatchRanker,
+    expected_value,
+    kelly_fraction,
+    sharpe_ratio,
+)
 
 # ---------------------------------------------------------------------------
 # kelly_fraction

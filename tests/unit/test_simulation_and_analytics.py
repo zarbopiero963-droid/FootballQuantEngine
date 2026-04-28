@@ -9,13 +9,6 @@ import time
 
 import pytest
 
-from simulation.monte_carlo_advanced import (
-    MCResult,
-    MonteCarloAdvanced,
-    _accumulate,
-    _bivariate_poisson_sample,
-    _poisson_sample,
-)
 from analytics.market_inefficiency_scanner import (
     MarketInefficiencyScanner,
     _classify_type,
@@ -25,6 +18,13 @@ from analytics.market_inefficiency_scanner import (
     _implied_prob,
     _remove_vig,
     _z_score,
+)
+from simulation.monte_carlo_advanced import (
+    MCResult,
+    MonteCarloAdvanced,
+    _accumulate,
+    _bivariate_poisson_sample,
+    _poisson_sample,
 )
 
 # ===========================================================================

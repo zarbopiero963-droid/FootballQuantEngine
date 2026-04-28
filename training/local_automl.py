@@ -33,9 +33,9 @@ from typing import Any
 
 from training.automl_learners import (
     _GaussianNB,
-    _SGDLogisticReg,
     _has,
     _optuna_tune,
+    _SGDLogisticReg,
     _sklearn_candidates,
 )
 from training.automl_metrics import (

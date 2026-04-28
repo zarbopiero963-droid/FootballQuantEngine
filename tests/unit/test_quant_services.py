@@ -9,8 +9,8 @@ import pytest
 
 from quant.services.agreement_engine import AgreementEngine
 from quant.services.confidence_engine import QuantConfidenceEngine
-from quant.services.no_bet_filter import QuantNoBetFilter
 from quant.services.market_tools import MarketTools
+from quant.services.no_bet_filter import QuantNoBetFilter
 
 # ---------------------------------------------------------------------------
 # AgreementEngine

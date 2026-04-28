@@ -12,11 +12,13 @@ from __future__ import annotations
 
 import pytest
 
+from quant.providers.league_registry import _STATIC, all_known
+from quant.providers.league_registry import name as league_name
+
 # ===========================================================================
 # quant/providers/league_registry.py  (29% → 70%+)
 # ===========================================================================
 
-from quant.providers.league_registry import name as league_name, all_known, _STATIC
 
 
 class TestLeagueRegistry:
@@ -65,17 +67,17 @@ class TestLeagueRegistry:
 # engine/gaussian_copula.py  (35% → 60%+)
 # ===========================================================================
 
+from engine.copula_math import (
+    _make_positive_definite,
+    _normal_cdf,
+    _normal_pdf,
+    _normal_ppf,
+)
 from engine.gaussian_copula import (
     BetLeg,
     CopulaCorrelation,
     CopulaResult,
     GaussianCopulaEngine,
-)
-from engine.copula_math import (
-    _normal_cdf,
-    _normal_pdf,
-    _normal_ppf,
-    _make_positive_definite,
 )
 
 

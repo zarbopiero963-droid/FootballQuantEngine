@@ -6,9 +6,10 @@ Run with: pytest tests/integration/ -v -m integration
 Skip in fast CI: pytest -m "not integration"
 """
 
-import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 pytestmark = pytest.mark.integration
 
@@ -222,8 +223,8 @@ def test_parse_standings(mock_resp):
 
 def test_full_pipeline_rank_and_export(tmp_path):
     """Fixture data → MatchRanker → CsvExporter pipeline."""
-    from ranking.match_ranker import MatchRanker
     from export.csv_exporter import CsvExporter
+    from ranking.match_ranker import MatchRanker
 
     records = [
         {

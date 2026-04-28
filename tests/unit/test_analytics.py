@@ -7,14 +7,14 @@ from __future__ import annotations
 
 import pytest
 
-from analytics.probability_markets import ProbabilityMarkets, poisson_pmf
 from analytics.league_predictability import (
-    LeaguePredictabilityAnalyser,
     LeaguePredictability,
-    _ranked_prob_score,
+    LeaguePredictabilityAnalyser,
     _gini,
+    _ranked_prob_score,
 )
 from analytics.market_inefficiency_scanner import MarketInefficiencyScanner
+from analytics.probability_markets import ProbabilityMarkets, poisson_pmf
 
 # ---------------------------------------------------------------------------
 # Helpers / shared data

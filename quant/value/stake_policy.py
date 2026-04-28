@@ -67,7 +67,7 @@ class StakePolicy:
           - ``expected_return``  : portfolio μ
           - ``portfolio_variance``: portfolio σ²
         """
-        from engine.markowitz_optimizer import MarkowitzOptimizer, BetProposal
+        from engine.markowitz_optimizer import BetProposal, MarkowitzOptimizer
 
         if not bets:
             return {

@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import pytest
 
-from quant.models.poisson_engine import PoissonEngine
 from quant.models.dixon_coles_engine import DixonColesEngine
 from quant.models.elo_engine import EloEngine
 from quant.models.form_engine import FormEngine
 from quant.models.h2h_engine import H2HEngine
+from quant.models.poisson_engine import PoissonEngine
 
 # ---------------------------------------------------------------------------
 # Shared fixtures

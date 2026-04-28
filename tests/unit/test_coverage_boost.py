@@ -17,11 +17,12 @@ import time
 
 import pytest
 
+from analytics.betfair_leagues import BETFAIR_EXCHANGE_ITALIA_LEAGUES, is_betfair_league
+
 # ===========================================================================
 # analytics/betfair_leagues.py  (5 lines → 100%)
 # ===========================================================================
 
-from analytics.betfair_leagues import is_betfair_league, BETFAIR_EXCHANGE_ITALIA_LEAGUES
 
 
 class TestBetfairLeagues:
@@ -220,9 +221,11 @@ class TestLuckIndexAnalysis:
 from engine.correlated_parlay import (
     CorrelatedParlayEngine,
     SingleEvent,
-    build_same_game_parlay,
-    _poisson_pmf as parlay_pmf,
     _build_score_matrix,
+)
+from engine.correlated_parlay import _poisson_pmf as parlay_pmf
+from engine.correlated_parlay import (
+    build_same_game_parlay,
 )
 
 
@@ -315,7 +318,7 @@ class TestCorrelatedParlayFull:
 # engine/sentiment_engine.py  (37% → 55%+)
 # ===========================================================================
 
-from engine.sentiment_engine import SentimentEngine, TextItem, SentimentScore
+from engine.sentiment_engine import SentimentEngine, SentimentScore, TextItem
 
 
 class TestSentimentEngine:

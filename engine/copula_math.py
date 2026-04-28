@@ -279,11 +279,17 @@ def _stable_sample(alpha: float, rng: random.Random) -> float:
     α must be in (0, 1).
     """
     u = rng.random() * math.pi  # U ~ Uniform(0, π)
-    e = -math.log(rng.random())  # E ~ Exp(1)
-    sin_u = math.sin(alpha * u)
-    cos_u = math.cos((1.0 - alpha) * u)
-    return (sin_u / (math.sin(u) ** (1.0 / alpha))) * (
-        (cos_u / e) ** ((1.0 - alpha) / alpha)
+    e = -math.log(max(rng.random(), 1e-300))  # E ~ Exp(1), guard log(0)
+    # Hofert (2011) Algorithm 3: use sin((1-α)u), NOT cos((1-α)u).
+    # cos would be negative for u > π/(2(1-α)) when α < 0.5 (θ > 2),
+    # producing complex numbers when raised to a fractional power.
+    sin_alpha_u = math.sin(alpha * u)
+    sin_1m_alpha_u = math.sin((1.0 - alpha) * u)
+    sin_u = math.sin(u)
+    if sin_u < 1e-300:
+        return 1.0  # u ≈ 0 or π: stable → 1 (independence fallback)
+    return (sin_alpha_u / (sin_u ** (1.0 / alpha))) * (
+        (sin_1m_alpha_u / e) ** ((1.0 - alpha) / alpha)
     )
 
 

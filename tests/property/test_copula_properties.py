@@ -12,6 +12,7 @@ Invariants verified:
 
 from __future__ import annotations
 
+import math
 import random
 
 import pytest
@@ -99,10 +100,13 @@ def test_clayton_high_theta_approaches_comonotonicity(probs: list[float]) -> Non
     rng = random.Random(hash(tuple(probs)))
     jp = simulate_joint_prob_clayton(probs, theta=50.0, n_simulations=_N, rng=rng)
     floor = min(probs)
-    # Allow generous tolerance due to MC noise at extreme theta
-    assert (
-        jp >= floor * 0.85
-    ), f"Clayton theta=50 joint={jp:.4f} far below min(probs)={floor:.4f}"
+    # 5σ lower bound: P(false failure) < 3e-7 for any floor ∈ (0,1)
+    sigma = math.sqrt(floor * (1.0 - floor) / _N)
+    bound = floor - 5 * sigma
+    assert jp >= bound, (
+        f"Clayton theta=50 joint={jp:.4f} far below min(probs)={floor:.4f} "
+        f"(5σ bound={bound:.4f})"
+    )
 
 
 @given(prob_pair)
@@ -112,9 +116,12 @@ def test_gumbel_high_theta_approaches_comonotonicity(probs: list[float]) -> None
     rng = random.Random(hash(tuple(probs)))
     jp = simulate_joint_prob_gumbel(probs, theta=50.0, n_simulations=_N, rng=rng)
     floor = min(probs)
-    assert (
-        jp >= floor * 0.85
-    ), f"Gumbel theta=50 joint={jp:.4f} far below min(probs)={floor:.4f}"
+    sigma = math.sqrt(floor * (1.0 - floor) / _N)
+    bound = floor - 5 * sigma
+    assert jp >= bound, (
+        f"Gumbel theta=50 joint={jp:.4f} far below min(probs)={floor:.4f} "
+        f"(5σ bound={bound:.4f})"
+    )
 
 
 # ---------------------------------------------------------------------------

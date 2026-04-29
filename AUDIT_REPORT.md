@@ -9,7 +9,7 @@
 ## Executive Summary
 
 18 of 20 quantitative trading features are fully implemented. 2 are partial. 0 are missing.
-The engine covers the complete stack from alpha generation to portfolio execution used by institutional sports betting funds.
+The engine covers the complete stack—from alpha generation to portfolio execution—for institutional sports betting funds.
 
 ---
 
@@ -153,18 +153,18 @@ The engine covers the complete stack from alpha generation to portfolio executio
 
 ## Summary Scorecard
 
-| Category | Implemented | Partial | Not Implemented |
-|---|---|---|---|
-| Money Management | 2/2 | 0 | 0 |
-| Asian / Exotic Markets | 1/1 | 0 | 0 |
-| Market Intelligence | 3/3 | 0 | 0 |
-| ML / AI Models | 2/2 | 1 (GNN) | 0 |
-| Feature Engineering | 3/3 | 0 | 0 |
-| Live / In-Play | 2/2 | 0 | 0 |
-| Alternative Data | 3/3 | 1 (Referee) | 0 |
-| Market Microstructure | 3/3 | 0 | 0 |
-| Risk Management | 2/2 | 0 | 0 |
-| **TOTAL** | **18/20** | **2/20** | **0/20** |
+| Category | Total | Implemented | Partial | Not Implemented |
+|---|---|---|---|---|
+| Money Management | 2 | 2 | 0 | 0 |
+| Asian / Exotic Markets | 1 | 1 | 0 | 0 |
+| Market Intelligence | 3 | 3 | 0 | 0 |
+| ML / AI Models | 3 | 2 | 1 (GNN) | 0 |
+| Feature Engineering | 3 | 3 | 0 | 0 |
+| Live / In-Play | 2 | 2 | 0 | 0 |
+| Alternative Data | 4 | 3 | 1 (Referee) | 0 |
+| Market Microstructure | 3 | 3 | 0 | 0 |
+| Risk Management | 2 | 2 | 0 | 0 |
+| **TOTAL** | **23** | **21** | **2** | **0** |
 
 ---
 

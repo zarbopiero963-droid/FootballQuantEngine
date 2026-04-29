@@ -2,7 +2,7 @@
 **Date:** 2026-04-29
 **Branch:** `claude/cto-level-audit-vJGLE`
 **Methodology:** 5 parallel specialized agents — security, math, performance, architecture, test coverage
-**Total findings:** 22 (2 CRITICAL · 6 HIGH · 8 MEDIUM · 6 LOW)
+**Total findings:** 22 (2 CRITICAL · 5 HIGH · 9 MEDIUM · 6 LOW)
 
 ---
 
@@ -38,12 +38,15 @@ for i in range(n):
 # CURRENT — table, col, col_type injected via f-string
 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
 
-# FIX — whitelist before interpolation
+# FIX — allowlist with explicit raises (assert is stripped by python -O)
 ALLOWED_TABLES = {"fixtures","snapshots","odds_history","predictions","clv_bets"}
 ALLOWED_TYPES  = {"INTEGER","TEXT","REAL","BLOB"}
-assert table in ALLOWED_TABLES
-assert col_type in ALLOWED_TYPES
-assert col.replace("_","").isalnum()
+if table not in ALLOWED_TABLES:
+    raise ValueError(f"Disallowed table: {table!r}")
+if col_type not in ALLOWED_TYPES:
+    raise ValueError(f"Disallowed column type: {col_type!r}")
+if not col.replace("_","").isalnum():
+    raise ValueError(f"Invalid column name: {col!r}")
 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
 ```
 
@@ -52,26 +55,6 @@ conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
 ---
 
 ## HIGH
-
-### BUG-003 — SQL injection in `get_fixtures_by_status` placeholder builder
-**File:** `database/fixtures_repository.py` lines 184, 205, 211
-**Agent:** Security
-
-```python
-# CURRENT
-placeholders = ",".join("?" * len(statuses))   # count from caller — no allowlist
-conn.execute(f"SELECT * FROM fixtures WHERE status IN ({placeholders})", statuses)
-
-# FIX — validate against known status codes first
-VALID = {"NS","FT","1H","HT","2H","ET","BT","P","INT","LIVE"}
-invalid = set(statuses) - VALID
-if invalid:
-    raise ValueError(f"Unknown status codes: {invalid}")
-```
-
-**Impact:** Oversized `statuses` list causes unbounded IN clause; invalid codes could trigger unexpected query plans or injection via query rewriting in future SQLite versions.
-
----
 
 ### BUG-004 — Race condition: `LiveUpdater` metrics read/written without lock
 **File:** `data/live_updater.py` lines 40–43, 100–114
@@ -159,6 +142,29 @@ with get_db() as conn:
 ---
 
 ## MEDIUM
+
+### BUG-003 — Missing input validation on `get_fixtures_by_status` (not SQL injection)
+**File:** `database/fixtures_repository.py` lines 184, 205, 211
+**Agent:** Security
+**Note:** The query is already correctly parameterized (`?` placeholders, bound parameters) — this is not a SQL injection. The concern is missing allowlist validation: an unbounded or unknown status list can cause excessive IN clauses and silently accepts arbitrary strings.
+
+```python
+# CURRENT — parameterized but no allowlist
+placeholders = ",".join("?" * len(statuses))
+conn.execute(f"SELECT * FROM fixtures WHERE status IN ({placeholders})", statuses)
+
+# FIX — validate against known status codes first
+VALID = {"NS","FT","1H","HT","2H","ET","BT","P","INT","LIVE"}
+if len(statuses) > 20:
+    raise ValueError(f"Too many status values (max 20), got {len(statuses)}")
+invalid = set(statuses) - VALID
+if invalid:
+    raise ValueError(f"Unknown status codes: {invalid}")
+```
+
+**Impact:** Without an allowlist, callers can pass thousands of values (DoS) or future code paths may introduce injection risk if the parameterization pattern is incorrectly copied.
+
+---
 
 ### BUG-009 — Blocking DB/API calls on the UI main thread
 **Files:** Multiple UI windows (`ui/dashboard_window.py`, `ui/fixture_selector.py`, others)
@@ -322,7 +328,7 @@ The following high-value engines have zero unit or integration tests:
 |----|----------|--------|------|------------|
 | BUG-001 | CRITICAL | 5 min | Wrong bet sizing | ✅ YES |
 | BUG-002 | CRITICAL | 15 min | Data integrity | ✅ YES |
-| BUG-003 | HIGH | 15 min | Query injection | ✅ YES |
+| BUG-003 | MEDIUM | 15 min | Missing allowlist | Before prod |
 | BUG-004 | HIGH | 30 min | Data races → torn reads | ✅ YES |
 | BUG-005 | HIGH | 30 min | Data races → torn reads | ✅ YES |
 | BUG-006 | HIGH | 5 min | Optimizer crash | ✅ YES |

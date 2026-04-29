@@ -286,11 +286,23 @@ def _stable_sample(alpha: float, rng: random.Random) -> float:
     sin_alpha_u = math.sin(alpha * u)
     sin_1m_alpha_u = math.sin((1.0 - alpha) * u)
     sin_u = math.sin(u)
-    if sin_u < 1e-300:
-        return 1.0  # u ≈ 0 or π: stable → 1 (independence fallback)
-    return (sin_alpha_u / (sin_u ** (1.0 / alpha))) * (
-        (sin_1m_alpha_u / e) ** ((1.0 - alpha) / alpha)
+    if sin_u <= 0.0 or sin_alpha_u <= 0.0 or sin_1m_alpha_u <= 0.0:
+        return 1.0  # u ≈ 0 or π: degenerate, fallback to independence
+
+    # Use log-space to avoid sin_u^(1/α) underflowing to 0.
+    # For small α (large θ), 1/α can be 50+; any sin_u < ~3e-7 gives
+    # sin_u^50 → 0.0 in IEEE 754 even though sin_u >> 0, causing ZeroDivisionError.
+    # log-space: log S = log(sin αu) − log(sin u)/α + (1−α)/α · log(sin(1−α)u / E)
+    log_s = (
+        math.log(sin_alpha_u)
+        - math.log(sin_u) / alpha
+        + ((1.0 - alpha) / alpha) * math.log(sin_1m_alpha_u / e)
     )
+    try:
+        return math.exp(log_s)
+    except OverflowError:
+        # S → ∞ means U_i = exp(−(E_i/S)^(1/θ)) → 1: sample never fires.
+        return float("inf")
 
 
 def simulate_joint_prob_clayton(

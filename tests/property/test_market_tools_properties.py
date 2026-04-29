@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import math
 
-from hypothesis import given, settings
+from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
 from quant.services.market_tools import MarketTools
@@ -61,9 +61,11 @@ def test_normalized_probs_all_in_unit_interval(odds: dict) -> None:
 @settings(max_examples=1000)
 def test_higher_odds_implies_lower_probability(odds: dict) -> None:
     """The outcome with the highest odds must have the lowest probability."""
+    odds_vals = list(odds.values())
+    assume(len(set(odds_vals)) == len(odds_vals))  # skip ties — ordering undefined
     probs = _mt.normalize_implied_probs_1x2(odds)
-    max_odds_key = max(odds, key=lambda k: odds[k])
     prob_map = {"home": "home_win", "draw": "draw", "away": "away_win"}
+    max_odds_key = max(odds, key=lambda k: odds[k])
     min_prob_key = min(probs, key=lambda k: probs[k])
     assert min_prob_key == prob_map[max_odds_key], (
         f"Highest odds on '{max_odds_key}' but lowest prob on '{min_prob_key}'"

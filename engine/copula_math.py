@@ -323,6 +323,11 @@ def simulate_joint_prob_clayton(
     hits = 0
     for _ in range(n_simulations):
         v = _gamma_sample(inv_theta, rng)
+        if v == 0.0:
+            # Gamma(1/θ) underflows to 0 for large θ; V→0 ⟹ E_i/V→∞ ⟹ U_i→0
+            # for all i, so all marginals fire — count as hit and skip E_i draws.
+            hits += 1
+            continue
         all_fire = True
         for i in range(n):
             e_i = -math.log(rng.random())

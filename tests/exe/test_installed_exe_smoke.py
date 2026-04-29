@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import threading
 import time
 
 import pytest
@@ -26,11 +27,23 @@ _POLL_INTERVAL = 1.5
 
 
 def _start_app() -> subprocess.Popen:
-    return subprocess.Popen(
+    proc = subprocess.Popen(
         [EXE_PATH],
-        stdout=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,  # GUI app; stdout not useful
         stderr=subprocess.PIPE,
     )
+    # Drain stderr in a background thread so the OS pipe buffer (~64 KB) never
+    # fills and blocks the subprocess.  Chunks are accumulated for diagnostics.
+    _buf: list[bytes] = []
+
+    def _drain() -> None:
+        assert proc.stderr
+        for chunk in iter(lambda: proc.stderr.read(4096), b""):
+            _buf.append(chunk)
+
+    proc._stderr_buf = _buf  # type: ignore[attr-defined]
+    threading.Thread(target=_drain, daemon=True).start()
+    return proc
 
 
 def _process_alive(proc: subprocess.Popen) -> bool:
@@ -54,11 +67,10 @@ def _wait_for_window(
 
     while time.time() < end_time:
         if not _process_alive(proc):
-            stdout = proc.stdout.read().decode(errors="replace") if proc.stdout else ""
-            stderr = proc.stderr.read().decode(errors="replace") if proc.stderr else ""
+            stderr = b"".join(getattr(proc, "_stderr_buf", [])).decode(errors="replace")
             pytest.fail(
                 f"EXE exited with code {proc.returncode} before a window appeared.\n"
-                f"stdout: {stdout[-2000:]}\nstderr: {stderr[-2000:]}"
+                f"stderr: {stderr[-2000:]}"
             )
 
         try:

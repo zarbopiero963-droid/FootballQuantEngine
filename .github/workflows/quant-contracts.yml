@@ -1,0 +1,83 @@
+name: Quant Contracts
+
+# Runs property-based tests (Hypothesis) and financial invariant tests
+# whenever files in the core quant math stack are modified.
+#
+# Triggered by changes to:
+#   - strategies/         — EdgeDetector, NoBetFilter, ValueBetStrategy
+#   - ranking/            — Kelly, EV, Sharpe, MatchRanker
+#   - quant/services/     — ConfidenceEngine, AgreementEngine, MarketTools
+#   - quant/models/       — PredictionResult, PoissonEngine, FormEngine
+#   - engine/copula*      — Gaussian, Clayton, Gumbel copula math
+#   - config/constants.py — EDGE_THRESHOLD and other global constants
+#   - the test files themselves
+
+on:
+  push:
+    paths:
+      - "strategies/**"
+      - "ranking/**"
+      - "quant/services/**"
+      - "quant/models/**"
+      - "engine/copula_math.py"
+      - "engine/copula_types.py"
+      - "engine/gaussian_copula.py"
+      - "config/constants.py"
+      - "tests/property/**"
+      - "tests/invariant/**"
+  pull_request:
+    paths:
+      - "strategies/**"
+      - "ranking/**"
+      - "quant/services/**"
+      - "quant/models/**"
+      - "engine/copula_math.py"
+      - "engine/copula_types.py"
+      - "engine/gaussian_copula.py"
+      - "config/constants.py"
+      - "tests/property/**"
+      - "tests/invariant/**"
+  workflow_dispatch:
+
+jobs:
+  quant-contracts:
+    name: Property & Invariant Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run invariant tests
+        run: |
+          pytest tests/invariant/ -v --tb=short \
+            -p no:randomly \
+            --override-ini="log_cli=true"
+
+      - name: Run property tests (Hypothesis)
+        run: |
+          pytest tests/property/ -v --tb=short \
+            -p no:randomly \
+            --hypothesis-seed=0 \
+            --override-ini="log_cli=true"
+
+      - name: Cache Hypothesis examples
+        uses: actions/cache@v4
+        if: always()
+        with:
+          path: .hypothesis
+          key: hypothesis-${{ runner.os }}-${{ hashFiles('tests/property/**') }}
+          restore-keys: |
+            hypothesis-${{ runner.os }}-

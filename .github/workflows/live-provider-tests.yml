@@ -2,6 +2,9 @@ name: Live Provider Tests
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - "v*"
 
 jobs:
   integration-live:

@@ -279,12 +279,30 @@ def _stable_sample(alpha: float, rng: random.Random) -> float:
     α must be in (0, 1).
     """
     u = rng.random() * math.pi  # U ~ Uniform(0, π)
-    e = -math.log(rng.random())  # E ~ Exp(1)
-    sin_u = math.sin(alpha * u)
-    cos_u = math.cos((1.0 - alpha) * u)
-    return (sin_u / (math.sin(u) ** (1.0 / alpha))) * (
-        (cos_u / e) ** ((1.0 - alpha) / alpha)
+    e = -math.log(max(rng.random(), 1e-300))  # E ~ Exp(1), guard log(0)
+    # Hofert (2011) Algorithm 3: use sin((1-α)u), NOT cos((1-α)u).
+    # cos would be negative for u > π/(2(1-α)) when α < 0.5 (θ > 2),
+    # producing complex numbers when raised to a fractional power.
+    sin_alpha_u = math.sin(alpha * u)
+    sin_1m_alpha_u = math.sin((1.0 - alpha) * u)
+    sin_u = math.sin(u)
+    if sin_u <= 0.0 or sin_alpha_u <= 0.0 or sin_1m_alpha_u <= 0.0:
+        return 1.0  # u ≈ 0 or π: degenerate, fallback to independence
+
+    # Use log-space to avoid sin_u^(1/α) underflowing to 0.
+    # For small α (large θ), 1/α can be 50+; any sin_u < ~3e-7 gives
+    # sin_u^50 → 0.0 in IEEE 754 even though sin_u >> 0, causing ZeroDivisionError.
+    # log-space: log S = log(sin αu) − log(sin u)/α + (1−α)/α · log(sin(1−α)u / E)
+    log_s = (
+        math.log(sin_alpha_u)
+        - math.log(sin_u) / alpha
+        + ((1.0 - alpha) / alpha) * math.log(sin_1m_alpha_u / e)
     )
+    try:
+        return math.exp(log_s)
+    except OverflowError:
+        # S → ∞ means U_i = exp(−(E_i/S)^(1/θ)) → 1: sample never fires.
+        return float("inf")
 
 
 def simulate_joint_prob_clayton(
@@ -317,6 +335,13 @@ def simulate_joint_prob_clayton(
     hits = 0
     for _ in range(n_simulations):
         v = _gamma_sample(inv_theta, rng)
+        if v == 0.0:
+            # Gamma(1/θ) underflows to 0 for large θ; V→0 ⟹ U_i→0 for all i.
+            # Count as hit only when all p_i > 0 — consistent with normal path
+            # where u_i=0.0 >= p_i=0.0 would correctly reject a zero-prob event.
+            if all(p > 0.0 for p in probs):
+                hits += 1
+            continue
         all_fire = True
         for i in range(n):
             e_i = -math.log(rng.random())

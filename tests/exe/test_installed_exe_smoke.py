@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import os
 import subprocess
 import sys
+import threading
 import time
 
 import pytest
@@ -18,43 +21,90 @@ EXE_PATH = os.environ.get(
     r"dist\FootballQuantEngine\FootballQuantEngine.exe",
 )
 
+# GitHub Actions Windows runners are slow on cold start due to Defender scans.
+_WINDOW_TIMEOUT = float(os.environ.get("EXE_WINDOW_TIMEOUT", "60"))
+_POLL_INTERVAL = 1.5
 
-def _start_app():
-    return subprocess.Popen(
-        [EXE_PATH], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+
+def _start_app() -> subprocess.Popen:
+    proc = subprocess.Popen(
+        [EXE_PATH],
+        stdout=subprocess.DEVNULL,  # GUI app; stdout not useful
+        stderr=subprocess.PIPE,
     )
+    # Drain stderr in a background thread so the OS pipe buffer (~64 KB) never
+    # fills and blocks the subprocess.  Chunks are accumulated for diagnostics.
+    _buf: list[bytes] = []
+
+    def _drain() -> None:
+        assert proc.stderr
+        for chunk in iter(lambda: proc.stderr.read(4096), b""):
+            _buf.append(chunk)
+
+    proc._stderr_buf = _buf  # type: ignore[attr-defined]
+    threading.Thread(target=_drain, daemon=True).start()
+    return proc
 
 
-def _wait_for_window(timeout: float = 30.0):
-    Desktop = pytest.importorskip("pywinauto").Desktop
+def _process_alive(proc: subprocess.Popen) -> bool:
+    return proc.poll() is None
+
+
+def _wait_for_window(proc: subprocess.Popen, timeout: float = _WINDOW_TIMEOUT) -> tuple:
+    """
+    Wait for the app window to appear, anchored to the process PID.
+
+    Uses pywinauto.Application.connect() so we only look at windows owned
+    by our specific process — not every window on the desktop — which is
+    both faster and immune to title collisions with other apps.
+
+    Always returns (window | None, diag: str).
+    """
+    Application = pytest.importorskip("pywinauto").Application
     end_time = time.time() + timeout
 
     while time.time() < end_time:
+        if not _process_alive(proc):
+            stderr = b"".join(getattr(proc, "_stderr_buf", [])).decode(errors="replace")
+            pytest.fail(
+                f"EXE exited with code {proc.returncode} before a window appeared.\n"
+                f"stderr: {stderr[-2000:]}"
+            )
+
         try:
-            windows = Desktop(backend="uia").windows()
-            for window in windows:
-                try:
-                    title = window.window_text() or ""
-                except Exception:
-                    title = ""
-
-                if "football quant engine" in title.lower():
-                    return window
-            time.sleep(1.0)
+            app = Application(backend="uia").connect(process=proc.pid, timeout=2)
+            # top_window() returns the foreground window of this process
+            win = app.top_window()
+            # Confirm it has a real title (not a transient splash/loader)
+            title = win.window_text() or ""
+            if title:
+                return win, ""
         except Exception:
-            time.sleep(1.0)
+            pass
 
-    return None
+        time.sleep(_POLL_INTERVAL)
+
+    # Last-ditch: dump what's visible for CI diagnostics
+    try:
+        Desktop = pytest.importorskip("pywinauto").Desktop
+        all_titles = [
+            w.window_text() for w in Desktop(backend="uia").windows() if w.window_text()
+        ]
+        diag = f"Visible windows at timeout: {all_titles}"
+    except Exception as exc:
+        diag = f"Could not enumerate windows: {exc}"
+
+    return None, diag
 
 
-def _terminate_process_tree(pid: int):
+def _terminate_process_tree(pid: int) -> None:
     try:
         import psutil
 
         parent = psutil.Process(pid)
-        for proc in parent.children(recursive=True):
+        for child in parent.children(recursive=True):
             try:
-                proc.kill()
+                child.kill()
             except Exception:
                 pass
         parent.kill()
@@ -73,15 +123,18 @@ def test_installed_exe_opens_main_window():
     proc = _start_app()
 
     try:
-        main = _wait_for_window(timeout=30.0)
-        assert main is not None, "No window found for EXE process"
+        main, diag = _wait_for_window(proc)
+        assert main is not None, f"No window found after {_WINDOW_TIMEOUT}s. {diag}"
 
+        title = ""
         try:
             title = main.window_text()
         except Exception:
-            title = ""
+            pass
 
-        assert "football quant engine" in title.lower()
+        assert (
+            "football quant engine" in title.lower()
+        ), f"Unexpected window title: {title!r}"
     finally:
         _terminate_process_tree(proc.pid)
 
@@ -97,14 +150,14 @@ def test_installed_exe_has_main_buttons():
     proc = _start_app()
 
     try:
-        main = _wait_for_window(timeout=30.0)
-        assert main is not None, "No window found for EXE process"
+        main, diag = _wait_for_window(proc)
+        assert main is not None, f"No window found after {_WINDOW_TIMEOUT}s. {diag}"
 
         descendants = []
         try:
             descendants = main.descendants()
         except Exception:
-            descendants = []
+            pass
 
         texts = []
         for item in descendants:

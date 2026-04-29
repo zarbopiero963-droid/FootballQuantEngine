@@ -37,13 +37,17 @@ def _process_alive(proc: subprocess.Popen) -> bool:
     return proc.poll() is None
 
 
-def _wait_for_window(proc: subprocess.Popen, timeout: float = _WINDOW_TIMEOUT):
+def _wait_for_window(
+    proc: subprocess.Popen, timeout: float = _WINDOW_TIMEOUT
+) -> tuple:
     """
     Wait for the app window to appear, anchored to the process PID.
 
     Uses pywinauto.Application.connect() so we only look at windows owned
     by our specific process — not every window on the desktop — which is
     both faster and immune to title collisions with other apps.
+
+    Always returns (window | None, diag: str).
     """
     Application = pytest.importorskip("pywinauto").Application
     end_time = time.time() + timeout
@@ -64,7 +68,7 @@ def _wait_for_window(proc: subprocess.Popen, timeout: float = _WINDOW_TIMEOUT):
             # Confirm it has a real title (not a transient splash/loader)
             title = win.window_text() or ""
             if title:
-                return win
+                return win, ""
         except Exception:
             pass
 
@@ -111,8 +115,7 @@ def test_installed_exe_opens_main_window():
     proc = _start_app()
 
     try:
-        result = _wait_for_window(proc)
-        main, diag = result if isinstance(result, tuple) else (result, "")
+        main, diag = _wait_for_window(proc)
         assert main is not None, f"No window found after {_WINDOW_TIMEOUT}s. {diag}"
 
         title = ""
@@ -139,8 +142,7 @@ def test_installed_exe_has_main_buttons():
     proc = _start_app()
 
     try:
-        result = _wait_for_window(proc)
-        main, diag = result if isinstance(result, tuple) else (result, "")
+        main, diag = _wait_for_window(proc)
         assert main is not None, f"No window found after {_WINDOW_TIMEOUT}s. {diag}"
 
         descendants = []

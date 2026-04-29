@@ -9,6 +9,7 @@ Invariants verified:
 - BetLeg validation raises on invalid inputs
 - CopulaResult.edge_pct sign matches model vs book comparison
 """
+
 from __future__ import annotations
 
 import random
@@ -99,9 +100,9 @@ def test_clayton_high_theta_approaches_comonotonicity(probs: list[float]) -> Non
     jp = simulate_joint_prob_clayton(probs, theta=50.0, n_simulations=_N, rng=rng)
     floor = min(probs)
     # Allow generous tolerance due to MC noise at extreme theta
-    assert jp >= floor * 0.85, (
-        f"Clayton theta=50 joint={jp:.4f} far below min(probs)={floor:.4f}"
-    )
+    assert (
+        jp >= floor * 0.85
+    ), f"Clayton theta=50 joint={jp:.4f} far below min(probs)={floor:.4f}"
 
 
 @given(prob_pair)
@@ -111,9 +112,9 @@ def test_gumbel_high_theta_approaches_comonotonicity(probs: list[float]) -> None
     rng = random.Random(hash(tuple(probs)))
     jp = simulate_joint_prob_gumbel(probs, theta=50.0, n_simulations=_N, rng=rng)
     floor = min(probs)
-    assert jp >= floor * 0.85, (
-        f"Gumbel theta=50 joint={jp:.4f} far below min(probs)={floor:.4f}"
-    )
+    assert (
+        jp >= floor * 0.85
+    ), f"Gumbel theta=50 joint={jp:.4f} far below min(probs)={floor:.4f}"
 
 
 # ---------------------------------------------------------------------------
@@ -127,7 +128,9 @@ def test_gumbel_high_theta_approaches_comonotonicity(probs: list[float]) -> None
     st.floats(min_value=0.01, max_value=0.99),
 )
 @settings(max_examples=500)
-def test_betleg_valid_inputs_accepted(name: str, market_odds: float, model_prob: float) -> None:
+def test_betleg_valid_inputs_accepted(
+    name: str, market_odds: float, model_prob: float
+) -> None:
     """Valid BetLeg inputs must not raise."""
     leg = BetLeg(name=name, market_odds=market_odds, model_prob=model_prob)
     assert 0.0 < leg.bookmaker_implied < 1.0
@@ -143,7 +146,9 @@ def test_betleg_valid_inputs_accepted(name: str, market_odds: float, model_prob:
     ),
 )
 @settings(max_examples=300)
-def test_betleg_invalid_prob_raises(name: str, market_odds: float, bad_prob: float) -> None:
+def test_betleg_invalid_prob_raises(
+    name: str, market_odds: float, bad_prob: float
+) -> None:
     """model_prob outside (0, 1) must raise ValueError."""
     assume(not (0.0 < bad_prob < 1.0))
     with pytest.raises((ValueError, Exception)):
@@ -156,7 +161,9 @@ def test_betleg_invalid_prob_raises(name: str, market_odds: float, bad_prob: flo
     st.floats(min_value=0.01, max_value=0.99),
 )
 @settings(max_examples=300)
-def test_betleg_invalid_odds_raises(name: str, bad_odds: float, model_prob: float) -> None:
+def test_betleg_invalid_odds_raises(
+    name: str, bad_odds: float, model_prob: float
+) -> None:
     """market_odds ≤ 1.0 must raise ValueError."""
     with pytest.raises((ValueError, Exception)):
         BetLeg(name=name, market_odds=bad_odds, model_prob=model_prob)

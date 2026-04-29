@@ -7,6 +7,7 @@ Invariants:
 - fair_odds is the exact reciprocal of probability
 - edge() sign matches model_prob vs 1/bookmaker_odds comparison
 """
+
 from __future__ import annotations
 
 import math
@@ -20,7 +21,9 @@ from quant.services.market_tools import MarketTools
 # Strategies
 # ---------------------------------------------------------------------------
 
-positive_odds = st.floats(min_value=1.01, max_value=50.0, allow_nan=False, allow_infinity=False)
+positive_odds = st.floats(
+    min_value=1.01, max_value=50.0, allow_nan=False, allow_infinity=False
+)
 prob = st.floats(min_value=0.01, max_value=0.99, allow_nan=False, allow_infinity=False)
 
 odds_triple = st.fixed_dictionaries(
@@ -41,9 +44,9 @@ def test_normalized_probs_sum_to_one(odds: dict) -> None:
     """After overround removal, 1x2 probabilities must sum to exactly 1."""
     probs = _mt.normalize_implied_probs_1x2(odds)
     total = probs["home_win"] + probs["draw"] + probs["away_win"]
-    assert abs(total - 1.0) < 1e-10, (
-        f"Probabilities sum to {total} (delta={total - 1.0}) for odds={odds}"
-    )
+    assert (
+        abs(total - 1.0) < 1e-10
+    ), f"Probabilities sum to {total} (delta={total - 1.0}) for odds={odds}"
 
 
 @given(odds_triple)
@@ -52,9 +55,7 @@ def test_normalized_probs_all_in_unit_interval(odds: dict) -> None:
     """Each normalised probability is strictly in (0, 1)."""
     probs = _mt.normalize_implied_probs_1x2(odds)
     for market, p in probs.items():
-        assert 0.0 < p < 1.0, (
-            f"prob[{market}]={p} not in (0, 1) for odds={odds}"
-        )
+        assert 0.0 < p < 1.0, f"prob[{market}]={p} not in (0, 1) for odds={odds}"
 
 
 @given(odds_triple)
@@ -67,9 +68,9 @@ def test_higher_odds_implies_lower_probability(odds: dict) -> None:
     prob_map = {"home": "home_win", "draw": "draw", "away": "away_win"}
     max_odds_key = max(odds, key=lambda k: odds[k])
     min_prob_key = min(probs, key=lambda k: probs[k])
-    assert min_prob_key == prob_map[max_odds_key], (
-        f"Highest odds on '{max_odds_key}' but lowest prob on '{min_prob_key}'"
-    )
+    assert (
+        min_prob_key == prob_map[max_odds_key]
+    ), f"Highest odds on '{max_odds_key}' but lowest prob on '{min_prob_key}'"
 
 
 # ---------------------------------------------------------------------------

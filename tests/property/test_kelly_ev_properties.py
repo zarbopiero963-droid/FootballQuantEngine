@@ -5,11 +5,11 @@ and EdgeDetector using Hypothesis.
 These tests verify mathematical invariants that must hold for ALL valid
 inputs — not just the happy-path examples in unit tests.
 """
+
 from __future__ import annotations
 
 import math
 
-import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -57,9 +57,9 @@ def test_kelly_monotone_in_probability(o: float, _unused: float) -> None:
     p1, p2 = 0.3, 0.6
     kf1 = kelly_fraction(p1, o)
     kf2 = kelly_fraction(p2, o)
-    assert kf1 <= kf2, (
-        f"kelly not monotone: kelly({p1}, {o})={kf1} > kelly({p2}, {o})={kf2}"
-    )
+    assert (
+        kf1 <= kf2
+    ), f"kelly not monotone: kelly({p1}, {o})={kf1} > kelly({p2}, {o})={kf2}"
 
 
 # ---------------------------------------------------------------------------
@@ -84,9 +84,9 @@ def test_ev_positive_iff_p_exceeds_implied(p: float, o: float) -> None:
 def test_ev_monotone_in_probability(o: float) -> None:
     """For fixed odds, EV strictly increases with probability."""
     p_lo, p_hi = 0.2, 0.8
-    assert expected_value(p_lo, o) < expected_value(p_hi, o), (
-        f"EV not monotone in p at odds={o}"
-    )
+    assert expected_value(p_lo, o) < expected_value(
+        p_hi, o
+    ), f"EV not monotone in p at odds={o}"
 
 
 @given(prob, odds)
@@ -133,7 +133,9 @@ def test_edge_sign_matches_value(p: float, o: float) -> None:
     if p > implied:
         assert edge > 0, f"edge={edge} not positive when p={p} > implied={implied}"
     else:
-        assert edge <= 0, f"edge={edge} not non-positive when p={p} <= implied={implied}"
+        assert (
+            edge <= 0
+        ), f"edge={edge} not non-positive when p={p} <= implied={implied}"
 
 
 @given(prob, odds)
@@ -146,6 +148,6 @@ def test_is_value_bet_consistent_with_edge(p: float, o: float) -> None:
     edge = det.calculate_edge(p, o)
     is_value = det.is_value_bet(p, o)
     expected = edge > EDGE_THRESHOLD
-    assert is_value == expected, (
-        f"is_value_bet={is_value} but edge={edge}, threshold={EDGE_THRESHOLD}"
-    )
+    assert (
+        is_value == expected
+    ), f"is_value_bet={is_value} but edge={edge}, threshold={EDGE_THRESHOLD}"

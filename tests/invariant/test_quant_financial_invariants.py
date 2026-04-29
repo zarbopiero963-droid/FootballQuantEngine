@@ -6,6 +6,7 @@ is producing mathematically unsound output that would cause real financial loss.
 Unlike property tests (random inputs via Hypothesis), these use a fixed set of
 representative scenarios that cover boundary conditions and typical market data.
 """
+
 from __future__ import annotations
 
 import math
@@ -19,7 +20,6 @@ from quant.services.market_tools import MarketTools
 from quant.services.no_bet_filter import QuantNoBetFilter
 from ranking.match_ranker import expected_value, kelly_fraction, sharpe_ratio
 from strategies.edge_detector import EdgeDetector
-from strategies.no_bet_filter import NoBetFilter
 
 _mt = MarketTools()
 _det = EdgeDetector()
@@ -57,12 +57,12 @@ def test_implied_probs_sum_to_one(odds: dict) -> None:
 @pytest.mark.parametrize(
     "p, o",
     [
-        (0.55, 2.10),   # clear value bet
-        (0.33, 3.00),   # fair price — edge ≈ 0
-        (0.20, 3.00),   # negative edge
-        (0.99, 1.01),   # near certainty, tiny odds
-        (0.01, 50.0),   # long shot
-        (0.50, 1.90),   # vigorish erodes edge
+        (0.55, 2.10),  # clear value bet
+        (0.33, 3.00),  # fair price — edge ≈ 0
+        (0.20, 3.00),  # negative edge
+        (0.99, 1.01),  # near certainty, tiny odds
+        (0.01, 50.0),  # long shot
+        (0.50, 1.90),  # vigorish erodes edge
     ],
 )
 def test_kelly_in_unit_interval(p: float, o: float) -> None:
@@ -145,8 +145,8 @@ def test_no_nan_or_inf_in_quant_outputs(p: float, o: float) -> None:
     [
         (0.60, 0.10, 0.75, 0.80),
         (0.50, 0.00, 0.50, 0.00),
-        (0.99, 1.00, 1.00, 1.00),   # extreme high
-        (0.01, 0.00, 0.00, 0.00),   # extreme low
+        (0.99, 1.00, 1.00, 1.00),  # extreme high
+        (0.01, 0.00, 0.00, 0.00),  # extreme low
     ],
 )
 def test_confidence_score_bounded(prob, edge, agreement, xg) -> None:
@@ -162,13 +162,13 @@ def test_confidence_score_bounded(prob, edge, agreement, xg) -> None:
 @pytest.mark.parametrize(
     "probs_list",
     [
-        [{"home_win": 0.50, "draw": 0.25, "away_win": 0.25}],                    # single model
-        [{"home_win": 0.50, "draw": 0.25, "away_win": 0.25}] * 3,               # perfect agreement
+        [{"home_win": 0.50, "draw": 0.25, "away_win": 0.25}],  # single model
+        [{"home_win": 0.50, "draw": 0.25, "away_win": 0.25}] * 3,  # perfect agreement
         [
             {"home_win": 0.30, "draw": 0.35, "away_win": 0.35},
             {"home_win": 0.70, "draw": 0.15, "away_win": 0.15},
-        ],                                                                         # max disagreement
-        [],                                                                        # empty list
+        ],  # max disagreement
+        [],  # empty list
     ],
 )
 def test_agreement_score_bounded(probs_list) -> None:
@@ -218,14 +218,14 @@ def test_joint_prob_cannot_exceed_smallest_marginal(probs: list) -> None:
     floor = min(probs)
 
     jp_c = simulate_joint_prob_clayton(probs, theta=2.0, n_simulations=10_000, rng=rng)
-    assert jp_c <= floor + 0.03, (
-        f"Clayton joint={jp_c:.4f} > min(probs)={floor:.4f} (with MC tolerance)"
-    )
+    assert (
+        jp_c <= floor + 0.03
+    ), f"Clayton joint={jp_c:.4f} > min(probs)={floor:.4f} (with MC tolerance)"
 
     jp_g = simulate_joint_prob_gumbel(probs, theta=2.0, n_simulations=10_000, rng=rng)
-    assert jp_g <= floor + 0.03, (
-        f"Gumbel joint={jp_g:.4f} > min(probs)={floor:.4f} (with MC tolerance)"
-    )
+    assert (
+        jp_g <= floor + 0.03
+    ), f"Gumbel joint={jp_g:.4f} > min(probs)={floor:.4f} (with MC tolerance)"
 
 
 # ---------------------------------------------------------------------------
@@ -236,11 +236,11 @@ def test_joint_prob_cannot_exceed_smallest_marginal(probs: list) -> None:
 @pytest.mark.parametrize(
     "p, o, expect_value",
     [
-        (0.55, 2.10, True),   # implied=0.476 < 0.55 → value
+        (0.55, 2.10, True),  # implied=0.476 < 0.55 → value
         (0.45, 2.10, False),  # implied=0.476 > 0.45 → no value
         (0.50, 2.00, False),  # fair price, edge=0
         (0.60, 1.50, False),  # implied=0.667 > 0.60 → no value despite high prob
-        (0.70, 1.80, True),   # implied=0.556 < 0.70 → value
+        (0.70, 1.80, True),  # implied=0.556 < 0.70 → value
     ],
 )
 def test_is_value_bet_matches_edge_sign(p: float, o: float, expect_value: bool) -> None:
@@ -248,6 +248,6 @@ def test_is_value_bet_matches_edge_sign(p: float, o: float, expect_value: bool) 
 
     edge = _det.calculate_edge(p, o)
     is_value = _det.is_value_bet(p, o)
-    assert is_value == (edge > EDGE_THRESHOLD), (
-        f"is_value_bet={is_value} but edge={edge:.4f}, threshold={EDGE_THRESHOLD}"
-    )
+    assert is_value == (
+        edge > EDGE_THRESHOLD
+    ), f"is_value_bet={is_value} but edge={edge:.4f}, threshold={EDGE_THRESHOLD}"

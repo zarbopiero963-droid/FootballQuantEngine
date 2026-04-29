@@ -50,9 +50,7 @@ def _process_alive(proc: subprocess.Popen) -> bool:
     return proc.poll() is None
 
 
-def _wait_for_window(
-    proc: subprocess.Popen, timeout: float = _WINDOW_TIMEOUT
-) -> tuple:
+def _wait_for_window(proc: subprocess.Popen, timeout: float = _WINDOW_TIMEOUT) -> tuple:
     """
     Wait for the app window to appear, anchored to the process PID.
 
@@ -90,9 +88,7 @@ def _wait_for_window(
     try:
         Desktop = pytest.importorskip("pywinauto").Desktop
         all_titles = [
-            w.window_text()
-            for w in Desktop(backend="uia").windows()
-            if w.window_text()
+            w.window_text() for w in Desktop(backend="uia").windows() if w.window_text()
         ]
         diag = f"Visible windows at timeout: {all_titles}"
     except Exception as exc:
@@ -136,9 +132,9 @@ def test_installed_exe_opens_main_window():
         except Exception:
             pass
 
-        assert "football quant engine" in title.lower(), (
-            f"Unexpected window title: {title!r}"
-        )
+        assert (
+            "football quant engine" in title.lower()
+        ), f"Unexpected window title: {title!r}"
     finally:
         _terminate_process_tree(proc.pid)
 

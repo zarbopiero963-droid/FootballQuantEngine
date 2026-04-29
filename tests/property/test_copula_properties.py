@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import math
 import random
+import struct
 
 import pytest
 from hypothesis import assume, given, settings
@@ -40,6 +41,30 @@ gumbel_theta = st.floats(min_value=1.0, max_value=10.0, allow_nan=False)
 _N = 5_000  # Monte Carlo samples — enough precision without being too slow
 
 
+def _rng(probs: list[float]) -> random.Random:
+    """Deterministic RNG seeded from float bit patterns — immune to PYTHONHASHSEED."""
+    seed = int.from_bytes(struct.pack(">dd", probs[0], probs[1]), "big") % (2**32)
+    return random.Random(seed)
+
+
+def _rng2(probs: list[float], theta: float) -> random.Random:
+    seed = int.from_bytes(struct.pack(">ddd", probs[0], probs[1], theta), "big") % (
+        2**32
+    )
+    return random.Random(seed)
+
+
+def _clayton_analytical(probs: list[float], theta: float) -> float:
+    """Closed-form bivariate Clayton copula C(u1,u2;θ) = (u1^-θ + u2^-θ - 1)^(-1/θ)."""
+    s = sum(p ** (-theta) for p in probs) - len(probs) + 1
+    return max(s, 0.0) ** (-1.0 / theta)
+
+
+def _gumbel_analytical(probs: list[float], theta: float) -> float:
+    """Closed-form bivariate Gumbel copula C(u1,u2;θ) = exp(-(Σ(-ln ui)^θ)^(1/θ))."""
+    return math.exp(-(sum((-math.log(p)) ** theta for p in probs) ** (1.0 / theta)))
+
+
 # ---------------------------------------------------------------------------
 # Joint probability is always in [0, 1]
 # ---------------------------------------------------------------------------
@@ -48,25 +73,26 @@ _N = 5_000  # Monte Carlo samples — enough precision without being too slow
 @given(prob_pair, clayton_theta)
 @settings(max_examples=300)
 def test_clayton_joint_prob_in_unit_interval(probs: list[float], theta: float) -> None:
-    rng = random.Random(hash((tuple(probs), theta)))
-    jp = simulate_joint_prob_clayton(probs, theta, n_simulations=_N, rng=rng)
+    jp = simulate_joint_prob_clayton(
+        probs, theta, n_simulations=_N, rng=_rng2(probs, theta)
+    )
     assert 0.0 <= jp <= 1.0, f"Clayton joint={jp} not in [0,1] for probs={probs}"
 
 
 @given(prob_pair, gumbel_theta)
 @settings(max_examples=300)
 def test_gumbel_joint_prob_in_unit_interval(probs: list[float], theta: float) -> None:
-    rng = random.Random(hash((tuple(probs), theta)))
-    jp = simulate_joint_prob_gumbel(probs, theta, n_simulations=_N, rng=rng)
+    jp = simulate_joint_prob_gumbel(
+        probs, theta, n_simulations=_N, rng=_rng2(probs, theta)
+    )
     assert 0.0 <= jp <= 1.0, f"Gumbel joint={jp} not in [0,1] for probs={probs}"
 
 
 @given(prob_pair)
 @settings(max_examples=200)
 def test_gaussian_joint_prob_in_unit_interval(probs: list[float]) -> None:
-    rng = random.Random(hash(tuple(probs)))
     corr = uniform_corr_matrix(len(probs), rho=0.0)
-    jp = simulate_joint_prob(probs, corr, n_simulations=_N, rng=rng)
+    jp = simulate_joint_prob(probs, corr, n_simulations=_N, rng=_rng(probs))
     assert 0.0 <= jp <= 1.0, f"Gaussian joint={jp} not in [0,1] for probs={probs}"
 
 
@@ -79,9 +105,8 @@ def test_gaussian_joint_prob_in_unit_interval(probs: list[float]) -> None:
 @settings(max_examples=200)
 def test_gaussian_zero_corr_approximates_independence(probs: list[float]) -> None:
     """rho=0 Gaussian copula should give joint ≈ product of marginals."""
-    rng = random.Random(hash(tuple(probs)))
     corr = uniform_corr_matrix(len(probs), rho=0.0)
-    jp = simulate_joint_prob(probs, corr, n_simulations=20_000, rng=rng)
+    jp = simulate_joint_prob(probs, corr, n_simulations=20_000, rng=_rng(probs))
     independent = 1.0
     for p in probs:
         independent *= p
@@ -97,15 +122,17 @@ def test_gaussian_zero_corr_approximates_independence(probs: list[float]) -> Non
 @settings(max_examples=200)
 def test_clayton_high_theta_approaches_comonotonicity(probs: list[float]) -> None:
     """As theta → ∞, Clayton joint → min(probs) (comonotonicity)."""
-    rng = random.Random(hash(tuple(probs)))
-    jp = simulate_joint_prob_clayton(probs, theta=50.0, n_simulations=_N, rng=rng)
-    floor = min(probs)
-    # 5σ lower bound: P(false failure) < 3e-7 for any floor ∈ (0,1)
-    sigma = math.sqrt(floor * (1.0 - floor) / _N)
-    bound = floor - 5 * sigma
+    jp = simulate_joint_prob_clayton(
+        probs, theta=50.0, n_simulations=_N, rng=_rng(probs)
+    )
+    # Use the closed-form value as the reference so the 5σ bound is correct even
+    # when floor is large (where true Clayton < floor by a non-negligible margin).
+    true_val = _clayton_analytical(probs, theta=50.0)
+    sigma = math.sqrt(true_val * (1.0 - true_val) / _N)
+    bound = true_val - 5 * sigma
     assert jp >= bound, (
-        f"Clayton theta=50 joint={jp:.4f} far below min(probs)={floor:.4f} "
-        f"(5σ bound={bound:.4f})"
+        f"Clayton theta=50 joint={jp:.4f} far below analytical={true_val:.4f} "
+        f"(5σ bound={bound:.4f}, probs={probs})"
     )
 
 
@@ -113,14 +140,15 @@ def test_clayton_high_theta_approaches_comonotonicity(probs: list[float]) -> Non
 @settings(max_examples=200)
 def test_gumbel_high_theta_approaches_comonotonicity(probs: list[float]) -> None:
     """As theta → ∞, Gumbel joint → min(probs)."""
-    rng = random.Random(hash(tuple(probs)))
-    jp = simulate_joint_prob_gumbel(probs, theta=50.0, n_simulations=_N, rng=rng)
-    floor = min(probs)
-    sigma = math.sqrt(floor * (1.0 - floor) / _N)
-    bound = floor - 5 * sigma
+    jp = simulate_joint_prob_gumbel(
+        probs, theta=50.0, n_simulations=_N, rng=_rng(probs)
+    )
+    true_val = _gumbel_analytical(probs, theta=50.0)
+    sigma = math.sqrt(true_val * (1.0 - true_val) / _N)
+    bound = true_val - 5 * sigma
     assert jp >= bound, (
-        f"Gumbel theta=50 joint={jp:.4f} far below min(probs)={floor:.4f} "
-        f"(5σ bound={bound:.4f})"
+        f"Gumbel theta=50 joint={jp:.4f} far below analytical={true_val:.4f} "
+        f"(5σ bound={bound:.4f}, probs={probs})"
     )
 
 
